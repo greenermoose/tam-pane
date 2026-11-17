@@ -1,0 +1,7 @@
+WORK SESSIONS
+
+This folder is for recording work sessions.
+
+Record a session as W<number>-<name>.md.  Record the AI harness and AI model used for the work session. Include relevant prompts, but trim out superfluous interjections. The goal is to record just the pertinent prompts that the AI agents used for guidance.
+
+Describe what was attempted, what succeeded, and what failed. Include a handoff if work was left undone or there is an obvious and necessary next step to be done.
