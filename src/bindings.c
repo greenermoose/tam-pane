@@ -82,13 +82,20 @@ static void move_to_tag(struct tp_server *s, union tp_arg a) {
 		tp_client_set_tags(c, tp_tag_mask(a.u));
 }
 
+static void toggle_client_tag(struct tp_server *s, union tp_arg a) {
+	struct tp_client *c = tp_focused(s);
+	if (c)
+		tp_client_toggle_tags(c, tp_tag_mask(a.u));
+}
+
 #define META TP_MOD_META
 #define SHIFT WLR_MODIFIER_SHIFT
 #define CTRL WLR_MODIFIER_CTRL
 #define TAG(key, n)                                                            \
 	{META, key, view_tag, {.u = n}},                                           \
 		{META | SHIFT, key, move_to_tag, {.u = n}},                            \
-		{META | CTRL, key, toggle_view_tag, {.u = n}}
+		{META | CTRL, key, toggle_view_tag, {.u = n}}, \
+		{META | SHIFT | CTRL, key, toggle_client_tag, {.u = n}}
 
 static const struct tp_binding bindings[] = {
 	{META, XKB_KEY_Return, terminal, {0}},

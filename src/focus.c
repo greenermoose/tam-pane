@@ -31,6 +31,8 @@ void tp_focus(struct tp_server *s, struct tp_client *c) {
 	wlr_xdg_toplevel_set_activated(c->toplevel, true);
 	if (c->mon)
 		s->selmon = c->mon;
+	if (c->mon && tp_client_visible(c))
+		c->mon->focus[tp_tags_slot(tp_tagview_current(&c->mon->view))] = c;
 
 	struct wlr_keyboard *kb = wlr_seat_get_keyboard(s->seat);
 	struct wlr_surface *surface = c->toplevel->base->surface;
@@ -51,7 +53,11 @@ struct tp_client *tp_focus_top(struct tp_server *s, struct tp_monitor *m) {
 }
 
 void tp_focus_refresh(struct tp_server *s) {
-	tp_focus(s, s->selmon ? tp_focus_top(s, s->selmon) : NULL);
+	struct tp_monitor *m = s->selmon;
+	struct tp_client *c = m ? m->focus[tp_tags_slot(tp_tagview_current(&m->view))] : NULL;
+	if (!c || !c->mapped || c->mon != m || !tp_client_visible(c))
+		c = m ? tp_focus_top(s, m) : NULL;
+	tp_focus(s, c);
 }
 
 void tp_focus_cycle(struct tp_server *s, int dir) {

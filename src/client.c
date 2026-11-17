@@ -109,6 +109,10 @@ static void on_unmap(struct wl_listener *l, void *data) {
 	bool had_focus = tp_focused(s) == c;
 
 	c->mapped = false;
+	if (c->mon)
+		for (unsigned int i = 0; i < TP_TAG_SLOTS; i++)
+			if (c->mon->focus[i] == c)
+				c->mon->focus[i] = NULL;
 	wl_list_remove(&c->link);
 	wl_list_remove(&c->flink);
 	if (c->mon) {
@@ -214,11 +218,22 @@ void tp_client_close(struct tp_client *c) {
 	wlr_xdg_toplevel_send_close(c->toplevel);
 }
 
+void tp_client_toggle_tags(struct tp_client *c, tp_tags_t mask) {
+	tp_client_set_tags(c, c->tags ^ (mask & TP_TAG_ALL));
+}
+
 void tp_client_set_tags(struct tp_client *c, tp_tags_t tags) {
 	tags &= TP_TAG_ALL;
 	if (!tags || tags == c->tags)
 		return;
 	c->tags = tags;
+	if (c->mon) {
+		for (unsigned int i = 1; i < TP_TAG_SLOTS; i++)
+			if (!(tags & tp_tag_mask(i)) && c->mon->focus[i] == c)
+				c->mon->focus[i] = NULL;
+		if (!tp_client_visible(c) && c->mon->focus[0] == c)
+			c->mon->focus[0] = NULL;
+	}
 	if (c->mon)
 		tp_arrange(c->mon);
 	tp_focus_refresh(c->server);

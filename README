@@ -70,6 +70,7 @@ KEYS (COMPILED IN UNTIL LUA CONFIGURATION ARRIVES)
   Meta+1 .. Meta+9      view one tag
   Meta+Shift+1 .. 9     move the focused window to a tag
   Meta+Ctrl+1 .. 9      add or remove a tag from the view
+  Meta+Shift+Ctrl+1 .. 9 add or remove a tag from the focused window
   Meta+Tab              go back to the previous view
   Meta+Shift+E          quit tam-pane
 

@@ -20,6 +20,7 @@ struct tp_monitor {
 	struct tp_rect area;   /* the whole output, layout coordinates */
 	struct tp_rect usable; /* area minus panels' exclusive zones */
 	struct tp_tagview view;
+	struct tp_client *focus[TP_TAG_SLOTS]; /* slot 0: combined views */
 	struct tp_dwindle trees[TP_TAG_SLOTS]; /* see tp_tags_slot() */
 	struct wl_listener frame;
 	struct wl_listener request_state;

@@ -4,6 +4,9 @@
 #include "check.h"
 #include "tam-pane/client.h"
 #include "tam-pane/input.h"
+#include "tam-pane/focus.h"
+#include "tam-pane/monitor.h"
+#include <wlr/types/wlr_scene.h>
 #include "tam-pane/server.h"
 #include <poll.h>
 #include <fcntl.h>
@@ -295,6 +298,19 @@ static void send_key(struct wlr_keyboard *keyboard, uint32_t code,
 	wlr_keyboard_notify_key(keyboard, &event);
 }
 
+/* Send actual modifier/key events through the compositor keyboard path. */
+static void chord(struct wlr_keyboard *kb, unsigned int code, bool shift,
+		bool ctrl) {
+	send_key(kb, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_PRESSED, 50);
+	if (shift) send_key(kb, KEY_LEFTSHIFT, WL_KEYBOARD_KEY_STATE_PRESSED, 51);
+	if (ctrl) send_key(kb, KEY_LEFTCTRL, WL_KEYBOARD_KEY_STATE_PRESSED, 52);
+	send_key(kb, code, WL_KEYBOARD_KEY_STATE_PRESSED, 53);
+	send_key(kb, code, WL_KEYBOARD_KEY_STATE_RELEASED, 54);
+	if (ctrl) send_key(kb, KEY_LEFTCTRL, WL_KEYBOARD_KEY_STATE_RELEASED, 55);
+	if (shift) send_key(kb, KEY_LEFTSHIFT, WL_KEYBOARD_KEY_STATE_RELEASED, 56);
+	send_key(kb, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_RELEASED, 57);
+}
+
 int main(void) {
 	struct tp_server server = {0};
 	struct wlr_keyboard keyboard;
@@ -412,6 +428,61 @@ int main(void) {
 	CHECK(client.pointer_motions > 0);
 	CHECK(client.pointer_buttons == 2);
 
+	/* Exercise all tag bindings, including shifted digit symbol handling. */
+	struct tp_client *a = tp_focused(&server);
+	struct tp_client *b;
+	wl_list_for_each(b, &server.clients, link) if (b != a) break;
+	struct tp_monitor *m = a->mon;
+	for (unsigned int n = 1; n <= TP_TAG_COUNT; n++) {
+		chord(&keyboard, KEY_1 + n - 1, true, false);
+		CHECK(a->tags == tp_tag_mask(n));
+		chord(&keyboard, KEY_1 + n - 1, false, false);
+		CHECK(tp_tagview_current(&m->view) == tp_tag_mask(n));
+		tp_focus(&server, a);
+		chord(&keyboard, KEY_1 + n - 1, true, true);
+		CHECK(a->tags == tp_tag_mask(n)); /* cannot remove last tag */
+		unsigned int other = n == TP_TAG_COUNT ? 1 : n + 1;
+		chord(&keyboard, KEY_1 + other - 1, true, true);
+		CHECK(a->tags == (tp_tag_mask(n) | tp_tag_mask(other)));
+		chord(&keyboard, KEY_1 + other - 1, false, true);
+		CHECK(tp_tags_count(tp_tagview_current(&m->view)) == 2);
+		chord(&keyboard, KEY_1 + other - 1, false, true);
+		CHECK(tp_tagview_current(&m->view) == tp_tag_mask(n));
+		chord(&keyboard, KEY_1 + n - 1, false, true);
+		CHECK(tp_tagview_current(&m->view) == tp_tag_mask(n));
+		chord(&keyboard, KEY_1 + other - 1, true, true);
+		CHECK(a->tags == tp_tag_mask(n));
+	}
+	/* The same shared window must not overwrite another tag's memory. */
+	tp_client_set_tags(a, tp_tag_mask(1) | tp_tag_mask(2));
+	tp_client_set_tags(b, tp_tag_mask(1) | tp_tag_mask(2));
+	chord(&keyboard, KEY_1, false, false);
+	tp_focus(&server, a);
+	chord(&keyboard, KEY_2, false, false);
+	tp_focus(&server, b);
+	chord(&keyboard, KEY_1, false, false);
+	CHECK(tp_focused(&server) == a);
+	chord(&keyboard, KEY_TAB, false, false);
+	CHECK(tp_focused(&server) == b);
+	chord(&keyboard, KEY_1, false, true);
+	tp_focus(&server, a); /* combined slot */
+	chord(&keyboard, KEY_2, false, false);
+	tp_focus(&server, b);
+	chord(&keyboard, KEY_1, false, true);
+	CHECK(tp_focused(&server) == a);
+	tp_client_set_tags(a, tp_tag_mask(9));
+	CHECK(tp_focused(&server) == b);
+	CHECK(m->focus[1] != a && m->focus[2] != a && m->focus[0] != a);
+	CHECK(!a->tree->node.enabled);
+	chord(&keyboard, KEY_8, false, false);
+	CHECK(tp_focused(&server) == NULL);
+	chord(&keyboard, KEY_1, false, false);
+	CHECK(tp_focused(&server) == b);
+	for (unsigned int i = 0; i < 20; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(client.keyboard_focus == (b == first ? client.windows[1].surface
+		: client.windows[0].surface));
+
 	/* The close binding must send xdg_toplevel.close to the focused client. */
 	send_key(&keyboard, 125, WL_KEYBOARD_KEY_STATE_PRESSED, 40);
 	send_key(&keyboard, 17, WL_KEYBOARD_KEY_STATE_PRESSED, 41);
@@ -429,6 +500,11 @@ int main(void) {
 	for (unsigned int i = 0; i < 100 && wl_list_length(&server.clients) == 2; i++)
 		if (!pump(&client, &server)) goto fail;
 	CHECK(wl_list_length(&server.clients) == 1);
+	for (unsigned int i = 0; i < TP_TAG_SLOTS; i++)
+		CHECK(m->focus[i] != b);
+	CHECK(tp_focused(&server) == NULL);
+	chord(&keyboard, KEY_9, false, false);
+	CHECK(tp_focused(&server) == a);
 
 	wl_display_disconnect(client.display);
 	if (client.shm_data && client.shm_data != MAP_FAILED)

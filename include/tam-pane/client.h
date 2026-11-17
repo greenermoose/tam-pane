@@ -49,6 +49,7 @@ bool tp_client_visible(const struct tp_client *c);
 void tp_client_place(struct tp_client *c, struct tp_rect box);
 
 void tp_client_close(struct tp_client *c);
+void tp_client_toggle_tags(struct tp_client *c, tp_tags_t mask);
 void tp_client_set_tags(struct tp_client *c, tp_tags_t tags);
 void tp_client_set_floating(struct tp_client *c, bool floating);
 void tp_client_set_fullscreen(struct tp_client *c, bool fullscreen);

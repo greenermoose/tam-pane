@@ -1,0 +1,44 @@
+W6 INTERACTIVE TAGS
+
+Date: 2026-11-17
+AI harness: Codex CLI 0.169.0
+AI model: gpt-6.1-sol
+Continues: W5
+
+GUIDANCE
+
+  Fred: "Do the next work for tam-pane."
+  Fred: "Shared combined-view memory (Recommended)"
+  Fred: "Implement the plan."
+
+DONE
+
+  - Added Meta+Shift+Ctrl+1..9 to toggle window tags, preserving at least
+    one tag. Focus memory uses nine single-tag slots and a shared combined
+    slot per monitor. Unmap and retagging invalidate stale references.
+  - Warning-free forced rebuild. make test passes outside the sandbox:
+    28 tag checks, 52 dwindle checks, 112 input checks, both smoke checks.
+    Input tests cover all nine tags, combined views, focus restoration,
+    empty views, retagging, scene visibility and remembered-window removal.
+  - Candidate binary SHA-256 (still reports accepted version 0.0.2):
+    cb8f2611cfec589d0549fd3a71e34a4527810d1dd890e50c0e96d28ec5daa1ca
+
+FAILED
+
+  - Initial sandboxed smoke run could not open its private Wayland socket.
+    The same tests pass outside the sandbox.
+
+HANDOFF
+
+  - Fred runs the existing nested launcher and checks every tag number:
+    Meta+N views; Meta+Shift+N moves; Meta+Ctrl+N toggles the view;
+    Meta+Shift+Ctrl+N toggles assignment, refusing to remove the last tag.
+    Meta+Tab restores the previous view. Empty tags clear keyboard focus.
+  - With two windows shared by tags 1 and 2, focus a different window on
+    each tag; switching restores each choice. Repeat with combined views;
+    those share one memory. Close or retag a remembered window and return;
+    focus must fall back safely. Ctrl+Alt+Escape restores host shortcuts.
+  - Record Fred's result against this commit and binary hash. Only then
+    accept 0.0.3 and bump VERSION and roadmap/phase status.
+  - P2 0.1.0 still needs Lua symbol isolation and an nm -D check.
+  - After a few more sessions, Fred judges the work/ procedure trial.

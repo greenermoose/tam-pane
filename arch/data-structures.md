@@ -26,6 +26,9 @@ the same commit as any change to them.
 
 - **`area`:** the whole output, in layout coordinates.
 - **`usable`:** `area` minus panels' exclusive zones (layer-shell, 0.0.5).
+- **`focus`:** remembered window per single tag, plus shared slot 0 for
+  combined views. Focus changes update only the active slot; invalid
+  candidates fall back to the most recently focused visible window.
 - **`view`:** the monitor's tag view (below).
 - **`trees`:** `TP_TAG_SLOTS` dwindle trees, one per single tag plus slot
   0, which is shared by every multi-tag view. `tp_monitor_tree()` returns
