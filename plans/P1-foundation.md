@@ -1,6 +1,7 @@
 # P1: Foundation (0.0.x)
 
-**Status:** in progress. 0.0.1 is built and tested headless.
+**Status:** in progress. 0.0.2 nested behavior accepted by Fred on
+2026-11-17. Next: 0.0.3, tags in use.
 
 ## Goal
 
@@ -21,6 +22,11 @@ session. It sets the module structure everything later builds on.
   starts, maps windows and stops.
 
 ### 0.0.2: first nested run
+
+Accepted on 2026-11-17: Fred reported "worked" after the nested input
+check using helper commit `ec41c2d`. The tested compositor binary SHA-256
+was `9d8797596fef75c5ed7147ffbe2425f6251cbdf0589422cd0340c838527e0e51`
+(it still reported 0.0.1 before this acceptance bump).
 
 - Run `build/tam-pane` as a window inside Hyprland (wlroots' Wayland
   backend). Fred tests it; agents never launch it on his monitors.

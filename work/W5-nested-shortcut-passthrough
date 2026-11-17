@@ -3,12 +3,14 @@ W5 NESTED SHORTCUT PASSTHROUGH
 Date: 2026-11-17
 AI harness: Codex CLI 0.169.0
 AI model: gpt-6.1-sol
+Commits: ec41c2d
 Continues: W4
 
 GUIDANCE
 
   Fred: "Do the next work for tam-pane."
   Fred: "Implement the plan."
+  Fred: "worked"
 
 DONE
 
@@ -21,6 +23,10 @@ DONE
     no nested window was opened by the agent.
   - Forced rebuild had no warnings. make test passed: 28 tag, 52 dwindle,
     19 input checks, and both smoke checks.
+  - Fred confirmed the nested check worked on helper commit ec41c2d.
+    Tested binary SHA-256:
+    9d8797596fef75c5ed7147ffbe2425f6251cbdf0589422cd0340c838527e0e51
+    Accepted 0.0.2; bumped version and milestone status.
 
 FAILED
 
@@ -29,10 +35,7 @@ FAILED
 
 HANDOFF
 
-  - Fred launches the helper and checks Meta+Return, J/K and W, repeat,
-    pointer behavior, escape and restored host shortcuts. Record results
-    against the printed commit and binary hash. Fix any failures.
-  - Keep 0.0.2 unaccepted and VERSION at 0.0.1 until Fred confirms the
-    required nested behavior. Then update VERSION and milestone status.
+  - Next milestone is 0.0.3: interactive tags, multi-tag assignment
+    and remembered focus. This session stops at accepted 0.0.2.
   - P2 0.1.0 still needs Lua symbol isolation and an nm -D check.
   - After a few more sessions, Fred judges the work/ procedure trial.
