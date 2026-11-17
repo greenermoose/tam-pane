@@ -3,6 +3,7 @@
 - **Date:** 2026-11-17
 - **CLI tool:** Claude Code (`claude`) `2.1.326`
 - **Model:** `claude-opus-5-5`
+- **Commit:** `d840afb`
 - **Transcript:** Retained privately by the author.
 - **Authorship:** AI-assisted design, implementation, documentation and
   verification, directed by Fred.
