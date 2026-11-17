@@ -1,0 +1,38 @@
+W5 NESTED SHORTCUT PASSTHROUGH
+
+Date: 2026-11-17
+AI harness: Codex CLI 0.169.0
+AI model: gpt-6.1-sol
+Continues: W4
+
+GUIDANCE
+
+  Fred: "Do the next work for tam-pane."
+  Fred: "Implement the plan."
+
+DONE
+
+  - Added tools/nested-input and its Lua adapter: a temporary Hyprland
+    submap scoped to the child window, focus callbacks, a latched
+    Ctrl+Alt+Escape exit, and idempotent undo. No persistent config changes.
+  - Updated the short launch/undo wrappers, preserving their originals.
+  - Mock lifecycle checks pass, including partial setup failure. Live
+    Hyprland 0.56.2 registered and removed the inactive escape binding;
+    no nested window was opened by the agent.
+  - Forced rebuild had no warnings. make test passed: 28 tag, 52 dwindle,
+    19 input checks, and both smoke checks.
+
+FAILED
+
+  - The agent environment has no Hyprland instance variable. The helper
+    now discovers the instance only when exactly one exists.
+
+HANDOFF
+
+  - Fred launches the helper and checks Meta+Return, J/K and W, repeat,
+    pointer behavior, escape and restored host shortcuts. Record results
+    against the printed commit and binary hash. Fix any failures.
+  - Keep 0.0.2 unaccepted and VERSION at 0.0.1 until Fred confirms the
+    required nested behavior. Then update VERSION and milestone status.
+  - P2 0.1.0 still needs Lua symbol isolation and an nm -D check.
+  - After a few more sessions, Fred judges the work/ procedure trial.

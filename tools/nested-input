@@ -1,0 +1,83 @@
+#!/usr/bin/env python3
+"""Launch a nested development compositor with temporary Hyprland passthrough."""
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import signal
+import subprocess
+import time
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--undo', action='store_true')
+    args = parser.parse_args()
+    instance = os.environ.get('HYPRLAND_INSTANCE_SIGNATURE')
+    if not instance:
+        instances = json.loads(subprocess.check_output(['hyprctl', 'instances', '-j']))
+        if len(instances) != 1:
+            parser.error('run from the intended Hyprland session')
+        instance = instances[0]['instance']
+    ctl = ['hyprctl', '-i', instance]
+    # Use decimal escapes for every byte to avoid either language's escape rules.
+    path = ''.join('\\%03d' % b for b in os.fsencode(ROOT / 'tools/nested-input.lua'))
+
+    def call(value):
+        result = subprocess.check_output(ctl + ['repl',
+            'return assert(loadfile("' + path + '"))()(' + value + ')'], text=True)
+        if 'error' in result.lower():
+            raise RuntimeError(result.strip())
+        return result
+
+    if args.undo:
+        call('"undo"')
+        return
+    # A duplicate launcher must not undo another launcher's state.
+    check = subprocess.check_output(ctl + ['repl',
+        'return _G.tp_nested_input and "busy" or "free"'], text=True)
+    if 'free' not in check:
+        parser.error('passthrough already installed; use --undo first')
+    binary = ROOT / 'build/tam-pane'
+    print('Source:', subprocess.check_output(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], text=True).strip())
+    print('Binary SHA-256:', hashlib.sha256(binary.read_bytes()).hexdigest(), flush=True)
+    env = dict(os.environ, WLR_BACKENDS='wayland')
+    # Preserve the parent's display for the backend; clients receive the child's
+    # socket from tp_server_start. Never fall back to DRM.
+    if not env.get('WAYLAND_DISPLAY'):
+        instances = json.loads(subprocess.check_output(['hyprctl', 'instances', '-j']))
+        env['WAYLAND_DISPLAY'] = next(i['wl_socket'] for i in instances if i['instance'] == instance)
+    child = subprocess.Popen([str(binary), '-d', '-s', 'foot'], env=env)
+    def stop(signum, frame):
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGHUP, stop)
+    try:
+        for _ in range(100):
+            if child.poll() is not None:
+                raise RuntimeError('nested compositor exited before window appeared')
+            if 'installed' in call(str(child.pid)):
+                break
+            time.sleep(0.1)
+        else:
+            raise RuntimeError('nested window did not appear within 10 seconds')
+        print('Passthrough ready. Ctrl+Alt+Escape restores host shortcuts.', flush=True)
+        child.wait()
+    finally:
+        try:
+            call('"undo"')
+        finally:
+            if child.poll() is None:
+                child.terminate()
+                try:
+                    child.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    child.kill()
+                    child.wait()
+
+
+if __name__ == '__main__':
+    main()

@@ -1,0 +1,30 @@
+NESTED INPUT TEST
+
+Run tools/nested-input from a terminal in Hyprland. It opens the development
+build with a foot terminal, prints the source commit and binary SHA-256,
+and passes host shortcuts through only while that nested window has focus.
+It forces the Wayland backend; it cannot become a hardware compositor.
+
+Ctrl+Alt+Escape restores host shortcuts immediately and latches passthrough
+off until the helper is undone and started again. Moving focus away also
+restores host shortcuts; returning normally restores passthrough.
+
+Run tools/nested-input --undo to remove its temporary binding and callbacks.
+The wrapper also does this when its child exits or it receives a normal
+termination signal. SIGKILL cannot run cleanup: use --undo afterward.
+Undo does not terminate the nested compositor. Close it normally, or use
+Meta+Shift+E while passthrough is active.
+
+No persistent config is written and no reload is needed. Repeating undo is
+safe. A second launcher refuses to replace an existing helper. The private
+submap has no ordinary host bindings; universal bindings from other user
+configuration can still apply. This is a Hyprland 0.56 Lua development aid,
+not a tam-pane public API. Retire it when nested input testing no longer
+needs host shortcut passthrough.
+
+Acceptance: open two terminals with Meta+Return, cycle with Meta+J/K,
+close with Meta+W, hold a typing key to check repeat, and move/click between
+windows. Check Ctrl+Alt+Escape and host shortcuts after leaving passthrough.
+Record Fred's results against the printed source and binary hash.
+
+Checks: python3 -B tests/test_nested_input.py; make test.
