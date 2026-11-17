@@ -1,0 +1,122 @@
+W1 TAM-PANE SCAFFOLD AND 0.0.1 FRAMEWORK
+
+Date: 2026-11-17
+AI harness: Claude Code 2.1.326
+AI model: claude-opus-5-5
+Commits: d840afb, 7e8185a
+
+Converted from docs/ai/2026-11-17-tam-pane-scaffold.md in W3.
+
+
+GUIDANCE
+
+  Fred, the opening request:
+
+    "I'd like to replace hyprland with tam-pane, my own window manager /
+    compositor. But I'd like to base tam-pane on MangoWM. I've got a
+    clone of MangoWM at ~/Code/mango. Help me do the following:
+
+    1) Create an empty repo at ~/Code/tamlinux/tam-pane and get git
+    working in it.
+    2) In tam-pane, create a plain text README that explains the project:
+    create our own Wayland windowing system, taking the best ideas from
+    MangoWM, Hyprland, sway, and every other window manager we can find
+    3) Create an ideas folder with a README-ideas plain text file
+    explaining that this is where we keep the ideas we find from other
+    window managers.
+    4) In ideas, create a file for each of the window managers we're
+    tracking for ideas, including hyprland and MangoWM
+    5) Create an arch folder with a README-arch plain text file explaining
+    that this is where we document the system architecture, including
+    data structures and algorithms, we use for tam-pane
+    6) Carefully evaluate the mango repo to understand its dependencies
+    and how mango works
+    7) Port over the code from that repo into tam-pane so that we can
+    build our own window manager
+    8) A markdown ROADMAP.md file that sets milestones with semvers
+    attached, e.g. 0.0.1 initial framework established and code compiles
+    9) Create a plans folder, including a plaintext README-plans file,
+    with work phases to achieve each milestone. Each plan should be
+    labeled P1-<name>.md, P2-<name>.md, etc. A phase can include several
+    semvers, e.g. Phase 1 might be all 0.0.x versions.
+    10) Create a bugs folder, including plaintext README-bugs, for bug
+    tracking. Each bug should be labeled B1-<name>.md, etc.
+
+    The goal of tam-pane is to have a window manager that works on an Arch
+    Linux rootstock to provide equivalent functionality to MangoWM and
+    hyprland, but that has no other dependencies besides standard C
+    libraries and libtam. A few things that tam-pane should provide:
+
+    1) Dynamic tiling like hyprland
+    2) tags on windows like MangoWM
+    3) lua scripting built in like hyprland"
+
+  Fred, later in the session:
+
+    "LICENSE should GPL v3"
+
+    "I don't want all of mango's code in tam-pane. I just want to use
+    mango for ideas. We can copy over only what we need. Keep the rest of
+    it out of tam-pane."
+
+    "The idea is to build a very clean system from the ground up. I want
+    to learn from mango and hyprland, not duplicate their whole code
+    structure. Copy what they have working well; ignore what they don't
+    do well. Our clean should be tight, clean, and excellent."
+
+    "We can refactor and build our code exactly as we want. We want to
+    jetison unnecessary dependencies. I want to use Makefiles, not drag
+    in a whole 'nuther build system. Make sure the plan understands the
+    goal here: I'm not forking and cloning, I'm starting fresh but
+    building on the code base mango and hyprland have created."
+
+    "Pull changes in repos for other window managers so we stay current
+    with their latest ideas, bug fixes, etc."
+
+  Fred also chose: the end state is libc, libtam and Mesa for the GPU;
+  Lua 5.4 sources kept in the tree (changed to 5.5 in W3); a branch named
+  dev; default install prefix $HOME/.local. tam-pane is developed under
+  Tamlinux 0.6.x and dogfooded in 0.7.x, replacing the plan to move to
+  Sway.
+
+
+DONE
+
+  - Repository, README, ROADMAP.md, and the ideas, arch, plans and bugs
+    folders with their README files; MangoWM and Hyprland evaluations.
+  - Fresh code, not a fork. Taken, rewritten and listed in UPSTREAM.md:
+    MangoWM's dwindle tree and tag view model, Hyprland's dwindle split
+    rules, and the layer-shell protocol file.
+  - No globals: one tp_server is passed everywhere. Each module owns and
+    removes its own listeners, so teardown never trips wlroots' destroy
+    assertions.
+  - The dwindle tree is pure: opaque items, settings kept in the tree,
+    windows placed through a callback. It is unit-testable, and Lua
+    layouts can reuse it.
+  - Bindings match the unshifted key symbol, so "Meta+Shift+1" is written
+    with "1" on any layout.
+  - Windows are configured only on a real size change, saving redraws.
+  - The event loop never blocks: tp_spawn double-forks.
+  - Dropped: scenefx, pango, cairo, cJSON, pcre2, xcb, meson and ninja.
+    Direct dependencies: wlroots 0.20, wayland-server, xkbcommon, libtam
+    (static), libc and libm.
+  - tools/pull-references keeps the MangoWM and Hyprland clones current,
+    from the list in ideas/sources.
+  - Checked: make clean && make has no warnings with -Wall -Wextra
+    -Wpedantic. make test passes: test_tags (28 checks), test_dwindle (52
+    checks), and the headless smoke test (starts, opens its socket, maps
+    two foot windows, survives one closing, exits 0 on SIGTERM).
+    readelf -d lists only libwlroots-0.20, libwayland-server,
+    libxkbcommon, libm and libc.
+
+
+FAILED
+
+  - Nothing. 7e8185a was a commit only to name d840afb in the record, the
+    kind of paperwork commit work/ records avoid.
+
+
+HANDOFF
+
+  - Interactive use is untested. Fred runs it nested at 0.0.2 (done in
+    W2).

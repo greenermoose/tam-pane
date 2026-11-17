@@ -1,9 +1,101 @@
 WORK SESSIONS
 
-This folder is for recording work sessions.
+This folder holds one record per work session: what was asked, what got
+done, what failed, and what comes next. The main purpose is recall and
+handoff. An AI agent starting work in this repository should be able to
+read the newest record and carry on without asking Fred to repeat himself.
 
-Since 2026-11-17 these records replace docs/ai/ for tam-pane, as a trial. The two earlier docs/ai/ records stay as history.
 
-Record a session as W<number>-<name>.md.  Record the AI harness and AI model used for the work session. Include relevant prompts, but trim out superfluous interjections. The goal is to record just the pertinent prompts that the AI agents used for guidance.
+WHY THIS REPLACES DOCS/AI
 
-Describe what was attempted, what succeeded, and what failed. Include a handoff if work was left undone or there is an obvious and necessary next step to be done.
+Since 2026-11-17, tam-pane uses work/ instead of docs/ai/, as a trial. If
+it works better, it will be used across Tamlinux.
+
+docs/ai/ recorded the useful things: Fred's prompts, commit hashes, test
+results and the reasons behind choices. Those are kept here. But it also
+turned into paperwork. Every session edited an index file and two tables
+as well as its record, and every record repeated the same boilerplate
+fields. Agents made commits only to write a record's own hash into it, or
+to refresh an index; in tam, about one commit in ten did nothing else.
+docs/ai/ also had no place for failures or a handoff, which are what the
+next agent needs most.
+
+So these records are short and plain, nothing indexes them, and the
+record goes in a commit with the work.
+
+
+THE PROCEDURE
+
+At the start of a session, read this file and then the newest record:
+
+    ls work | sort -V | tail -1
+
+Its HANDOFF section is the current to-do list.
+
+At the end of a session, write one record and commit it with the work
+(or with the session's last commit). If the session goes on after that,
+update the same record instead of starting another.
+
+Any HANDOFF item from the previous record that is still open is repeated
+in the new record, so the newest record is the only place to look.
+
+
+NAMING
+
+Name each record W<number>-<name>, with no extension and no date: for
+example W3-lua-5-5. The number gives the order. The date goes inside the
+record, because git sets every file's date to when it was checked out.
+
+
+FORMAT
+
+Plain text, no Markdown, lines no longer than 76 characters. One value per
+header line. Section names in capitals.
+
+    W3 LUA 5.5, AND WORK RECORDS REPLACE DOCS/AI
+
+    Date: 2026-11-17
+    AI harness: Claude Code 2.1.326
+    AI model: claude-opus-5-5
+    Commits: e8a8f38, 68be547
+    Continues: W2  (only when this session picked up W2's handoff)
+
+    GUIDANCE
+
+      Fred: "Use lua 5.5 for tam-pane. Update that repo."
+
+    DONE
+
+      - What changed and how it was checked, one item per change.
+
+    FAILED
+
+      - What was tried and did not work, and why. "Nothing." if nothing.
+
+    HANDOFF
+
+      - What is left, in the order to do it. "None." if nothing.
+
+Rules:
+
+  - Take the harness version from the running tool (claude --version,
+    codex --version), never from memory.
+  - Commits lists the work's commits. A record never contains the hash of
+    the commit that adds it, and no commit is made just to add a hash.
+  - Continues names the record whose handoff this session picked up. Leave
+    it out otherwise.
+  - Quote Fred's prompts that steered the work, word for word. Leave out
+    side remarks.
+  - Write only what the next agent needs and cannot get from the diff.
+    15 to 40 lines is typical.
+
+
+PRIVACY
+
+This repository is public. Records never contain session IDs, transcript
+or store paths, home-directory paths, private repository names or private
+decision numbers. Transcripts are kept privately by the author; one
+private line per record maps it to its transcript.
+
+Commits made with AI help still carry Co-authored-by, AI-Tool (with the
+version) and AI-Model trailers.

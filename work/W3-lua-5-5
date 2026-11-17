@@ -1,0 +1,74 @@
+W3 LUA 5.5, AND WORK RECORDS REPLACE DOCS/AI
+
+Date: 2026-11-17
+AI harness: Claude Code 2.1.326
+AI model: claude-opus-5-5
+Commits: e8a8f38, 68be547
+
+
+GUIDANCE
+
+  Fred: "Use lua 5.5 for tam-pane. Update that repo. Make a note of this
+  decision."
+
+  Fred: "work/ supersedes docs/ai/. I want to try out this new procedure
+  in tam-pane. If it is better than docs/ai/, then I want to roll it out
+  across Tamlinux. But let's see how it works for developing tam-pane
+  first."
+
+  Fred: "Plan how the work folder and work sessions should be done.
+  Consider what has been helpful and what has been harmful about the
+  docs/ai system. I consider helpful things that help us do work faster.
+  I consider harmful bureaucratic quagmires that have AI agents spending
+  time on paperwork rather than getting work done that contributes to
+  functional code. The README-work files should be updated to explain
+  well our new procedure and the reason for trying it. The main reason is
+  to enable better recall and handoffs for AI agents working in a repo."
+  He asked for decisions on dates in names, a transcript status line, and
+  the format, and prefers one value per line and plain text.
+
+  Fred: "Renumber the work sessions for tam-pane to include the two work
+  sessions from docs/ai that preceded this new work record procedure."
+
+
+DONE
+
+  - e8a8f38: the Lua plan is 5.5 instead of 5.4 in README, ROADMAP.md
+    (0.1.0), plans/P2-lua.md, arch/dependencies.md and ideas/hyprland.md.
+    No Lua code exists yet. The libinput line in arch/dependencies.md
+    still says liblua 5.4; it describes Arch's libinput, not tam-pane.
+  - Added a P2 risk: while wlroots remains, libinput loads liblua 5.4
+    into the compositor process, so tam-pane's static Lua 5.5 must not
+    export its lua_* symbols. The Makefile does not use -rdynamic.
+  - 68be547: work/ replaced docs/ai/ as a trial, and README lists work/.
+  - Settled the format, written in README-work: plain text with no
+    extension, one value per header line, no date in the name (git
+    resets file dates on checkout), no transcript status line, no
+    indexes, and the record committed with the work.
+  - Converted the two docs/ai/ records into W1 and W2. The docs/ai/
+    headless-input record and the first work record described one Codex
+    session, so they are merged into W2. Removed docs/ai/; git keeps the
+    old files. AI_PROVENANCE.md is now a short pointer to work/.
+  - make test passes (no code changed after e8a8f38).
+
+
+FAILED
+
+  - The e8a8f38 trailer reads AI-Tool: claude-code without the version.
+    It is pushed, so it stays; this record gives the version.
+
+
+HANDOFF
+
+  - Open from W2: finish the integration harness (a real test client,
+    injected keyboard and pointer events; check geometry, closing, focus,
+    event delivery and bindings).
+  - Open from W2: look into a possible unmatched key release after a
+    consumed binding, fix what the harness finds, and rerun the suite.
+  - Open from W2: 0.0.2 still needs a short nested check and Fred's
+    acceptance of the exact build.
+  - P2 0.1.0: link without -rdynamic, and check that nm -D build/tam-pane
+    shows no lua_* symbols.
+  - After a few more sessions, Fred judges the trial: did the next agent
+    start from the newest HANDOFF without asking him to repeat context,
+    and were there no paperwork-only commits?
