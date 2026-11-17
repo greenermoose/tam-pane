@@ -38,7 +38,7 @@ Fred decided this on 2026-11-17:
 
 ### Phase P2: Lua (0.1.x), `plans/P2-lua.md`
 
-- **0.1.0** The Lua 5.4 sources are in the tree, built by our Makefile.
+- **0.1.0** The Lua 5.5 sources are in the tree, built by our Makefile.
   `~/.config/tam-pane/init.lua` sets the settings, and an instruction
   budget guards every call.
 - **0.1.1** Key bindings and dispatchers come from Lua, and the

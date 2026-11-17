@@ -60,9 +60,10 @@
   configuration values fetched through static `CConfigValue` lookups
   scattered through the code. We keep settings in one small struct.
 - **Lua 5.5.**
-  - Hyprland requires 5.5 (`CMakeLists.txt:291`); tam-pane uses 5.4, by
-    Fred's choice.
-  - Not a fault, but configurations won't carry across unchanged.
+  - Hyprland requires 5.5 (`CMakeLists.txt:291`); tam-pane uses 5.5 too,
+    by Fred's choice (2026-11-17).
+  - Configurations still won't carry across unchanged, because the API is
+    our own.
 
 ## Where to look
 

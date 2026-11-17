@@ -23,7 +23,7 @@ WHAT IT DOES
   several tags at once.
 
   Lua scripting built in, like Hyprland. Configuration, key bindings, event
-  hooks, window rules and layouts will be written in Lua, with the Lua 5.4
+  hooks, window rules and layouts will be written in Lua, with the Lua 5.5
   interpreter compiled into tam-pane itself (from 0.1.0).
 
 

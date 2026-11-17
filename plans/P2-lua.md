@@ -12,7 +12,7 @@ or crash the compositor.
 
 ### 0.1.0: the interpreter and init.lua
 
-- Fetch the Lua 5.4 release tarball from lua.org into its own empty
+- Fetch the Lua 5.5 release tarball from lua.org into its own empty
   directory. Check its SHA-256 against the value lua.org publishes, then
   copy the C sources (not the `lua` or `luac` programs) into
   `third_party/lua/`, with its license and version noted in `UPSTREAM.md`.
@@ -70,13 +70,18 @@ or crash the compositor.
 
 ## Dependencies
 
-- Adds: Lua 5.4 sources in the tree. No external dependency.
+- Adds: Lua 5.5 sources in the tree. No external dependency.
 
 ## Risks
 
-- **Version.** Hyprland 0.56 and later embed Lua 5.5. tam-pane uses 5.4,
-  by Fred's choice, so configurations will not carry over word for word;
-  the API is our own anyway.
+- **Version.** tam-pane uses Lua 5.5, by Fred's choice
+  (2026-11-17), the same major version Hyprland 0.56 and later embed.
+  Configurations still will not carry over word for word, because the
+  API is our own.
+- **Two Lua versions in one process.** Until wlroots goes (P6), Arch's
+  libinput loads liblua 5.4 for its plugins. tam-pane's static Lua 5.5
+  must not export its `lua_*` symbols: link without `-rdynamic`, and check
+  with `nm -D build/tam-pane` that none appear.
 
 ## Open points
 

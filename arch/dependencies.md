@@ -65,6 +65,6 @@ and libgbm stay.
 
 ## Coming in later phases
 
-- **Lua 5.4** (P2, 0.1.0): C sources in `third_party/lua/`, built by our
+- **Lua 5.5** (P2, 0.1.0): C sources in `third_party/lua/`, built by our
   Makefile. They are not an external dependency.
 - **xcb** (P3, 0.2.5): temporary, for XWayland only.
