@@ -1,7 +1,7 @@
 # tam-pane: a Wayland compositor. Plain Make; no other build system.
 #
 #   make            build build/tam-pane
-#   make test       unit tests plus a headless start/stop check
+#   make test       unit, smoke, and headless input integration checks
 #   make install    install to PREFIX (default $HOME/.local)
 #   make uninstall  remove what install put there
 #   make clean      remove build/
@@ -16,6 +16,8 @@ LIBTAM_PREFIX ?= $(HOME)/.local
 
 PKG_CONFIG ?= pkg-config
 PKGS = wlroots-0.20 wayland-server xkbcommon
+# Used only by the test client, never linked into the compositor.
+CLIENT_PKGS = wayland-client
 
 VERSION := $(shell tr -d '[:space:]' < VERSION)
 WAYLAND_SCANNER := $(shell $(PKG_CONFIG) --variable=wayland_scanner wayland-scanner)
@@ -44,6 +46,8 @@ TESTS = build/tests/test_tags build/tests/test_dwindle
 
 PROTO_HEADERS = build/protocols/xdg-shell-protocol.h \
 	build/protocols/wlr-layer-shell-unstable-v1-protocol.h
+CLIENT_PROTO_HEADER = build/protocols/xdg-shell-client-protocol.h
+CLIENT_PROTO_CODE = build/protocols/xdg-shell-protocol.c
 
 all: build/tam-pane
 
@@ -66,13 +70,26 @@ build/protocols/wlr-layer-shell-unstable-v1-protocol.h: protocols/wlr-layer-shel
 	@mkdir -p $(@D)
 	$(WAYLAND_SCANNER) server-header $< $@
 
+build/protocols/xdg-shell-client-protocol.h: $(WAYLAND_PROTOCOLS)/stable/xdg-shell/xdg-shell.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) client-header $< $@
+
+build/protocols/xdg-shell-protocol.c: $(WAYLAND_PROTOCOLS)/stable/xdg-shell/xdg-shell.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) private-code $< $@
+
 build/tests/test_%: tests/test_%.c $(CORE_OBJS) tests/check.h
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -o $@ $< $(CORE_OBJS)
 
-build/tests/test_input_headless: tests/test_input_headless.c $(CORE_OBJS) $(filter-out build/main.o,$(WM_OBJS)) $(LIBTAM)
+build/tests/test_input_headless: tests/test_input_headless.c $(CORE_OBJS) \
+	$(filter-out build/main.o,$(WM_OBJS)) $(LIBTAM) \
+	$(CLIENT_PROTO_HEADER) $(CLIENT_PROTO_CODE)
 	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(PKG_CFLAGS) -o $@ $< $(CORE_OBJS) $(filter-out build/main.o,$(WM_OBJS)) $(LIBTAM) $(PKG_LIBS) -lm
+	$(CC) $(CFLAGS) $(PKG_CFLAGS) -Ibuild/protocols -o $@ $< \
+		$(CLIENT_PROTO_CODE) $(CORE_OBJS) \
+		$(filter-out build/main.o,$(WM_OBJS)) $(LIBTAM) $(PKG_LIBS) \
+		$(shell $(PKG_CONFIG) --libs $(CLIENT_PKGS)) -lm
 
 test: $(TESTS) build/tam-pane build/tests/test_input_headless
 	@for t in $(TESTS); do $$t || exit 1; done

@@ -17,6 +17,8 @@ struct tp_keyboard {
 	struct wl_listener modifiers;
 	struct wl_listener key;
 	struct wl_listener destroy;
+	/* Linux KEY_MAX fits in twelve 64-bit words. */
+	uint64_t consumed_keys[12];
 };
 
 /* Seat, device discovery and seat requests (input.c). */

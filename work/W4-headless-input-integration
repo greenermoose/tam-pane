@@ -1,0 +1,33 @@
+W4 0.0.2 HEADLESS INPUT INTEGRATION
+
+Date: 2026-11-17
+AI harness: Codex CLI 0.169.0
+AI model: gpt-6-luna
+Continues: W3
+
+GUIDANCE
+
+  Fred: "Implement the plan."
+
+DONE
+
+  - The input test now creates two real xdg-shell clients on the private
+    headless compositor. It checks configure sizes, focus cycling, keyboard
+    delivery, pointer enter, motion and button events, close requests and
+    client unmapping.
+  - A handled binding now consumes its matching key release as well as its
+    press. Ordinary key press and release events still reach the client.
+  - `make clean && make test` passes outside the sandbox: 28 tag checks,
+    52 dwindle checks, both smoke checks and 19 input integration checks.
+
+FAILED
+
+  - The sandbox cannot create the private Wayland socket. The same suite
+    passes outside the sandbox.
+
+HANDOFF
+
+  - Fred runs this exact build nested and accepts 0.0.2. Do not bump VERSION
+    before that acceptance; record the exact build he tried.
+  - P2 0.1.0 still needs Lua symbol isolation and an `nm -D` check.
+  - After a few more sessions, Fred judges the `work/` procedure trial.

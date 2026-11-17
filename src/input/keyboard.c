@@ -39,10 +39,20 @@ static bool run_binding(struct tp_keyboard *k, uint32_t keycode) {
 static void on_key(struct wl_listener *l, void *data) {
 	struct tp_keyboard *k = wl_container_of(l, k, key);
 	struct wlr_keyboard_key_event *ev = data;
+	uint32_t word = ev->keycode / 64;
+	uint64_t mask = UINT64_C(1) << (ev->keycode % 64);
 
-	if (ev->state == WL_KEYBOARD_KEY_STATE_PRESSED &&
-		run_binding(k, ev->keycode))
+	if (ev->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+		if (run_binding(k, ev->keycode)) {
+			if (word < sizeof(k->consumed_keys) / sizeof(k->consumed_keys[0]))
+				k->consumed_keys[word] |= mask;
+			return;
+		}
+	} else if (word < sizeof(k->consumed_keys) / sizeof(k->consumed_keys[0]) &&
+			   (k->consumed_keys[word] & mask)) {
+		k->consumed_keys[word] &= ~mask;
 		return;
+	}
 	wlr_seat_set_keyboard(k->server->seat, k->wlr);
 	wlr_seat_keyboard_notify_key(k->server->seat, ev->time_msec, ev->keycode,
 								 ev->state);
