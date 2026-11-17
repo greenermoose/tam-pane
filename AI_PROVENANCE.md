@@ -17,9 +17,11 @@ listed in `docs/ai/README`.
 | Tool | Verified version | Model | Date |
 | --- | --- | --- | --- |
 | Claude Code | 2.1.326 | claude-opus-5-5 | 2026-11-17 |
+| Codex CLI | 0.169.0 | gpt-6.1-terra | 2026-11-17 |
 
 ## Milestones
 
 | Date | Milestone | Record |
 | --- | --- | --- |
 | 2026-11-17 | 0.0.1: repository, documentation folders, MangoWM and Hyprland evaluations, and a framework that compiles and passes headless tests | [Session](docs/ai/2026-11-17-tam-pane-scaffold.md) |
+| 2026-11-17 | Headless synthetic input device setup checks | [Session](docs/ai/2026-11-17-headless-input.md) |

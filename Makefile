@@ -70,9 +70,14 @@ build/tests/test_%: tests/test_%.c $(CORE_OBJS) tests/check.h
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -o $@ $< $(CORE_OBJS)
 
-test: $(TESTS) build/tam-pane
+build/tests/test_input_headless: tests/test_input_headless.c $(CORE_OBJS) $(filter-out build/main.o,$(WM_OBJS)) $(LIBTAM)
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(PKG_CFLAGS) -o $@ $< $(CORE_OBJS) $(filter-out build/main.o,$(WM_OBJS)) $(LIBTAM) $(PKG_LIBS) -lm
+
+test: $(TESTS) build/tam-pane build/tests/test_input_headless
 	@for t in $(TESTS); do $$t || exit 1; done
 	@sh tests/smoke-headless.sh build/tam-pane
+	@sh tests/run-input-headless.sh build/tests/test_input_headless
 
 install: build/tam-pane
 	install -Dm755 build/tam-pane $(DESTDIR)$(BINDIR)/tam-pane
