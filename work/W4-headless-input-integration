@@ -19,6 +19,9 @@ DONE
     press. Ordinary key press and release events still reach the client.
   - `make clean && make test` passes outside the sandbox: 28 tag checks,
     52 dwindle checks, both smoke checks and 19 input integration checks.
+  - Fred ran commit a5815e5 nested under Hyprland. Foot opens and accepts
+    typing, but Hyprland captures all Meta shortcuts before tam-pane sees
+    them. The nested Meta bindings remain untested.
 
 FAILED
 
@@ -27,7 +30,12 @@ FAILED
 
 HANDOFF
 
-  - Fred runs this exact build nested and accepts 0.0.2. Do not bump VERSION
-    before that acceptance; record the exact build he tried.
+  - Find a reversible way to pass Meta shortcuts through Hyprland to the
+    nested compositor. Do not change persistent Hyprland configuration.
+  - With that route, check Meta+Return, Meta+J/K and Meta+W, plus focus
+    cycling, key repeat and pointer behavior across windows. Record results
+    against the exact build.
+  - Keep 0.0.2 unaccepted and VERSION at 0.0.1 until Fred confirms the
+    required nested behavior.
   - P2 0.1.0 still needs Lua symbol isolation and an `nm -D` check.
   - After a few more sessions, Fred judges the `work/` procedure trial.
