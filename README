@@ -1,0 +1,99 @@
+TAM-PANE - A WAYLAND WINDOWING SYSTEM FOR TAMLINUX
+
+tam-pane is our own Wayland compositor and window manager. It is built
+fresh, from the ground up, and it builds on the best ideas and the best
+code of MangoWM, Hyprland, sway and every other window manager we can
+find. Where another project's code works well, we take it and refactor it
+into tam-pane's own shape. Where it doesn't, we leave it out. tam-pane is
+not a fork or a clone of any of them.
+
+Fred is developing tam-pane while running Tamlinux 0.6.x, with the goal of
+dogfooding it as the Tamlinux 0.7.x compositor in place of Hyprland.
+
+
+WHAT IT DOES
+
+  Dynamic tiling, like Hyprland. Windows tile themselves in a binary tree
+  (dwindle): each new window splits the space of the window it opens next
+  to, along that window's longer side.
+
+  Tags on windows, like MangoWM and dwm. A window carries one or more of
+  nine tags; a monitor shows every window whose tags meet the set it is
+  viewing. One window can appear in several views, and one view can show
+  several tags at once.
+
+  Lua scripting built in, like Hyprland. Configuration, key bindings, event
+  hooks, window rules and layouts will be written in Lua, with the Lua 5.4
+  interpreter compiled into tam-pane itself (from 0.1.0).
+
+
+HOW IT IS BUILT
+
+  - Small modules with one job each, and explicit state: every function is
+    handed the server it works on, and there are no global variables.
+  - Pure logic (tags, the layout tree) has no compositor code in it, so it
+    is tested without a display.
+  - The event loop never blocks: no waiting on child processes, and Lua
+    will run with an instruction budget and no blocking calls.
+  - Every dependency has to earn its place and has a planned exit. The goal
+    is libc, the kernel's headers, libtam and code in this repository, with
+    Mesa allowed so the GPU does the compositing.
+  - Plain Make. There is no other build system.
+
+  arch/principles.md has the full set of principles.
+
+
+BUILDING
+
+  Needs: a C11 compiler, make, pkg-config, wlroots 0.20, wayland,
+  wayland-protocols, libxkbcommon, and libtam installed under
+  LIBTAM_PREFIX (default $HOME/.local).
+
+    make              build build/tam-pane
+    make test         unit tests, then headless start/stop checks
+    make install      install to PREFIX (default $HOME/.local)
+    make uninstall    remove the installed binary
+    make clean        remove build/
+
+  The headless checks never touch the running desktop. Running tam-pane
+  for real (nested in a window, or as a session) starts with 0.0.2; see
+  ROADMAP.md.
+
+
+KEYS (COMPILED IN UNTIL LUA CONFIGURATION ARRIVES)
+
+  Meta+Return           open a terminal ($TERMINAL, else foot)
+  Meta+W                close the focused window
+  Meta+J / Meta+K       focus the next / previous window
+  Meta+V                toggle floating
+  Meta+F                toggle fullscreen
+  Meta+1 .. Meta+9      view one tag
+  Meta+Shift+1 .. 9     move the focused window to a tag
+  Meta+Ctrl+1 .. 9      add or remove a tag from the view
+  Meta+Tab              go back to the previous view
+  Meta+Shift+E          quit tam-pane
+
+  Meta is the key with the logo on it.
+
+
+WHERE THINGS ARE
+
+  src/, include/   the compositor (one module per file)
+  tests/           unit tests and headless checks
+  protocols/       Wayland protocol files we carry
+  ideas/           ideas we collect from other window managers
+  arch/            architecture: data structures, algorithms, evaluations
+  plans/           one plan per work phase (P1, P2, ...)
+  bugs/            one record per bug (B1, B2, ...)
+  tools/           helper scripts for developing tam-pane
+  ROADMAP.md       milestones with their version numbers
+  UPSTREAM.md      every piece of code we took from another project
+  COPYRIGHT        copyright and license notices
+  LICENSE          GNU General Public License, version 3
+
+
+LICENSE
+
+  tam-pane is free software under the GNU General Public License, version
+  3 or later. Code taken from other projects keeps its notices; see
+  COPYRIGHT and UPSTREAM.md.

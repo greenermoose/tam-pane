@@ -1,0 +1,57 @@
+#!/bin/sh
+# Bring the reference clones listed in ideas/sources up to date, so
+# tam-pane keeps learning from the projects' latest ideas and fixes.
+#
+#   tools/pull-references          update (or clone) every listed project
+#   tools/pull-references --list   print the list and each clone's commit
+#
+# Clones are read-only references: one with local changes is skipped, not
+# overwritten. Shallow clones are reset to the newly fetched tip.
+set -u
+here=$(cd "$(dirname "$0")/.." && pwd)
+list="$here/ideas/sources"
+mode=${1:-pull}
+status=0
+
+entries=$(grep -v '^[[:space:]]*#' "$list" | grep -v '^[[:space:]]*$')
+
+# Read from a here-document, not a pipe, so the loop runs in this shell
+# and its failures reach the exit status.
+while read -r name url path branch depth; do
+	case $path in "~/"*) path="$HOME/${path#\~/}" ;; esac
+	if [ "$mode" = --list ]; then
+		head=$(git -C "$path" log -1 --format='%h %cs' 2>/dev/null || echo 'not cloned')
+		printf '%-10s %-40s %s\n' "$name" "$path" "$head"
+		continue
+	fi
+	if [ ! -d "$path/.git" ]; then
+		echo "$name: cloning into $path"
+		if [ "$depth" = full ]; then
+			git clone -q --branch "$branch" "$url" "$path" </dev/null || status=1
+		else
+			git clone -q --depth "$depth" --branch "$branch" "$url" "$path" </dev/null || status=1
+		fi
+		continue
+	fi
+	if [ -n "$(git -C "$path" status --porcelain)" ]; then
+		echo "$name: skipped, $path has local changes"
+		status=1
+		continue
+	fi
+	before=$(git -C "$path" rev-parse --short HEAD)
+	if [ "$depth" = full ]; then
+		git -C "$path" pull -q --ff-only origin "$branch" </dev/null || { status=1; continue; }
+	else
+		git -C "$path" fetch -q --depth "$depth" origin "$branch" </dev/null &&
+			git -C "$path" reset -q --hard FETCH_HEAD || { status=1; continue; }
+	fi
+	after=$(git -C "$path" rev-parse --short HEAD)
+	if [ "$before" = "$after" ]; then
+		echo "$name: already current at $after"
+	else
+		echo "$name: $before -> $after"
+	fi
+done <<LIST
+$entries
+LIST
+exit "$status"

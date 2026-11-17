@@ -1,0 +1,101 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/*
+ * The server: one instance holds every piece of compositor state. Modules
+ * receive it explicitly; there are no global variables. Each module owns
+ * the listeners it sets up here and removes them in its own finish call.
+ */
+#ifndef TAM_PANE_SERVER_H
+#define TAM_PANE_SERVER_H
+
+#include "tam-pane/settings.h"
+#include <stdbool.h>
+#include <wayland-server-core.h>
+
+struct wlr_allocator;
+struct wlr_backend;
+struct wlr_compositor;
+struct wlr_cursor;
+struct wlr_output_layout;
+struct wlr_renderer;
+struct wlr_scene;
+struct wlr_scene_output_layout;
+struct wlr_scene_tree;
+struct wlr_seat;
+struct wlr_session;
+struct wlr_xcursor_manager;
+struct wlr_xdg_shell;
+struct tp_monitor;
+
+/* Scene layers, bottom to top. */
+enum tp_layer {
+	TP_LAYER_BACKGROUND,
+	TP_LAYER_BOTTOM,
+	TP_LAYER_TILE,
+	TP_LAYER_FLOAT,
+	TP_LAYER_TOP,
+	TP_LAYER_FULLSCREEN,
+	TP_LAYER_OVERLAY,
+	TP_LAYER_COUNT
+};
+
+struct tp_server {
+	struct tp_settings settings;
+
+	struct wl_display *display;
+	struct wl_event_loop *loop;
+	struct wlr_backend *backend;
+	struct wlr_session *session;
+	struct wlr_renderer *renderer;
+	struct wlr_allocator *allocator;
+	struct wlr_compositor *compositor;
+
+	struct wlr_scene *scene;
+	struct wlr_scene_tree *layer[TP_LAYER_COUNT];
+	struct wlr_output_layout *output_layout;
+	struct wlr_scene_output_layout *scene_layout;
+
+	struct wl_list monitors;	/* tp_monitor.link */
+	struct tp_monitor *selmon;	/* monitor that receives new windows */
+	struct wl_listener new_output;
+	struct wl_listener layout_change;
+
+	struct wlr_xdg_shell *xdg_shell;
+	struct wl_list clients;		/* tp_client.link, stacking-independent */
+	struct wl_list focus_stack; /* tp_client.flink, most recent first */
+	struct wl_listener new_toplevel;
+	struct wl_listener new_popup;
+
+	struct wlr_seat *seat;
+	struct wl_list keyboards; /* tp_keyboard.link */
+	struct wl_listener new_input;
+	struct wl_listener request_cursor;
+	struct wl_listener request_set_selection;
+
+	struct wlr_cursor *cursor;
+	struct wlr_xcursor_manager *cursor_mgr;
+	struct wl_listener cursor_motion;
+	struct wl_listener cursor_motion_absolute;
+	struct wl_listener cursor_button;
+	struct wl_listener cursor_axis;
+	struct wl_listener cursor_frame;
+
+	struct wl_event_source *sigterm, *sigint;
+	bool stopping; /* set while tearing down: no more layout or focus */
+	const char *socket;
+};
+
+/* Create every global and module. Returns false (after logging) when the
+ * compositor cannot run; tp_server_finish is still safe to call. */
+bool tp_server_init(struct tp_server *s);
+
+/* Open the Wayland socket, start the backend and export WAYLAND_DISPLAY. */
+bool tp_server_start(struct tp_server *s);
+
+/* Run until tp_server_quit or SIGTERM/SIGINT. */
+void tp_server_run(struct tp_server *s);
+void tp_server_quit(struct tp_server *s);
+
+/* Tear down in dependency order. */
+void tp_server_finish(struct tp_server *s);
+
+#endif

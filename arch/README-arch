@@ -1,0 +1,28 @@
+ARCHITECTURE
+
+This folder documents tam-pane's system architecture: the modules and how
+they connect, the data structures, the algorithms, the dependencies, and
+the evaluations of other compositors that shaped them.
+
+
+FILES
+
+  principles.md          the design rules every change follows
+  data-structures.md     Server, Monitor, Client, tags and the layout tree,
+                         as they are built today
+  dependencies.md        every library tam-pane uses, why, and which
+                         version removes it
+  mango-evaluation.md    how MangoWM works; what to take and what not to
+                         repeat
+  hyprland-evaluation.md the same for Hyprland
+
+  Later phases add their own files here, for example lua-api.md (P2),
+  ipc.md and protocols.md (P3).
+
+
+KEEPING IT TRUE
+
+  These documents describe the code as it is. A change that alters a
+  structure, an algorithm or a dependency updates the matching file in
+  the same commit. Where code and document disagree, the code is right
+  and the document is a bug.

@@ -1,0 +1,6 @@
+# Reference clones of other window managers, read by tools/pull-references.
+# One project per line:  name  url  local-path  branch  depth
+# depth: "full" for a normal clone, or a number for a shallow clone.
+# Lines starting with # are comments. Add a project by adding a line.
+mangowm   https://github.com/mangowm/mango.git        ~/Code/mango      main  full
+hyprland  https://github.com/hyprwm/Hyprland.git      ~/Code/hyprland   main  1
