@@ -1,7 +1,7 @@
 # P1: Foundation (0.0.x)
 
-**Status:** in progress. 0.0.2 nested behavior accepted by Fred on
-2026-11-17. Next: 0.0.3, tags in use.
+**Status:** in progress. 0.0.3 interactive tags accepted by Fred on
+2026-11-17. Next: 0.0.4, tiling complete.
 
 ## Goal
 
@@ -36,7 +36,9 @@ was `9d8797596fef75c5ed7147ffbe2425f6251cbdf0589422cd0340c838527e0e51`
 
 ### 0.0.3: tags in use
 
-- Check every tag binding interactively.
+- Accepted on 2026-11-17 after representative nested checks on commit
+  `dea128d`. Automated tests cover all nine tag numbers; no exhaustive
+  human sweep is required.
 - Move a window to several tags at once (Meta+Shift+Ctrl+N, as in dwm).
 - Per-tag remembered focus: returning to a tag focuses the window you
   left.
@@ -64,7 +66,10 @@ was `9d8797596fef75c5ed7147ffbe2425f6251cbdf0589422cd0340c838527e0e51`
 - `make clean && make`: no warnings.
 - `make test`: every unit test and headless check passes.
 - 0.0.2 to 0.0.5: Fred runs the build nested or on a spare session and
-  confirms the version's features. Record the exact build he ran.
+  confirms representative behavior that automation cannot establish. Record
+  the exact build he ran. Agents automate exhaustive combinations; never ask
+  Fred to repeat them manually. Keep human checks brief and enjoyable, and
+  stop when Fred says he has tested enough.
 
 ## Dependencies
 

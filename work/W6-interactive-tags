@@ -3,6 +3,7 @@ W6 INTERACTIVE TAGS
 Date: 2026-11-17
 AI harness: Codex CLI 0.169.0
 AI model: gpt-6.1-sol
+Commits: dea128d
 Continues: W5
 
 GUIDANCE
@@ -23,22 +24,23 @@ DONE
   - Candidate binary SHA-256 (still reports accepted version 0.0.2):
     cb8f2611cfec589d0549fd3a71e34a4527810d1dd890e50c0e96d28ec5daa1ca
 
+  - Fred verified moving/viewing tags, previous view, multi-tag assignment,
+    refusal to remove a final tag, independent single-tag focus, shared
+    combined-view focus, closing a remembered window and empty-view return.
+    Accepted 0.0.3 on 2026-11-17 using the candidate hash above.
+  - Removed exhaustive manual tag sweeps. Automated tests own combinations;
+    Fred's brief desktop checks cover what automation cannot establish.
+
 FAILED
 
+  - Asked Fred to repeat an exhaustive tag 3..9 sweep despite automated
+    coverage. Fred rejected that drudgery: "This is not fun and violates a
+    core principle of Tamlinux." The requirement is removed.
   - Initial sandboxed smoke run could not open its private Wayland socket.
     The same tests pass outside the sandbox.
 
 HANDOFF
 
-  - Fred runs the existing nested launcher and checks every tag number:
-    Meta+N views; Meta+Shift+N moves; Meta+Ctrl+N toggles the view;
-    Meta+Shift+Ctrl+N toggles assignment, refusing to remove the last tag.
-    Meta+Tab restores the previous view. Empty tags clear keyboard focus.
-  - With two windows shared by tags 1 and 2, focus a different window on
-    each tag; switching restores each choice. Repeat with combined views;
-    those share one memory. Close or retag a remembered window and return;
-    focus must fall back safely. Ctrl+Alt+Escape restores host shortcuts.
-  - Record Fred's result against this commit and binary hash. Only then
-    accept 0.0.3 and bump VERSION and roadmap/phase status.
+  - Next milestone: 0.0.4, tiling complete. No further 0.0.3 human checks.
   - P2 0.1.0 still needs Lua symbol isolation and an nm -D check.
   - After a few more sessions, Fred judges the work/ procedure trial.
