@@ -1,0 +1,68 @@
+WHATNOW
+
+What tam-pane is doing now and what comes next. Read this first; revise
+it at the end of every session (work/README-work).
+
+Updated: 2026-11-17, with W7
+
+
+STATE
+
+  Version 0.0.3 on branch dev, pushed. Fred accepted 0.0.3, interactive
+  tags, on 2026-11-17 (W6): view a tag, toggle tags in the view, move a
+  window to a tag, add or remove tags on a window (never the last one),
+  previous view, and focus remembered per view.
+
+  Dynamic tiling (dwindle), floating and fullscreen work; Lua, panels,
+  multiple monitors and the desktop protocols do not yet. Dependencies
+  today: wlroots 0.20, wayland-server, xkbcommon, libtam.
+
+  Development runs nested in Hyprland (tools/nested-input, which passes
+  host shortcuts through while the nested window has focus) and headless
+  (tests/smoke-headless.sh, tests/run-input-headless.sh).
+
+
+NEXT
+
+  1. 0.0.4, tiling complete (plans/P1-foundation.md):
+     - resize splits from the keyboard, grow and shrink by direction
+       (src/layout/dwindle.c, as pure functions with unit tests in
+       tests/test_dwindle.c);
+     - move and resize floating windows with Meta plus a mouse button
+       (src/input/pointer.c);
+     - swap and move tiled windows by direction;
+     - optional proportional resizing on insert and remove, from
+       mango's dwindle_manual_split arithmetic, rewritten as pure
+       functions with tests.
+     Bump VERSION to 0.0.4 in the first code commit. Automated tests
+     cover the combinations (tests/test_input_headless.c); Fred's own
+     check is short and nested.
+
+  2. 0.0.5, panels and monitors: layer-shell and several monitors, so a
+     Quickshell bar runs and windows move between monitors.
+
+  3. P2, 0.1.0 (Lua 5.5): link without -rdynamic, so tam-pane does not
+     export its lua_* symbols; check with nm -D build/tam-pane that none
+     appear (plans/P2-lua.md).
+
+  4. Later: Tamlinux's desktop tests move from headless Sway to
+     tam-pane's headless mode once it can serve them (ROADMAP.md).
+
+
+WAITING FOR FRED
+
+  - Nothing for 0.0.3. For 0.0.4: a short nested try of resizing and
+    moving windows, once the automated tests pass.
+
+
+WATCH OUT
+
+  - Never ask Fred to repeat exhaustive manual checks; automate them.
+    Fred, after W6: "This is not fun and violates a core principle of
+    Tamlinux." Keep his checks brief and record the exact build he ran
+    (its SHA-256).
+  - Every code change bumps VERSION in the same commit.
+  - Under Codex's sandbox the headless tests cannot open their private
+    Wayland socket; run them outside the sandbox.
+  - Never toggle anything on Fred's active monitor; the nested window is
+    where he tests.

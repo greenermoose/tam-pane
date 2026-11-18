@@ -86,7 +86,8 @@ WHERE THINGS ARE
   arch/            architecture: data structures, algorithms, evaluations
   plans/           one plan per work phase (P1, P2, ...)
   bugs/            one record per bug (B1, B2, ...)
-  work/            one record per work session (W1, W2, ...)
+  work/            WHATNOW (read it first: what is next) and one record
+                   per work session (W1, W2, ...)
   tools/           helper scripts for developing tam-pane
   ROADMAP.md       milestones with their version numbers
   UPSTREAM.md      every piece of code we took from another project
