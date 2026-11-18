@@ -72,6 +72,9 @@ Fred decided this on 2026-11-17:
 - **0.3.1** Quickshell and the `fred.*` plugins work through tam-pane's
   IPC in place of Hyprland's.
 - **0.3.x** Fixes from daily use, recorded in `bugs/`.
+- Tamlinux's desktop tests switch their offscreen compositor from headless
+  Sway to tam-pane once tam-pane's headless mode can serve them (Tamlinux
+  D268).
 
 ### Phase P5: visuals (0.4.x), `plans/P5-visuals.md`
 
