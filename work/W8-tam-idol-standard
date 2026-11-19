@@ -1,0 +1,35 @@
+W8 TAM-IDOL STANDARD
+
+Date: 2026-11-19
+AI harness: opencode 2.2.5
+AI model: big-pickle
+Commits: the commit that adds this record
+
+
+GUIDANCE
+
+  Fred: "Take the next work slice of tam-idol."
+
+
+DONE
+
+  - Renamed AI_PROVENANCE.md to AI-BLAME.md and reworded it.
+  - Added "Follows the tam-idol 0.1.0 standard." and the missing
+    reviews/ and AI-BLAME.md lines in README's WHERE THINGS ARE.
+  - Brought arch/README-arch, bugs/README-bugs, ideas/README-ideas,
+    plans/README-plans and work/README-work into line with tam-idol
+    0.1.0, keeping tam-pane's own notes under IN THIS REPOSITORY.
+  - Added reviews/README-reviews.
+  - tam-idol/tools/idol-check passes on tam-pane. No code changed;
+    VERSION stays 0.0.3.
+
+
+FAILED
+
+  - Nothing.
+
+
+HANDOFF
+
+  - 0.0.4, tiling complete (plans/P1-foundation.md), is next for code;
+    WHATNOW has the detail.

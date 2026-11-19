@@ -1,34 +1,30 @@
 PLANS
 
-This folder holds one plan per work phase of tam-pane. A phase covers a
-range of versions; ROADMAP.md lists the milestones and their version
-numbers, and each plan says how to reach them.
+This folder holds one plan per work phase of this repository's project.
+A phase covers a range of versions; ROADMAP.md lists the milestones and
+their version numbers, and each plan says how to reach them.
 
 
 NAMING
 
-  P<n>-<name>.md, numbered in the order the phases run:
+  P<n>-<name>.md, numbered in the order the phases run, for example
+  P1-foundation.md for 0.0.x. IN THIS REPOSITORY, below, lists the
+  plans with their version ranges.
 
-    P1-foundation.md                 0.0.x
-    P2-lua.md                        0.1.x
-    P3-daily-parity.md               0.2.x
-    P4-dogfood-tamlinux-0.7.md       0.3.x
-    P5-visuals.md                    0.4.x
-    P6-own-the-stack.md              0.5.x to 0.7.x
-    P7-retire-hyprland.md            1.0.0
-
-  Numbers are never reused. A new phase gets the next number, even when it
-  runs between two existing ones; its version range says where it fits.
+  Numbers are never reused. A new phase gets the next number, even when
+  it runs between two existing ones; its version range says where it
+  fits.
 
 
 WHAT A PLAN HOLDS
 
-  Status        not started, in progress, or done, with the current version
+  Status        not started, in progress, or done, with the current
+                version
   Goal          what the phase achieves, in a sentence or two
   Versions      each version in the phase with its work items
   Acceptance    the checks that say a version is done
-  Dependencies  what the phase adds or removes (keep arch/dependencies.md
-                in step)
+  Dependencies  what the phase adds or removes (keep
+                arch/dependencies.md in step)
   Risks         what could go wrong, and what we do about it
   Open points   questions for Fred, which stay open until he decides
 
@@ -40,4 +36,17 @@ KEEPING PLANS CURRENT
     commit as the code, and say why in the commit message.
   - Fred's decisions are written into the plan as decisions, with their
     date. Until then, a remark from Fred is context, not a decision.
-  - Bugs found while working on a phase go in bugs/, linked from the plan.
+  - Bugs found while working on a phase go in bugs/, linked from the
+    plan.
+
+
+
+IN THIS REPOSITORY
+
+  P1-foundation.md                 0.0.x
+  P2-lua.md                        0.1.x
+  P3-daily-parity.md               0.2.x
+  P4-dogfood-tamlinux-0.7.md       0.3.x
+  P5-visuals.md                    0.4.x
+  P6-own-the-stack.md              0.5.x to 0.7.x
+  P7-retire-hyprland.md            1.0.0
