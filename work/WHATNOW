@@ -13,7 +13,7 @@ STATE
   window to a tag, add or remove tags on a window (never the last one),
   previous view, and focus remembered per view.
 
-  Follows the tam-idol 0.1.0 standard (W8, 2026-11-19). That change
+  Follows the tam-idol 0.2.0 standard (W8, 2026-11-19). That change
   touched READMEs and records only; no code changed, so VERSION stays
   0.0.3.
 
