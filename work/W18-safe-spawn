@@ -10,6 +10,7 @@ Continues: W17
 GUIDANCE
 
   Fred: "Passes. Next?" (after accepting 0.1.6)
+  Fred: "All pass. Next?" (after his tools/demo-0.1.7 check)
 
 
 DONE
@@ -57,6 +58,9 @@ FAILED
 
 HANDOFF
 
-  - B3 is "Fix available" until Fred checks 0.1.7 with tools/demo-0.1.7.
+  - 0.1.7 accepted by Fred on 2026-11-21 after his tools/demo-0.1.7
+    check (commit 51b0425, binary SHA-256
+    7ad7e6a94943c01c222f5c4950cbfd5048d36d456008b4814279136f6e54784d).
+    B3 is Verified.
   - Next in R1's order: finding 8 (capped Lua allocator, truncated rule
     subjects), see WHATNOW.

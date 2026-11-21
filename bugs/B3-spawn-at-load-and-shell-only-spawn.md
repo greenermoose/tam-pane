@@ -1,6 +1,6 @@
 # B3: tp.spawn runs at config load, and only through a shell
 
-- **Status:** Fix available
+- **Status:** Verified
 - **Severity:** high
 - **Affected versions:** 0.1.0 to 0.1.6
 - **Fixed in:** 0.1.7
@@ -58,5 +58,8 @@ Regression tests:
   ran once, saw tam-pane's own `WAYLAND_DISPLAY`, and did not run again
   after SIGHUP.
 
-`tools/demo-0.1.7` is Fred's nested check. Not yet checked in a build
-Fred runs.
+Fred checked 0.1.7 nested with `tools/demo-0.1.7` on 2026-11-21
+(commit 51b0425, binary SHA-256
+`7ad7e6a94943c01c222f5c4950cbfd5048d36d456008b4814279136f6e54784d`). He found
+one guide terminal across reloads, the hostile title shown as text, the
+load-time spawn refused, and the launcher printed PASS.

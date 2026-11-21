@@ -60,7 +60,7 @@ schedules are not findings here.
   fails, so the rollback is not atomic.
 - **Fix:** refuse spawn while staging; add a startup hook or
   `tp.exec_once` that runs after the server starts.
-- **Status:** became B3, fixed in 0.1.7
+- **Status:** became B3, fixed in 51b0425 (0.1.7), verified by Fred
 
 ### 4. Fullscreen state is wrong across map and remap (medium)
 
@@ -96,7 +96,7 @@ schedules are not findings here.
 - **Fix:** add `tp.spawn{argv...}` with no shell, recommend it for event
   data, and say in the docs that the sandbox does not make untrusted
   strings safe.
-- **Status:** became B3, fixed in 0.1.7
+- **Status:** became B3, fixed in 51b0425 (0.1.7), verified by Fred
 
 ### 8. The watchdog misses work inside C calls (high)
 
