@@ -13,6 +13,8 @@ GUIDANCE
   Asked how to check 0.1.10, whose changed paths all need two monitors
   while tools/nested-input deliberately supports one nested window, Fred
   answered: "Defer this check to a future phase."
+  Fred: "We will have to stop here. Write up a good handoff. Then commit
+  and let me know when I can close this session."
 
 
 DONE
@@ -62,5 +64,7 @@ HANDOFF
 
   - 0.1.10 stays a candidate. Fred's check is the multi-monitor item in
     P4's acceptance list.
-  - Next in R1's order: finding 12 (new windows split the last leaf),
-    see WHATNOW.
+  - Next in R1's order: finding 12 (new windows split the last leaf).
+    WHATNOW NEXT 1 has the cause, a likely fix, the test and the demo.
+  - Session IDs for W16 to W21 are in the private ledger
+    (improvements-fred-tamlinux blame/tam-pane.tsv).

@@ -39,9 +39,17 @@ NEXT
 
   1. R1 finding 12: new windows split the last leaf, not the focused
      window. on_map puts the new client on top of the focus stack before
-     tp_arrange, so sync_tree's "near" is the new window itself
-     (src/client.c, src/layout/arrange.c). Fixing it also makes
-     sync_tree's comment true.
+     tp_arrange, so sync_tree's "near" (tp_focus_top) is the new window
+     itself. It is not in the tree yet, so sync_tree falls back to the
+     last leaf (src/client.c on_map, src/layout/arrange.c sync_tree).
+     A likely fix: have sync_tree take the most recently focused visible
+     window that is already in the tree. Test: in
+     tests/test_input_headless.c, focus c0 in [c0 | c1], open a window,
+     and check that it splits c0. Expect older tests that assumed
+     last-leaf placement to need updating; read each failure before
+     changing an expectation. Demo: tools/demo-0.1.11, nested; three
+     terminals, focus the first, open a fourth, and see where it lands.
+     Fixing this also makes the sync_tree comment true.
   2. R1 findings 4 (fullscreen across map and remap) and 5 (xdg popups
      never unconstrained).
   3. R1 findings 9, 11 and 15 to 17: write them into the P3 and P4
@@ -69,11 +77,16 @@ WATCH OUT
     where he tests.
   - Never ask Fred to press Ctrl+Alt+F-keys in the nested window: the
     host may switch his real VT.
+  - Demos (tools/demo-<version> plus .lua): copy the latest one. They
+    check that build/tam-pane reports VERSION, open the guide from a
+    startup hook, and print PASS or FAIL themselves where they can.
+    Write them with an editor, not shell heredocs: in W19 nested heredocs
+    sharing one delimiter ran half a script in the agent's shell.
+  - A Fred check needs no key pressed while Meta and a mouse button are
+    held; use delays (W16).
   - The nested window is one monitor: tools/nested-input refuses two
     nested windows on purpose. Multi-monitor behaviour is checked by the
     headless tests and, by Fred's choice, on real hardware in P4.
-  - A Fred demo must not need a key pressed while Meta and a mouse
-    button are held; use delays instead (W16).
   - third_party/lua/lstrlib.c carries one patch (lines marked
     "tam-pane patch"); re-apply it when updating Lua (UPSTREAM.md).
   - Every change updates every doc it makes wrong: README, ROADMAP.md,
