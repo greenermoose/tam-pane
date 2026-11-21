@@ -1,4 +1,4 @@
-# Data structures (0.0.1)
+# Data structures (0.0.4)
 
 This file describes the structures as they are built today. Update it in
 the same commit as any change to them.
@@ -16,11 +16,16 @@ the same commit as any change to them.
   - the output layout;
   - lists of monitors, clients, the focus stack and keyboards, and
     `selmon`, the monitor that receives new windows;
-  - the listeners, grouped by the module that owns them.
+  - the listeners, grouped by the module that owns them;
+  - `grab` (`struct tp_pointer_grab`), explicit state for an active
+    `Meta+Left/Right` pointer move or resize drag (no globals).
 - **Listener ownership:** each module removes its own listeners in its
   `*_finish` function, before `tp_server_finish` destroys anything.
 - **Settings:** `settings` (`struct tp_settings`) holds every user setting
-  in one small struct. Compiled-in defaults now; Lua in P2.
+  in one small struct (`gap_inner`, `gap_outer`, `split_ratio`,
+  `width_bias`, `preserve_split`, `smart_split`, `proportional_split`,
+  `resize_step`, terminal, cursor, keyboard repeat). Compiled-in defaults
+  now; Lua in P2.
 
 ## tp_monitor (`include/tam-pane/monitor.h`)
 
@@ -85,6 +90,16 @@ the same commit as any change to them.
     which side comes first);
   - `tp_dwindle_smart_split` (the pointer's direction from the centre
     picks the edge, and the orientation is locked).
+- **Resizing and moving:**
+  - `tp_dwindle_resize` adjusts the nearest split ancestor in a direction
+    (falling back to the nearest ancestor on that axis at screen edges);
+  - `tp_dwindle_drag_begin` / `tp_dwindle_drag_update` capture and update
+    the nearest horizontal and vertical splits during a pointer resize;
+  - `tp_dwindle_neighbor`, `tp_dwindle_swap_dir`, and `tp_dwindle_move_dir`
+    find adjacent leaves geometrically, swap them, or re-insert a window
+    next to its neighbor;
+  - `proportional_split` (optional, off by default) scales same-direction
+    sibling runs proportionally on insert and restores shares on remove.
 - **Cost:** insert and remove are O(n) in the number of windows, because
   of the find. Layout is O(n). With tens of windows this is nothing; a
   pointer from client to leaf would make find O(1) if it is ever needed.

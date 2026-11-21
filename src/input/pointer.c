@@ -1,19 +1,37 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* The cursor: motion, buttons, scrolling, and pointer focus. Keyboard
  * focus follows clicks; focus-follows-mouse becomes a Lua setting. */
+#include "tam-pane/bindings.h"
 #include "tam-pane/client.h"
 #include "tam-pane/focus.h"
 #include "tam-pane/input.h"
+#include "tam-pane/layout/arrange.h"
 #include "tam-pane/monitor.h"
 #include "tam-pane/server.h"
+#include <linux/input-event-codes.h>
 #include <tam.h>
+#include <time.h>
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_input_device.h>
+#include <wlr/types/wlr_keyboard.h>
 #include <wlr/types/wlr_pointer.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_xcursor_manager.h>
+#include <wlr/util/edges.h>
+
+static const char *resize_cursor_name(uint32_t edges) {
+	if ((edges & WLR_EDGE_TOP) && (edges & WLR_EDGE_LEFT))
+		return "nw-resize";
+	if ((edges & WLR_EDGE_TOP) && (edges & WLR_EDGE_RIGHT))
+		return "ne-resize";
+	if ((edges & WLR_EDGE_BOTTOM) && (edges & WLR_EDGE_LEFT))
+		return "sw-resize";
+	return "se-resize";
+}
 
 void tp_pointer_refocus(struct tp_server *s, uint32_t time_msec) {
+	if (s->grab.mode != TP_GRAB_NONE)
+		return;
 	struct wlr_surface *surface = NULL;
 	double sx = 0, sy = 0;
 	tp_client_at(s, s->cursor->x, s->cursor->y, &surface, &sx, &sy);
@@ -26,10 +44,81 @@ void tp_pointer_refocus(struct tp_server *s, uint32_t time_msec) {
 	wlr_seat_pointer_notify_motion(s->seat, time_msec, sx, sy);
 }
 
+void tp_pointer_cancel_grab(struct tp_server *s, struct tp_client *c) {
+	if (s->grab.mode == TP_GRAB_NONE)
+		return;
+	if (c && s->grab.client != c)
+		return;
+	s->grab = (struct tp_pointer_grab){0};
+	if (s->cursor && s->cursor_mgr)
+		wlr_cursor_set_xcursor(s->cursor, s->cursor_mgr, "default");
+	if (s->stopping || !s->cursor || !s->seat)
+		return;
+	struct timespec now;
+	clock_gettime(CLOCK_MONOTONIC, &now);
+	tp_pointer_refocus(s, (uint32_t)(now.tv_sec * 1000 + now.tv_nsec / 1000000));
+}
+
+static void update_grab(struct tp_server *s) {
+	struct tp_pointer_grab *g = &s->grab;
+	struct tp_client *c = g->client;
+	if (!c || !c->mapped) {
+		tp_pointer_cancel_grab(s, NULL);
+		return;
+	}
+
+	double dx = s->cursor->x - g->start_x;
+	double dy = s->cursor->y - g->start_y;
+
+	if (g->mode == TP_GRAB_MOVE) {
+		c->float_geom.x = g->start_geom.x + (int32_t)dx;
+		c->float_geom.y = g->start_geom.y + (int32_t)dy;
+		tp_client_place(c, c->float_geom);
+		return;
+	}
+
+	if (g->tiled) {
+		if (c->mon && tp_dwindle_drag_update(&g->drag, dx, dy))
+			tp_arrange(c->mon);
+		return;
+	}
+
+	struct tp_rect r = g->start_geom;
+	int32_t ix = (int32_t)dx, iy = (int32_t)dy;
+	if (g->edges & WLR_EDGE_LEFT) {
+		int32_t right = r.x + r.w;
+		r.w -= ix;
+		if (r.w < TP_FLOAT_MIN_W)
+			r.w = TP_FLOAT_MIN_W;
+		r.x = right - r.w;
+	} else if (g->edges & WLR_EDGE_RIGHT) {
+		r.w += ix;
+		if (r.w < TP_FLOAT_MIN_W)
+			r.w = TP_FLOAT_MIN_W;
+	}
+	if (g->edges & WLR_EDGE_TOP) {
+		int32_t bottom = r.y + r.h;
+		r.h -= iy;
+		if (r.h < TP_FLOAT_MIN_H)
+			r.h = TP_FLOAT_MIN_H;
+		r.y = bottom - r.h;
+	} else if (g->edges & WLR_EDGE_BOTTOM) {
+		r.h += iy;
+		if (r.h < TP_FLOAT_MIN_H)
+			r.h = TP_FLOAT_MIN_H;
+	}
+	c->float_geom = r;
+	tp_client_place(c, c->float_geom);
+}
+
 static void after_motion(struct tp_server *s, uint32_t time_msec) {
 	struct tp_monitor *m = tp_monitor_at(s, s->cursor->x, s->cursor->y);
 	if (m)
 		s->selmon = m;
+	if (s->grab.mode != TP_GRAB_NONE) {
+		update_grab(s);
+		return;
+	}
 	tp_pointer_refocus(s, time_msec);
 }
 
@@ -47,14 +136,92 @@ static void on_motion_absolute(struct wl_listener *l, void *data) {
 	after_motion(s, ev->time_msec);
 }
 
+static bool try_begin_grab(struct tp_server *s, struct tp_client *c,
+						   uint32_t button) {
+	if (!c || c->fullscreen)
+		return false;
+
+	if (button == BTN_LEFT && c->floating) {
+		s->grab = (struct tp_pointer_grab){
+			.mode = TP_GRAB_MOVE,
+			.client = c,
+			.button = button,
+			.start_x = s->cursor->x,
+			.start_y = s->cursor->y,
+			.start_geom = c->float_geom,
+		};
+		wlr_seat_pointer_clear_focus(s->seat);
+		wlr_cursor_set_xcursor(s->cursor, s->cursor_mgr, "grabbing");
+		return true;
+	}
+
+	if (button == BTN_RIGHT && c->floating) {
+		double cx = c->float_geom.x + c->float_geom.w / 2.0;
+		double cy = c->float_geom.y + c->float_geom.h / 2.0;
+		uint32_t edges = (s->cursor->x < cx ? WLR_EDGE_LEFT : WLR_EDGE_RIGHT) |
+						 (s->cursor->y < cy ? WLR_EDGE_TOP : WLR_EDGE_BOTTOM);
+		s->grab = (struct tp_pointer_grab){
+			.mode = TP_GRAB_RESIZE,
+			.client = c,
+			.button = button,
+			.start_x = s->cursor->x,
+			.start_y = s->cursor->y,
+			.start_geom = c->float_geom,
+			.edges = edges,
+			.tiled = false,
+		};
+		wlr_seat_pointer_clear_focus(s->seat);
+		wlr_cursor_set_xcursor(s->cursor, s->cursor_mgr,
+							   resize_cursor_name(edges));
+		return true;
+	}
+
+	if (button == BTN_RIGHT && !c->floating && c->mon) {
+		struct tp_dwindle_drag drag;
+		if (!tp_dwindle_drag_begin(tp_monitor_tree(c->mon), c, s->cursor->x,
+								   s->cursor->y, &drag))
+			return false;
+		s->grab = (struct tp_pointer_grab){
+			.mode = TP_GRAB_RESIZE,
+			.client = c,
+			.button = button,
+			.start_x = s->cursor->x,
+			.start_y = s->cursor->y,
+			.tiled = true,
+			.drag = drag,
+		};
+		wlr_seat_pointer_clear_focus(s->seat);
+		wlr_cursor_set_xcursor(s->cursor, s->cursor_mgr, "grabbing");
+		return true;
+	}
+
+	return false;
+}
+
 static void on_button(struct wl_listener *l, void *data) {
 	struct tp_server *s = wl_container_of(l, s, cursor_button);
 	struct wlr_pointer_button_event *ev = data;
+
+	if (s->grab.mode != TP_GRAB_NONE) {
+		if (ev->state == WL_POINTER_BUTTON_STATE_RELEASED &&
+			ev->button == s->grab.button) {
+			s->grab = (struct tp_pointer_grab){0};
+			wlr_cursor_set_xcursor(s->cursor, s->cursor_mgr, "default");
+			tp_pointer_refocus(s, ev->time_msec);
+		}
+		return;
+	}
+
 	if (ev->state == WL_POINTER_BUTTON_STATE_PRESSED) {
 		struct tp_client *c =
 			tp_client_at(s, s->cursor->x, s->cursor->y, NULL, NULL, NULL);
 		if (c && c != tp_focused(s))
 			tp_focus(s, c);
+
+		struct wlr_keyboard *kb = wlr_seat_get_keyboard(s->seat);
+		uint32_t mods = kb ? wlr_keyboard_get_modifiers(kb) : 0;
+		if ((mods & TP_MOD_META) && try_begin_grab(s, c, ev->button))
+			return;
 	}
 	wlr_seat_pointer_notify_button(s->seat, ev->time_msec, ev->button,
 								   ev->state);

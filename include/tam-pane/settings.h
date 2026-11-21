@@ -15,8 +15,10 @@ struct tp_settings {
 	int32_t gap_outer;	 /* pixels between windows and the monitor edge */
 	float split_ratio;	 /* first child's share for a new split */
 	float width_bias;	 /* dwindle: side by side when w > h * width_bias */
-	bool preserve_split; /* dwindle: keep each split's first orientation */
-	bool smart_split;	 /* dwindle: pointer direction picks the edge */
+	bool preserve_split;	 /* dwindle: keep each split's first orientation */
+	bool smart_split;		 /* dwindle: pointer direction picks the edge */
+	bool proportional_split; /* dwindle: keep same-direction runs proportional */
+	int32_t resize_step;	 /* pixels per keyboard resize step */
 	const char *terminal;
 	const char *cursor_theme; /* NULL: the XCURSOR_THEME default */
 	uint32_t cursor_size;

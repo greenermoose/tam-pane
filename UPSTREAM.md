@@ -23,15 +23,19 @@ updated with `tools/pull-references` (see `ideas/sources`):
 
 - **tam-pane files:** `src/layout/dwindle.c`, `include/tam-pane/layout/dwindle.h`
 - **Source:** MangoWM `src/layout/dwindle.c` (`dwindle_insert`,
-  `dwindle_remove`, `dwindle_assign`, `dwindle_swap_clients`), commit
-  `5ba74a95`, GPL-3.0-or-later.
+  `dwindle_remove`, `dwindle_assign`, `dwindle_swap_clients`,
+  `dwindle_move_next_to`, `get_block_path_and_ratios`,
+  `count_block_items`, and `dwindle_manual_split` proportional insert and
+  remove arithmetic), commit `5ba74a95`, GPL-3.0-or-later.
 - **How:** Rewritten. It keeps the same binary tree: inner nodes split,
   leaves hold windows, and a removed leaf's sibling takes its parent's
-  place. Removed: the globals `server` and `config`, the static
-  locked-node pointers, direct `Client` and `wlr_box` use, and resize
-  calls inside the layout pass. Items are opaque pointers and placement
-  goes through a callback, so the tree is tested without a display. The
-  gap arithmetic is simplified.
+  place. Added directional move (`tp_dwindle_move_dir`) and optional
+  proportional split rebalancing (`proportional_split`) as pure functions
+  without compositor state. Removed: the globals `server` and `config`,
+  the static locked-node pointers, direct `Client` and `wlr_box` use, and
+  resize calls inside the layout pass. Items are opaque pointers and
+  placement goes through a callback, so the tree is tested without a
+  display. The gap arithmetic is simplified.
 - **Why:** The algorithm is small and correct, and it is exactly what
   dynamic tiling needs.
 

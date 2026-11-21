@@ -6,7 +6,9 @@
 #include "tam-pane/bindings.h"
 #include "tam-pane/client.h"
 #include "tam-pane/focus.h"
+#include "tam-pane/input.h"
 #include "tam-pane/layout/arrange.h"
+#include "tam-pane/layout/dwindle.h"
 #include "tam-pane/monitor.h"
 #include "tam-pane/server.h"
 #include "tam-pane/spawn.h"
@@ -55,8 +57,40 @@ static void toggle_fullscreen(struct tp_server *s, union tp_arg a) {
 }
 
 static void view_changed(struct tp_server *s) {
+	tp_pointer_cancel_grab(s, NULL);
 	tp_arrange(s->selmon);
 	tp_focus_refresh(s);
+}
+
+static void swap_dir(struct tp_server *s, union tp_arg a) {
+	struct tp_client *c = tp_focused(s);
+	if (!c || !c->mon || c->floating || c->fullscreen)
+		return;
+	if (tp_dwindle_swap_dir(tp_monitor_tree(c->mon), c, (enum tp_dir)a.i))
+		tp_arrange(c->mon);
+}
+
+static void move_dir(struct tp_server *s, union tp_arg a) {
+	struct tp_client *c = tp_focused(s);
+	if (!c || !c->mon || c->floating || c->fullscreen)
+		return;
+	if (tp_dwindle_move_dir(tp_monitor_tree(c->mon), c, (enum tp_dir)a.i,
+							s->settings.split_ratio))
+		tp_arrange(c->mon);
+}
+
+static void resize_dir(struct tp_server *s, union tp_arg a) {
+	struct tp_client *c = tp_focused(s);
+	if (!c || !c->mon || c->fullscreen)
+		return;
+	enum tp_dir dir = (enum tp_dir)a.i;
+	if (c->floating) {
+		tp_client_resize_floating(c, dir, s->settings.resize_step);
+		return;
+	}
+	if (tp_dwindle_resize(tp_monitor_tree(c->mon), c, dir,
+						  s->settings.resize_step))
+		tp_arrange(c->mon);
 }
 
 static void view_tag(struct tp_server *s, union tp_arg a) {
@@ -91,6 +125,11 @@ static void toggle_client_tag(struct tp_server *s, union tp_arg a) {
 #define META TP_MOD_META
 #define SHIFT WLR_MODIFIER_SHIFT
 #define CTRL WLR_MODIFIER_CTRL
+#define ALT WLR_MODIFIER_ALT
+#define DIR(key, dir)                                                          \
+	{META | SHIFT, key, swap_dir, {.i = dir}},                                 \
+		{META | CTRL, key, move_dir, {.i = dir}},                              \
+		{META | ALT, key, resize_dir, {.i = dir}}
 #define TAG(key, n)                                                            \
 	{META, key, view_tag, {.u = n}},                                           \
 		{META | SHIFT, key, move_to_tag, {.u = n}},                            \
@@ -106,6 +145,10 @@ static const struct tp_binding bindings[] = {
 	{META, XKB_KEY_v, toggle_floating, {0}},
 	{META, XKB_KEY_f, toggle_fullscreen, {0}},
 	{META, XKB_KEY_Tab, view_back, {0}},
+	DIR(XKB_KEY_Left, TP_DIR_LEFT),
+	DIR(XKB_KEY_Right, TP_DIR_RIGHT),
+	DIR(XKB_KEY_Up, TP_DIR_UP),
+	DIR(XKB_KEY_Down, TP_DIR_DOWN),
 	TAG(XKB_KEY_1, 1),
 	TAG(XKB_KEY_2, 2),
 	TAG(XKB_KEY_3, 3),

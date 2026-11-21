@@ -43,7 +43,7 @@ struct test_client {
 	struct wl_keyboard *keyboard;
 	struct wl_pointer *pointer;
 	struct xdg_wm_base *wm_base;
-	struct test_window windows[2];
+	struct test_window windows[3];
 	struct wl_surface *keyboard_focus;
 	unsigned int key_events, pointer_enters, pointer_motions, pointer_buttons;
 	uint32_t keys[8], key_states[8];
@@ -266,7 +266,7 @@ static int create_shm_buffer(struct test_client *client) {
 
 static void configure_window(struct test_client *client,
 		struct test_window *window, const char *title) {
-	window->client = client;
+	*window = (struct test_window){ .client = client };
 	window->surface = wl_compositor_create_surface(client->compositor);
 	window->xdg_surface = xdg_wm_base_get_xdg_surface(client->wm_base,
 		window->surface);
@@ -299,16 +299,47 @@ static void send_key(struct wlr_keyboard *keyboard, uint32_t code,
 }
 
 /* Send actual modifier/key events through the compositor keyboard path. */
-static void chord(struct wlr_keyboard *kb, unsigned int code, bool shift,
-		bool ctrl) {
+static void chord_mod(struct wlr_keyboard *kb, unsigned int code, bool shift,
+		bool ctrl, bool alt) {
 	send_key(kb, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_PRESSED, 50);
 	if (shift) send_key(kb, KEY_LEFTSHIFT, WL_KEYBOARD_KEY_STATE_PRESSED, 51);
 	if (ctrl) send_key(kb, KEY_LEFTCTRL, WL_KEYBOARD_KEY_STATE_PRESSED, 52);
-	send_key(kb, code, WL_KEYBOARD_KEY_STATE_PRESSED, 53);
-	send_key(kb, code, WL_KEYBOARD_KEY_STATE_RELEASED, 54);
-	if (ctrl) send_key(kb, KEY_LEFTCTRL, WL_KEYBOARD_KEY_STATE_RELEASED, 55);
-	if (shift) send_key(kb, KEY_LEFTSHIFT, WL_KEYBOARD_KEY_STATE_RELEASED, 56);
-	send_key(kb, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_RELEASED, 57);
+	if (alt) send_key(kb, KEY_LEFTALT, WL_KEYBOARD_KEY_STATE_PRESSED, 53);
+	send_key(kb, code, WL_KEYBOARD_KEY_STATE_PRESSED, 54);
+	send_key(kb, code, WL_KEYBOARD_KEY_STATE_RELEASED, 55);
+	if (alt) send_key(kb, KEY_LEFTALT, WL_KEYBOARD_KEY_STATE_RELEASED, 56);
+	if (ctrl) send_key(kb, KEY_LEFTCTRL, WL_KEYBOARD_KEY_STATE_RELEASED, 57);
+	if (shift) send_key(kb, KEY_LEFTSHIFT, WL_KEYBOARD_KEY_STATE_RELEASED, 58);
+	send_key(kb, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_RELEASED, 59);
+}
+
+static void chord(struct wlr_keyboard *kb, unsigned int code, bool shift,
+		bool ctrl) {
+	chord_mod(kb, code, shift, ctrl, false);
+}
+
+static void emit_motion(struct tp_server *s, struct wlr_pointer *pointer,
+		double dx, double dy, uint32_t time) {
+	struct wlr_pointer_motion_event motion = {
+		.pointer = pointer,
+		.time_msec = time,
+		.delta_x = dx,
+		.delta_y = dy,
+		.unaccel_dx = dx,
+		.unaccel_dy = dy,
+	};
+	wl_signal_emit_mutable(&s->cursor->events.motion, &motion);
+}
+
+static void emit_button(struct tp_server *s, struct wlr_pointer *pointer,
+		uint32_t btn, enum wl_pointer_button_state state, uint32_t time) {
+	struct wlr_pointer_button_event button = {
+		.pointer = pointer,
+		.time_msec = time,
+		.button = btn,
+		.state = state,
+	};
+	wl_signal_emit_mutable(&s->cursor->events.button, &button);
 }
 
 int main(void) {
@@ -505,6 +536,126 @@ int main(void) {
 	CHECK(tp_focused(&server) == NULL);
 	chord(&keyboard, KEY_9, false, false);
 	CHECK(tp_focused(&server) == a);
+
+	/* 0.0.4: tiling resize, directional swap/move, floating move/resize, and
+	 * grab cleanup on unmap. Put 3 windows on tag 1 as [c0 | [c1 / c2]]. */
+	chord(&keyboard, KEY_1, true, false);
+	chord(&keyboard, KEY_1, false, false);
+	wlr_cursor_warp(server.cursor, &pointer.base, 1270.0, 710.0);
+	struct test_window *slot1 = client.windows[0].surface
+		? &client.windows[1] : &client.windows[0];
+	configure_window(&client, slot1, "tile-two");
+	for (unsigned int i = 0; i < 1000 && wl_list_length(&server.clients) < 2; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(wl_list_length(&server.clients) == 2);
+	struct tp_client *c1 = tp_focused(&server);
+	configure_window(&client, &client.windows[2], "tile-three");
+	for (unsigned int i = 0; i < 1000 && wl_list_length(&server.clients) < 3; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(wl_list_length(&server.clients) == 3);
+	struct tp_client *c2 = tp_focused(&server);
+	struct tp_client *c0 = a;
+	CHECK(c0 != c1 && c1 != c2 && c0 != c2);
+	CHECK(c0->geom.x < c1->geom.x && c1->geom.y < c2->geom.y);
+
+	/* Keyboard split resize: Meta+Alt+Right grows c0; Meta+Alt+Down grows c1. */
+	int32_t w0_before = c0->geom.w;
+	tp_focus(&server, c0);
+	chord_mod(&keyboard, KEY_RIGHT, false, false, true);
+	CHECK(c0->geom.w > w0_before);
+	chord_mod(&keyboard, KEY_LEFT, false, false, true);
+	CHECK(c0->geom.w == w0_before);
+
+	int32_t h1_before = c1->geom.h;
+	tp_focus(&server, c1);
+	chord_mod(&keyboard, KEY_DOWN, false, false, true);
+	CHECK(c1->geom.h > h1_before);
+	chord_mod(&keyboard, KEY_UP, false, false, true);
+	CHECK(c1->geom.h == h1_before);
+
+	/* Directional swap: Meta+Shift+Down swaps c1 and c2. */
+	struct tp_rect g1 = c1->geom, g2 = c2->geom;
+	tp_focus(&server, c1);
+	chord_mod(&keyboard, KEY_DOWN, true, false, false);
+	CHECK(c1->geom.y == g2.y && c2->geom.y == g1.y);
+	CHECK(tp_focused(&server) == c1);
+	chord_mod(&keyboard, KEY_UP, true, false, false);
+	CHECK(c1->geom.y == g1.y && c2->geom.y == g2.y);
+
+	/* Directional move: Meta+Ctrl+Right moves c0 into c1's slot -> [[c0|c1]/c2]. */
+	tp_focus(&server, c0);
+	chord_mod(&keyboard, KEY_RIGHT, false, true, false);
+	CHECK(c0->geom.y == c1->geom.y && c0->geom.x < c1->geom.x);
+	CHECK(c2->geom.y > c0->geom.y && c2->geom.w > c0->geom.w);
+
+	/* Tiled pointer resize: Meta+Right-drag on c0 widens c0. */
+	w0_before = c0->geom.w;
+	wlr_cursor_warp(server.cursor, &pointer.base,
+		c0->geom.x + 1.0, c0->geom.y + 1.0);
+	emit_motion(&server, &pointer, 0, 0, 100);
+	send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_PRESSED, 101);
+	emit_button(&server, &pointer, BTN_RIGHT, WL_POINTER_BUTTON_STATE_PRESSED, 102);
+	CHECK(server.grab.mode == TP_GRAB_RESIZE && server.grab.tiled);
+	emit_motion(&server, &pointer, 80.0, 0.0, 103);
+	CHECK(c0->geom.w > w0_before);
+	emit_button(&server, &pointer, BTN_RIGHT, WL_POINTER_BUTTON_STATE_RELEASED, 104);
+	send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_RELEASED, 105);
+	CHECK(server.grab.mode == TP_GRAB_NONE);
+
+	/* Floating toggle, keyboard resize, pointer move, and pointer resize. */
+	tp_focus(&server, c2);
+	chord(&keyboard, KEY_V, false, false);
+	CHECK(c2->floating);
+	CHECK(c2->float_geom.w >= TP_FLOAT_MIN_W && c2->float_geom.h >= TP_FLOAT_MIN_H);
+	for (unsigned int i = 0; i < 20; i++)
+		if (!pump(&client, &server)) goto fail;
+
+	/* Keyboard resize on floating window. */
+	int32_t fw = c2->float_geom.w, fh = c2->float_geom.h;
+	chord_mod(&keyboard, KEY_RIGHT, false, false, true);
+	chord_mod(&keyboard, KEY_DOWN, false, false, true);
+	CHECK(c2->float_geom.w == fw + server.settings.resize_step);
+	CHECK(c2->float_geom.h == fh + server.settings.resize_step);
+
+	/* Pointer move on floating window (Meta + BTN_LEFT). */
+	unsigned int buttons_before = client.pointer_buttons;
+	int32_t fx = c2->float_geom.x, fy = c2->float_geom.y;
+	wlr_cursor_warp(server.cursor, &pointer.base, fx + 1.0, fy + 1.0);
+	emit_motion(&server, &pointer, 0, 0, 110);
+	send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_PRESSED, 111);
+	emit_button(&server, &pointer, BTN_LEFT, WL_POINTER_BUTTON_STATE_PRESSED, 112);
+	CHECK(server.grab.mode == TP_GRAB_MOVE && server.grab.client == c2);
+	emit_motion(&server, &pointer, 50.0, 30.0, 113);
+	CHECK(c2->float_geom.x == fx + 50 && c2->float_geom.y == fy + 30);
+	emit_button(&server, &pointer, BTN_LEFT, WL_POINTER_BUTTON_STATE_RELEASED, 114);
+	send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_RELEASED, 115);
+	CHECK(server.grab.mode == TP_GRAB_NONE);
+	for (unsigned int i = 0; i < 10; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(client.pointer_buttons == buttons_before); /* grab swallowed buttons */
+
+	/* Pointer resize on floating window (Meta + BTN_RIGHT from top-left
+	 * quadrant clamps at TP_FLOAT_MIN_W/H while anchoring bottom-right). */
+	int32_t right_edge = c2->float_geom.x + c2->float_geom.w;
+	int32_t bottom_edge = c2->float_geom.y + c2->float_geom.h;
+	wlr_cursor_warp(server.cursor, &pointer.base,
+		c2->float_geom.x + 1.0, c2->float_geom.y + 1.0);
+	emit_motion(&server, &pointer, 0, 0, 120);
+	send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_PRESSED, 121);
+	emit_button(&server, &pointer, BTN_RIGHT, WL_POINTER_BUTTON_STATE_PRESSED, 122);
+	CHECK(server.grab.mode == TP_GRAB_RESIZE && !server.grab.tiled);
+	emit_motion(&server, &pointer, 2000.0, 2000.0, 123);
+	CHECK(c2->float_geom.w == TP_FLOAT_MIN_W && c2->float_geom.h == TP_FLOAT_MIN_H);
+	CHECK(c2->float_geom.x + c2->float_geom.w == right_edge);
+	CHECK(c2->float_geom.y + c2->float_geom.h == bottom_edge);
+
+	/* Unmapping a grabbed window mid-drag cancels the grab cleanly. */
+	destroy_window(&client.windows[2]);
+	for (unsigned int i = 0; i < 100 && wl_list_length(&server.clients) == 3; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(wl_list_length(&server.clients) == 2);
+	CHECK(server.grab.mode == TP_GRAB_NONE);
+	send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_RELEASED, 124);
 
 	wl_display_disconnect(client.display);
 	if (client.shm_data && client.shm_data != MAP_FAILED)

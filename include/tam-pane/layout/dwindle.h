@@ -33,8 +33,17 @@ struct tp_dwindle_node {
 struct tp_dwindle {
 	struct tp_dwindle_node *root;
 	/* Settings, set by tp_dwindle_init and changeable at any time. */
-	float width_bias;	 /* side by side when w > h * width_bias */
-	bool preserve_split; /* keep each split's first orientation */
+	float width_bias;		 /* side by side when w > h * width_bias */
+	bool preserve_split;	 /* keep each split's first orientation */
+	bool proportional_split; /* keep same-direction runs proportional */
+};
+
+/* State captured at the start of a pointer resize drag on a tiled window. */
+struct tp_dwindle_drag {
+	struct tp_dwindle_node *h_node;
+	struct tp_dwindle_node *v_node;
+	float h_ratio;
+	float v_ratio;
 };
 
 /* How a new window joins the tree next to an existing one. */
@@ -79,6 +88,28 @@ bool tp_dwindle_remove(struct tp_dwindle *t, void *item);
 
 /* Exchange the places of two items. Returns false unless both are present. */
 bool tp_dwindle_swap(struct tp_dwindle *t, void *a, void *b);
+
+/* Resize the split affecting `item` along `dir` by `delta` pixels.
+ * Positive moves the boundary in `dir`, negative moves it opposite. */
+bool tp_dwindle_resize(struct tp_dwindle *t, const void *item, enum tp_dir dir,
+					   int32_t delta);
+
+/* Capture the nearest horizontal/vertical split ancestors of `item` for a
+ * pointer resize drag, then apply cursor deltas from the drag origin. */
+bool tp_dwindle_drag_begin(const struct tp_dwindle *t, const void *item,
+						   double px, double py, struct tp_dwindle_drag *drag);
+bool tp_dwindle_drag_update(struct tp_dwindle_drag *drag, double dx, double dy);
+
+/* Find the closest laid-out leaf in `dir` from `item`, or NULL. */
+void *tp_dwindle_neighbor(const struct tp_dwindle *t, const void *item,
+						  enum tp_dir dir);
+
+/* Swap `item` with its neighbor in `dir`. */
+bool tp_dwindle_swap_dir(struct tp_dwindle *t, void *item, enum tp_dir dir);
+
+/* Move `item` into the slot next to its neighbor in `dir`. */
+bool tp_dwindle_move_dir(struct tp_dwindle *t, void *item, enum tp_dir dir,
+						 float ratio);
 
 struct tp_dwindle_node *tp_dwindle_find(const struct tp_dwindle *t,
 										const void *item);

@@ -7,6 +7,8 @@
 #ifndef TAM_PANE_SERVER_H
 #define TAM_PANE_SERVER_H
 
+#include "tam-pane/geom.h"
+#include "tam-pane/layout/dwindle.h"
 #include "tam-pane/settings.h"
 #include <stdbool.h>
 #include <wayland-server-core.h>
@@ -24,7 +26,26 @@ struct wlr_seat;
 struct wlr_session;
 struct wlr_xcursor_manager;
 struct wlr_xdg_shell;
+struct tp_client;
 struct tp_monitor;
+
+/* Interactive pointer drag state (explicit in tp_server, no globals). */
+enum tp_grab_mode {
+	TP_GRAB_NONE,
+	TP_GRAB_MOVE,
+	TP_GRAB_RESIZE,
+};
+
+struct tp_pointer_grab {
+	enum tp_grab_mode mode;
+	struct tp_client *client;
+	uint32_t button;
+	double start_x, start_y;
+	struct tp_rect start_geom;
+	uint32_t edges;
+	bool tiled;
+	struct tp_dwindle_drag drag;
+};
 
 /* Scene layers, bottom to top. */
 enum tp_layer {
@@ -78,6 +99,7 @@ struct tp_server {
 	struct wl_listener cursor_button;
 	struct wl_listener cursor_axis;
 	struct wl_listener cursor_frame;
+	struct tp_pointer_grab grab;
 
 	struct wl_event_source *sigterm, *sigint;
 	bool stopping; /* set while tearing down: no more layout or focus */

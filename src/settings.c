@@ -11,6 +11,8 @@ void tp_settings_defaults(struct tp_settings *s) {
 		.width_bias = 1.0f,
 		.preserve_split = false,
 		.smart_split = false,
+		.proportional_split = false,
+		.resize_step = 40,
 		.terminal = term && *term ? term : "foot",
 		.cursor_theme = NULL,
 		.cursor_size = 24,

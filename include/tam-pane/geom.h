@@ -10,6 +10,13 @@ struct tp_rect {
 	int32_t x, y, w, h;
 };
 
+enum tp_dir {
+	TP_DIR_LEFT,
+	TP_DIR_RIGHT,
+	TP_DIR_UP,
+	TP_DIR_DOWN,
+};
+
 static inline bool tp_rect_contains(struct tp_rect r, double x, double y) {
 	return x >= r.x && y >= r.y && x < (double)r.x + r.w &&
 		   y < (double)r.y + r.h;

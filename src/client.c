@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "tam-pane/client.h"
 #include "tam-pane/focus.h"
+#include "tam-pane/input.h"
 #include "tam-pane/layout/arrange.h"
 #include "tam-pane/monitor.h"
 #include "tam-pane/server.h"
@@ -109,6 +110,7 @@ static void on_unmap(struct wl_listener *l, void *data) {
 	bool had_focus = tp_focused(s) == c;
 
 	c->mapped = false;
+	tp_pointer_cancel_grab(s, c);
 	if (c->mon)
 		for (unsigned int i = 0; i < TP_TAG_SLOTS; i++)
 			if (c->mon->focus[i] == c)
@@ -242,15 +244,31 @@ void tp_client_set_tags(struct tp_client *c, tp_tags_t tags) {
 void tp_client_set_floating(struct tp_client *c, bool floating) {
 	if (c->floating == floating || c->fullscreen)
 		return;
+	tp_pointer_cancel_grab(c->server, c);
 	c->floating = floating;
-	if (floating)
-		c->geom = c->float_geom;
+	if (floating && c->mon &&
+		(c->float_geom.w < TP_FLOAT_MIN_W ||
+		 c->float_geom.h < TP_FLOAT_MIN_H)) {
+		int32_t w = c->mon->usable.w / 2;
+		int32_t h = c->mon->usable.h / 2;
+		if (w < TP_FLOAT_MIN_W)
+			w = TP_FLOAT_MIN_W;
+		if (h < TP_FLOAT_MIN_H)
+			h = TP_FLOAT_MIN_H;
+		c->float_geom = (struct tp_rect){
+			c->mon->usable.x + (c->mon->usable.w - w) / 2,
+			c->mon->usable.y + (c->mon->usable.h - h) / 2,
+			w,
+			h,
+		};
+	}
 	apply_floating(c);
 	if (c->mon)
 		tp_arrange(c->mon);
 }
 
 void tp_client_set_fullscreen(struct tp_client *c, bool fullscreen) {
+	tp_pointer_cancel_grab(c->server, c);
 	c->fullscreen = fullscreen;
 	wlr_xdg_toplevel_set_fullscreen(c->toplevel, fullscreen);
 	enum tp_layer layer = fullscreen	? TP_LAYER_FULLSCREEN
@@ -259,6 +277,33 @@ void tp_client_set_fullscreen(struct tp_client *c, bool fullscreen) {
 	wlr_scene_node_reparent(&c->tree->node, c->server->layer[layer]);
 	if (c->mon)
 		tp_arrange(c->mon);
+}
+
+void tp_client_resize_floating(struct tp_client *c, enum tp_dir dir,
+							   int32_t delta) {
+	if (!c || !c->floating || c->fullscreen || !delta)
+		return;
+	struct tp_rect r = c->float_geom;
+	switch (dir) {
+	case TP_DIR_RIGHT:
+		r.w += delta;
+		break;
+	case TP_DIR_LEFT:
+		r.w -= delta;
+		break;
+	case TP_DIR_DOWN:
+		r.h += delta;
+		break;
+	case TP_DIR_UP:
+		r.h -= delta;
+		break;
+	}
+	if (r.w < TP_FLOAT_MIN_W)
+		r.w = TP_FLOAT_MIN_W;
+	if (r.h < TP_FLOAT_MIN_H)
+		r.h = TP_FLOAT_MIN_H;
+	c->float_geom = r;
+	tp_client_place(c, c->float_geom);
 }
 
 struct tp_client *tp_client_at(struct tp_server *s, double x, double y,

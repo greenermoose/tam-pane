@@ -67,6 +67,11 @@ KEYS (COMPILED IN UNTIL LUA CONFIGURATION ARRIVES)
   Meta+Return           open a terminal ($TERMINAL, else foot)
   Meta+W                close the focused window
   Meta+J / Meta+K       focus the next / previous window
+  Meta+Shift+Arrow      swap the focused tiled window in that direction
+  Meta+Ctrl+Arrow       move the focused tiled window in that direction
+  Meta+Alt+Arrow        resize the focused split or floating window
+  Meta+Left-drag        move a floating window
+  Meta+Right-drag       resize a floating window or tiled split
   Meta+V                toggle floating
   Meta+F                toggle fullscreen
   Meta+1 .. Meta+9      view one tag

@@ -97,6 +97,7 @@ static void on_new_output(struct wl_listener *l, void *data) {
 		tp_dwindle_init(&m->trees[i]);
 		m->trees[i].width_bias = s->settings.width_bias;
 		m->trees[i].preserve_split = s->settings.preserve_split;
+		m->trees[i].proportional_split = s->settings.proportional_split;
 	}
 
 	m->frame.notify = on_frame;

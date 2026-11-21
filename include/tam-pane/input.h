@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <wayland-server-core.h>
 
+struct tp_client;
 struct tp_server;
 struct wlr_input_device;
 struct wlr_keyboard;
@@ -37,5 +38,8 @@ void tp_pointer_add(struct tp_server *s, struct wlr_input_device *dev);
 
 /* Re-send pointer focus after windows move under a still cursor. */
 void tp_pointer_refocus(struct tp_server *s, uint32_t time_msec);
+
+/* End an active pointer grab if it belongs to `c` (or any client when NULL). */
+void tp_pointer_cancel_grab(struct tp_server *s, struct tp_client *c);
 
 #endif

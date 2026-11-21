@@ -3,22 +3,28 @@ WHATNOW
 What tam-pane is doing now and what comes next. Read this first; revise
 it at the end of every session (work/README-work).
 
-Updated: 2026-11-19, with W8
+Updated: 2026-11-21, with W9
 
 
 STATE
 
-  Version 0.0.3 on branch dev, pushed. Fred accepted 0.0.3, interactive
-  tags, on 2026-11-17 (W6): view a tag, toggle tags in the view, move a
-  window to a tag, add or remove tags on a window (never the last one),
-  previous view, and focus remembered per view.
+  Version 0.0.4 on branch dev (candidate ready for Fred's brief nested
+  check; 0.0.3 was the last accepted milestone).
 
-  Follows the tam-idol 0.2.0 standard (W8, 2026-11-19). That change
-  touched READMEs and records only; no code changed, so VERSION stays
-  0.0.3.
+  W9 completed 0.0.4, tiling complete (plans/P1-foundation.md): keyboard
+  split resizing (Meta+Alt+Arrow), directional swap (Meta+Shift+Arrow),
+  directional move (Meta+Ctrl+Arrow), pointer move/resize of floating
+  windows and tiled splits (Meta+Left/Right-drag), and optional
+  proportional resizing on insert/remove (proportional_split).
 
-  Dynamic tiling (dwindle), floating and fullscreen work; Lua, panels,
-  multiple monitors and the desktop protocols do not yet. Dependencies
+  Automated checks pass with zero warnings: 28 tag checks, 133 dwindle
+  checks, 142 headless input checks, both smoke checks, and
+  tests/test_nested_input.py. Candidate build/tam-pane SHA-256:
+  8ab57432d7b0773a4c657f03d072660d11e40501a8df930c39bf604c2c8be029.
+
+  Dynamic tiling (dwindle), resizing, directional swap/move, floating
+  move/resize, fullscreen, and interactive tags work; Lua, panels,
+  multiple monitors, and the desktop protocols do not yet. Dependencies
   today: wlroots 0.20, wayland-server, xkbcommon, libtam.
 
   Development runs nested in Hyprland (tools/nested-input, which passes
@@ -28,19 +34,9 @@ STATE
 
 NEXT
 
-  1. 0.0.4, tiling complete (plans/P1-foundation.md):
-     - resize splits from the keyboard, grow and shrink by direction
-       (src/layout/dwindle.c, as pure functions with unit tests in
-       tests/test_dwindle.c);
-     - move and resize floating windows with Meta plus a mouse button
-       (src/input/pointer.c);
-     - swap and move tiled windows by direction;
-     - optional proportional resizing on insert and remove, from
-       mango's dwindle_manual_split arithmetic, rewritten as pure
-       functions with tests.
-     Bump VERSION to 0.0.4 in the first code commit. Automated tests
-     cover the combinations (tests/test_input_headless.c); Fred's own
-     check is short and nested.
+  1. Accept 0.0.4 once Fred completes his brief nested try of resizing,
+     swapping, moving, and floating drags, then update ROADMAP.md and
+     plans/P1-foundation.md with the accepted build hash.
 
   2. 0.0.5, panels and monitors: layer-shell and several monitors, so a
      Quickshell bar runs and windows move between monitors.
@@ -55,8 +51,11 @@ NEXT
 
 WAITING FOR FRED
 
-  - Nothing for 0.0.3. For 0.0.4: a short nested try of resizing and
-    moving windows, once the automated tests pass.
+  - 0.0.4 brief nested try via tools/nested-input on build/tam-pane
+    (SHA-256 8ab57432d7b0773a4c657f03d072660d11e40501a8df930c39bf604c2c8be029):
+    open 3 terminals, try Meta+Alt+Arrow and Meta+Right-drag resize,
+    Meta+Shift+Arrow swap, Meta+Ctrl+Arrow move, and Meta+v with
+    Meta+Left/Right-drag on a floating window.
 
 
 WATCH OUT

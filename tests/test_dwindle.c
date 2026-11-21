@@ -147,6 +147,152 @@ int main(void) {
 	s = tp_dwindle_smart_split(wide, 400, 200, 0.5f); /* dead centre */
 	CHECK(!s.split_h && !s.before);
 
+	/* Keyboard resize: grow/shrink by direction, edge fallback, and clamp. */
+	tp_dwindle_clear(&t);
+	CHECK(tp_dwindle_insert(&t, ITEM(1), NULL, after(0.5f)));
+	run_layout(&t, screen, 0);
+	CHECK(!tp_dwindle_resize(&t, ITEM(1), TP_DIR_RIGHT, 100)); /* single */
+	CHECK(tp_dwindle_insert(&t, ITEM(2), ITEM(1), after(0.5f)));
+	run_layout(&t, screen, 0);
+	CHECK(!tp_dwindle_resize(&t, ITEM(1), TP_DIR_UP, 50)); /* no v-split */
+	CHECK(tp_dwindle_resize(&t, ITEM(1), TP_DIR_RIGHT, 100));
+	run_layout(&t, screen, 0);
+	CHECK(rect_eq(placed[1], 0, 0, 600, 600));
+	CHECK(rect_eq(placed[2], 600, 0, 400, 600));
+	/* Screen-edge fallback: 1 pressing LEFT shrinks 1 by moving divider left. */
+	CHECK(tp_dwindle_resize(&t, ITEM(1), TP_DIR_LEFT, 100));
+	run_layout(&t, screen, 0);
+	CHECK(rect_eq(placed[1], 0, 0, 500, 600));
+	CHECK(tp_dwindle_resize(&t, ITEM(2), TP_DIR_LEFT, 100));
+	run_layout(&t, screen, 0);
+	CHECK(rect_eq(placed[1], 0, 0, 400, 600));
+	CHECK(rect_eq(placed[2], 400, 0, 600, 600));
+	CHECK(tp_dwindle_resize(&t, ITEM(2), TP_DIR_RIGHT, 100));
+	run_layout(&t, screen, 0);
+	CHECK(rect_eq(placed[1], 0, 0, 500, 600));
+	/* Clamp at RATIO_MAX and RATIO_MIN. */
+	CHECK(tp_dwindle_resize(&t, ITEM(1), TP_DIR_RIGHT, 5000));
+	CHECK(t.root->ratio == TP_DWINDLE_RATIO_MAX);
+	CHECK(!tp_dwindle_resize(&t, ITEM(1), TP_DIR_RIGHT, 100));
+	CHECK(tp_dwindle_resize(&t, ITEM(1), TP_DIR_LEFT, 5000));
+	CHECK(t.root->ratio == TP_DWINDLE_RATIO_MIN);
+
+	/* Nested 3-window tree [1 | [2 / 3]]: vertical resize, drag, neighbor,
+	 * directional swap, and directional move. */
+	tp_dwindle_clear(&t);
+	CHECK(tp_dwindle_insert(&t, ITEM(1), NULL, after(0.5f)));
+	CHECK(tp_dwindle_insert(&t, ITEM(2), ITEM(1), after(0.5f)));
+	CHECK(tp_dwindle_insert(&t, ITEM(3), ITEM(2), after(0.5f)));
+	run_layout(&t, screen, 0);
+	CHECK(tp_dwindle_resize(&t, ITEM(2), TP_DIR_DOWN, 60));
+	run_layout(&t, screen, 0);
+	CHECK(rect_eq(placed[2], 500, 0, 500, 360));
+	CHECK(rect_eq(placed[3], 500, 360, 500, 240));
+	CHECK(tp_dwindle_resize(&t, ITEM(3), TP_DIR_UP, 60));
+	run_layout(&t, screen, 0);
+	CHECK(rect_eq(placed[2], 500, 0, 500, 300));
+	CHECK(rect_eq(placed[3], 500, 300, 500, 300));
+
+	/* Pointer drag updates both horizontal and vertical splits. */
+	struct tp_dwindle_drag drag;
+	CHECK(tp_dwindle_drag_begin(&t, ITEM(2), 700, 150, &drag));
+	CHECK(drag.h_node == t.root && drag.v_node == t.root->child[1]);
+	CHECK(tp_dwindle_drag_update(&drag, 100.0, -60.0));
+	run_layout(&t, screen, 0);
+	CHECK(rect_eq(placed[1], 0, 0, 600, 600));
+	CHECK(rect_eq(placed[2], 600, 0, 400, 240));
+	CHECK(rect_eq(placed[3], 600, 240, 400, 360));
+
+	/* 3-window horizontal row [1 | [2 | 3]]: 2 resizes inner on RIGHT and
+	 * outer on LEFT. */
+	tp_dwindle_clear(&t);
+	struct tp_dwindle_split hlock = {.split_h = true, .lock = true, .ratio = 0.5f};
+	CHECK(tp_dwindle_insert(&t, ITEM(1), NULL, hlock));
+	CHECK(tp_dwindle_insert(&t, ITEM(2), ITEM(1), hlock));
+	CHECK(tp_dwindle_insert(&t, ITEM(3), ITEM(2), hlock));
+	run_layout(&t, (struct tp_rect){0, 0, 1000, 600}, 0);
+	CHECK(rect_eq(placed[1], 0, 0, 500, 600));
+	CHECK(rect_eq(placed[2], 500, 0, 250, 600));
+	CHECK(rect_eq(placed[3], 750, 0, 250, 600));
+	CHECK(tp_dwindle_resize(&t, ITEM(2), TP_DIR_RIGHT, 50));
+	run_layout(&t, (struct tp_rect){0, 0, 1000, 600}, 0);
+	CHECK(placed[1].w == 500 && placed[2].w == 300 && placed[3].w == 200);
+	CHECK(tp_dwindle_resize(&t, ITEM(2), TP_DIR_LEFT, 100));
+	run_layout(&t, (struct tp_rect){0, 0, 1000, 600}, 0);
+	CHECK(placed[1].w == 400);
+
+	/* Neighbors, directional swap, and directional move on [1 | [2 / 3]]. */
+	tp_dwindle_clear(&t);
+	CHECK(tp_dwindle_insert(&t, ITEM(1), NULL, after(0.5f)));
+	CHECK(tp_dwindle_insert(&t, ITEM(2), ITEM(1), after(0.5f)));
+	CHECK(tp_dwindle_insert(&t, ITEM(3), ITEM(2), after(0.5f)));
+	run_layout(&t, screen, 0);
+	CHECK(tp_dwindle_neighbor(&t, ITEM(1), TP_DIR_LEFT) == NULL);
+	CHECK(tp_dwindle_neighbor(&t, ITEM(1), TP_DIR_RIGHT) == ITEM(2));
+	CHECK(tp_dwindle_neighbor(&t, ITEM(2), TP_DIR_LEFT) == ITEM(1));
+	CHECK(tp_dwindle_neighbor(&t, ITEM(2), TP_DIR_DOWN) == ITEM(3));
+	CHECK(tp_dwindle_neighbor(&t, ITEM(3), TP_DIR_UP) == ITEM(2));
+	CHECK(tp_dwindle_neighbor(&t, ITEM(3), TP_DIR_LEFT) == ITEM(1));
+	CHECK(tp_dwindle_neighbor(&t, ITEM(3), TP_DIR_DOWN) == NULL);
+
+	CHECK(tp_dwindle_swap_dir(&t, ITEM(2), TP_DIR_DOWN));
+	run_layout(&t, screen, 0);
+	CHECK(rect_eq(placed[3], 500, 0, 500, 300));
+	CHECK(rect_eq(placed[2], 500, 300, 500, 300));
+	CHECK(!tp_dwindle_swap_dir(&t, ITEM(1), TP_DIR_LEFT));
+
+	/* Move sibling: 3 DOWN swaps sibling order back to [2 / 3]. */
+	CHECK(tp_dwindle_move_dir(&t, ITEM(3), TP_DIR_DOWN, 0.5f));
+	run_layout(&t, screen, 0);
+	CHECK(rect_eq(placed[2], 500, 0, 500, 300));
+	CHECK(rect_eq(placed[3], 500, 300, 500, 300));
+
+	/* Move across subtrees: 1 RIGHT moves into 2's slot -> [[1 | 2] / 3]. */
+	CHECK(tp_dwindle_move_dir(&t, ITEM(1), TP_DIR_RIGHT, 0.5f));
+	run_layout(&t, screen, 0);
+	CHECK(rect_eq(placed[1], 0, 0, 500, 300));
+	CHECK(rect_eq(placed[2], 500, 0, 500, 300));
+	CHECK(rect_eq(placed[3], 0, 300, 1000, 300));
+
+	/* Optional proportional split: equal 1/N shares on insert and rollback
+	 * on remove, plus preserving custom ratios. */
+	tp_dwindle_clear(&t);
+	t.proportional_split = true;
+	struct tp_rect wide1200 = {0, 0, 1200, 600};
+	struct tp_dwindle_split hsplit = {.split_h = true, .ratio = 0.5f};
+	CHECK(tp_dwindle_insert(&t, ITEM(1), NULL, hsplit));
+	CHECK(tp_dwindle_insert(&t, ITEM(2), ITEM(1), hsplit));
+	CHECK(tp_dwindle_insert(&t, ITEM(3), ITEM(2), hsplit));
+	CHECK(tp_dwindle_insert(&t, ITEM(4), ITEM(3), hsplit));
+	run_layout(&t, wide1200, 0);
+	CHECK(placed[1].w == 300 && placed[2].w == 300 &&
+		  placed[3].w == 300 && placed[4].w == 300);
+
+	CHECK(tp_dwindle_remove(&t, ITEM(4)));
+	run_layout(&t, wide1200, 0);
+	CHECK(placed[1].w == 400 && placed[2].w == 400 && placed[3].w == 400);
+
+	CHECK(tp_dwindle_remove(&t, ITEM(2)));
+	run_layout(&t, wide1200, 0);
+	CHECK(placed[1].w == 600 && placed[3].w == 600);
+
+	/* Custom ratio [0.6, 0.4] -> insert 3 -> [0.4, 0.267, 0.333] -> remove 3
+	 * restores [0.6, 0.4]. */
+	t.root->ratio = 0.6f;
+	CHECK(tp_dwindle_insert(&t, ITEM(4), ITEM(3), hsplit));
+	run_layout(&t, wide1200, 0);
+	CHECK(placed[1].w == 480 && placed[3].w == 320 && placed[4].w == 400);
+	CHECK(tp_dwindle_remove(&t, ITEM(4)));
+	run_layout(&t, wide1200, 0);
+	CHECK(placed[1].w == 720 && placed[3].w == 480);
+
+	/* Perpendicular split inside one column does not disturb horizontal run. */
+	struct tp_dwindle_split vsplit = {.split_h = false, .ratio = 0.5f};
+	CHECK(tp_dwindle_insert(&t, ITEM(5), ITEM(3), vsplit));
+	run_layout(&t, wide1200, 0);
+	CHECK(placed[1].w == 720 && placed[3].w == 480 && placed[5].w == 480);
+	CHECK(placed[3].h == 300 && placed[5].h == 300);
+
 	tp_dwindle_clear(&t);
 	CHECK_DONE("test_dwindle");
 }

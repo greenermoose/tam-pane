@@ -48,11 +48,16 @@ bool tp_client_visible(const struct tp_client *c);
 /* Move and resize the window. */
 void tp_client_place(struct tp_client *c, struct tp_rect box);
 
+#define TP_FLOAT_MIN_W 64
+#define TP_FLOAT_MIN_H 64
+
 void tp_client_close(struct tp_client *c);
 void tp_client_toggle_tags(struct tp_client *c, tp_tags_t mask);
 void tp_client_set_tags(struct tp_client *c, tp_tags_t tags);
 void tp_client_set_floating(struct tp_client *c, bool floating);
 void tp_client_set_fullscreen(struct tp_client *c, bool fullscreen);
+void tp_client_resize_floating(struct tp_client *c, enum tp_dir dir,
+							   int32_t delta);
 
 /* The window and surface under a layout point, with surface-local
  * coordinates. Any output pointer may be NULL. */
