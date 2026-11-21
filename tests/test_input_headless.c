@@ -43,6 +43,7 @@ struct test_client {
 	struct wl_keyboard *keyboard;
 	struct wl_pointer *pointer;
 	struct xdg_wm_base *wm_base;
+	bool has_viewporter, has_fractional_scale;
 	struct test_window windows[3];
 	struct wl_surface *keyboard_focus;
 	unsigned int key_events, pointer_enters, pointer_motions, pointer_buttons;
@@ -215,6 +216,10 @@ static void registry_global(void *data, struct wl_registry *registry,
 		client->wm_base = wl_registry_bind(registry, name,
 			&xdg_wm_base_interface, 1);
 		xdg_wm_base_add_listener(client->wm_base, &wm_listener, client);
+	} else if (!strcmp(interface, "wp_viewporter")) {
+		client->has_viewporter = true;
+	} else if (!strcmp(interface, "wp_fractional_scale_manager_v1")) {
+		client->has_fractional_scale = true;
 	}
 }
 
@@ -243,7 +248,8 @@ static bool pump(struct test_client *client, struct tp_server *server) {
 
 static bool globals_ready(struct test_client *client) {
 	return client->compositor && client->shm && client->seat && client->wm_base &&
-		client->keyboard && client->pointer;
+		client->keyboard && client->pointer &&
+		client->has_viewporter && client->has_fractional_scale;
 }
 
 static int create_shm_buffer(struct test_client *client) {

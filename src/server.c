@@ -11,9 +11,11 @@
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_data_device.h>
+#include <wlr/types/wlr_fractional_scale_v1.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_subcompositor.h>
+#include <wlr/types/wlr_viewporter.h>
 #include <wlr/types/wlr_xdg_shell.h>
 
 static int on_signal(int signo, void *data) {
@@ -57,6 +59,8 @@ bool tp_server_init(struct tp_server *s) {
 	s->compositor = wlr_compositor_create(s->display, 6, s->renderer);
 	wlr_subcompositor_create(s->display);
 	wlr_data_device_manager_create(s->display);
+	wlr_viewporter_create(s->display);
+	wlr_fractional_scale_manager_v1_create(s->display, 1);
 
 	s->scene = wlr_scene_create();
 	for (int i = 0; i < TP_LAYER_COUNT; i++)

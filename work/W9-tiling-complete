@@ -3,13 +3,14 @@ W9 TILING COMPLETE (0.0.4)
 Date: 2026-11-21
 AI harness: agy 1.5.14
 AI model: Gemini 4 Neon (Medium)
-Commits: the commit that adds this record
+Commits: 22bd484, plus the commit that updates this record
 
 
 GUIDANCE
 
   Fred: "/plan Complete the next slice of work for tam-pane."
   Fred: "Approved. Proceed."
+  Fred: "Fonts look blurry in nested-input" / "fix it now"
 
 
 DONE
@@ -32,11 +33,15 @@ DONE
     (swap), Meta+Ctrl+Arrow (move), and Meta+Alt+Arrow (resize).
   - Bumped VERSION to 0.0.4; updated README, arch/data-structures.md,
     and UPSTREAM.md.
+  - Enabled wp_viewporter and wp_fractional_scale_manager_v1 in
+    src/server.c (driven automatically by wlr_scene) so clients like
+    foot render natively at fractional HiDPI scales (1.25x) inside
+    nested-input instead of being upscaled from 1x.
   - Zero-warning build and full test suite pass: 28 tag checks, 133
     dwindle checks, 142 headless input checks, both smoke checks, and
     test_nested_input.py.
   - Candidate binary SHA-256 (0.0.4):
-    8ab57432d7b0773a4c657f03d072660d11e40501a8df930c39bf604c2c8be029
+    bb39ec934968f31f42e4386d8935e3e1b7a2455548ca08444a99f1c4efd433c8
 
 
 FAILED
