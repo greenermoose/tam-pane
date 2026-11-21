@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-/* Private interface shared between src/lua.c and src/lua_bindings.c. */
+/* Private interface shared between src/lua.c, src/lua_bindings.c, and src/lua_events.c. */
 #ifndef TAM_PANE_LUA_INTERNAL_H
 #define TAM_PANE_LUA_INTERNAL_H
 
@@ -22,6 +22,19 @@ struct tp_lua_bind_list {
 	bool has_unmodified;
 };
 
+struct tp_lua_hook {
+	uint64_t id;
+	enum tp_event_kind kind;
+	int lua_ref;
+};
+
+struct tp_lua_hook_list {
+	struct tp_lua_hook *items;
+	size_t len;
+	size_t cap;
+	size_t counts[TP_EVENT_COUNT];
+};
+
 struct tp_lua {
 	lua_State *L;
 
@@ -42,6 +55,11 @@ struct tp_lua {
 	struct tp_lua_bind_list active_binds;
 	struct tp_lua_bind_list staged_binds;
 	bool staging_binds;
+
+	struct tp_lua_hook_list active_hooks;
+	struct tp_lua_hook_list staged_hooks;
+	uint64_t next_hook_id;
+	bool staging_hooks;
 };
 
 struct tp_lua *tp_lua_from_state(lua_State *L);
@@ -62,5 +80,16 @@ void tp_lua_bindings_stage_abort(struct tp_lua *lua);
 
 /* Release all binding lists and Lua registry references before lua_close. */
 void tp_lua_bindings_finish(struct tp_lua *lua);
+
+/* Register tp.on, tp.off, and tp.clear_hooks on table at -1. */
+void tp_lua_events_open(lua_State *L);
+
+/* Atomic staging for event hooks during config load. */
+void tp_lua_hooks_stage_begin(struct tp_lua *lua);
+void tp_lua_hooks_stage_commit(struct tp_lua *lua);
+void tp_lua_hooks_stage_abort(struct tp_lua *lua);
+
+/* Release all hook lists and Lua registry references before lua_close. */
+void tp_lua_hooks_finish(struct tp_lua *lua);
 
 #endif

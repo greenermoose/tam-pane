@@ -10,6 +10,7 @@
 #define TAM_PANE_LUA_H
 
 #include "tam-pane/bindings.h"
+#include "tam-pane/events.h"
 #include "tam-pane/settings.h"
 #include <stdbool.h>
 #include <stddef.h>
@@ -83,5 +84,18 @@ size_t tp_lua_binding_count(const struct tp_lua *lua);
 
 /* True when at least one active binding has mods == 0. */
 bool tp_lua_has_unmodified_bindings(const struct tp_lua *lua);
+
+/* True when at least one active hook is registered for kind. */
+bool tp_lua_has_hooks(const struct tp_lua *lua, enum tp_event_kind kind);
+
+/* Number of active hooks for kind (or total hooks when kind == TP_EVENT_COUNT). */
+size_t tp_lua_hook_count(const struct tp_lua *lua, enum tp_event_kind kind);
+
+/*
+ * Invoke every active Lua hook registered for ev->kind in registration order,
+ * each with a fresh event table and guarded by the runtime watchdog. Errors or
+ * timeouts are logged without stopping remaining hooks. Returns hooks invoked.
+ */
+size_t tp_lua_emit_event(struct tp_lua *lua, const struct tp_event *ev);
 
 #endif

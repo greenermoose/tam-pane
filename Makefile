@@ -59,9 +59,9 @@ LUA_OBJS = $(patsubst third_party/lua/%.c,build/lua/%.o,$(LUA_SRCS))
 
 # Pure logic: no wlroots, so the unit tests build without it.
 CORE_SRCS = src/tags.c src/layout/dwindle.c
-LUA_HOST_SRCS = src/lua.c src/lua_bindings.c src/settings.c src/spawn.c
+LUA_HOST_SRCS = src/lua.c src/lua_bindings.c src/lua_events.c src/settings.c src/spawn.c
 # The compositor proper.
-WM_SRCS = src/main.c src/server.c src/monitor.c src/layer.c \
+WM_SRCS = src/main.c src/server.c src/events.c src/monitor.c src/layer.c \
 	src/client.c src/focus.c src/bindings.c src/layout/arrange.c \
 	src/input/input.c src/input/keyboard.c src/input/pointer.c
 
@@ -146,9 +146,9 @@ build/protocols/fractional-scale-v1-protocol.c: $(WAYLAND_PROTOCOLS)/staging/fra
 	@mkdir -p $(@D)
 	$(WAYLAND_SCANNER) private-code $< $@
 
-build/tests/test_lua: tests/test_lua.c $(LUA_HOST_OBJS) $(LUA_OBJS) $(LIBTAM) tests/check.h
+build/tests/test_lua: tests/test_lua.c build/tags.o $(LUA_HOST_OBJS) $(LUA_OBJS) $(LIBTAM) tests/check.h
 	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(XKB_CFLAGS) -o $@ $< $(LUA_HOST_OBJS) $(LUA_OBJS) $(LIBTAM) $(XKB_LIBS) -lm
+	$(CC) $(CFLAGS) $(XKB_CFLAGS) -o $@ $< build/tags.o $(LUA_HOST_OBJS) $(LUA_OBJS) $(LIBTAM) $(XKB_LIBS) -lm
 
 build/tests/test_%: tests/test_%.c $(CORE_OBJS) tests/check.h
 	@mkdir -p $(@D)

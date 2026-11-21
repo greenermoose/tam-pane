@@ -9,6 +9,7 @@
 
 #include "tam-pane/geom.h"
 #include "tam-pane/layout/dwindle.h"
+#include "tam-pane/server_events.h"
 #include "tam-pane/settings.h"
 #include <stdbool.h>
 #include <wayland-server-core.h>
@@ -65,6 +66,7 @@ enum tp_layer {
 struct tp_server {
 	struct tp_settings settings;
 	struct tp_lua *lua;
+	struct tp_event_queue events;
 
 	struct wl_display *display;
 	struct wl_event_loop *loop;

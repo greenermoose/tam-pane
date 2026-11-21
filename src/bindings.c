@@ -15,11 +15,15 @@
 #include "tam-pane/lua.h"
 #include "tam-pane/monitor.h"
 #include "tam-pane/server.h"
+#include "tam-pane/server_events.h"
 #include "tam-pane/spawn.h"
 
-static void view_changed(struct tp_server *s) {
+static void view_changed(struct tp_server *s, tp_tags_t prev_tags) {
 	tp_pointer_cancel_grab(s, NULL);
 	tp_arrange(s->selmon);
+	if (s->selmon)
+		tp_events_emit_tag(s, s->selmon, prev_tags,
+						   tp_tagview_current(&s->selmon->view));
 	tp_focus_refresh(s);
 }
 
@@ -91,14 +95,18 @@ void tp_action_run(struct tp_server *s, const struct tp_action *act) {
 		break;
 	}
 	case TP_ACT_TAG_VIEW:
-		if (s->selmon &&
-			tp_tagview_show(&s->selmon->view, tp_tag_mask(act->tag)))
-			view_changed(s);
+		if (s->selmon) {
+			tp_tags_t prev = tp_tagview_current(&s->selmon->view);
+			if (tp_tagview_show(&s->selmon->view, tp_tag_mask(act->tag)))
+				view_changed(s, prev);
+		}
 		break;
 	case TP_ACT_TAG_TOGGLE_VIEW:
-		if (s->selmon &&
-			tp_tagview_toggle(&s->selmon->view, tp_tag_mask(act->tag)))
-			view_changed(s);
+		if (s->selmon) {
+			tp_tags_t prev = tp_tagview_current(&s->selmon->view);
+			if (tp_tagview_toggle(&s->selmon->view, tp_tag_mask(act->tag)))
+				view_changed(s, prev);
+		}
 		break;
 	case TP_ACT_TAG_MOVE: {
 		struct tp_client *c = tp_focused(s);
@@ -114,8 +122,10 @@ void tp_action_run(struct tp_server *s, const struct tp_action *act) {
 	}
 	case TP_ACT_TAG_BACK:
 		if (s->selmon) {
+			tp_tags_t prev = tp_tagview_current(&s->selmon->view);
 			tp_tagview_back(&s->selmon->view);
-			view_changed(s);
+			if (tp_tagview_current(&s->selmon->view) != prev)
+				view_changed(s, prev);
 		}
 		break;
 	case TP_ACT_MONITOR_FOCUS: {

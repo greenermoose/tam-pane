@@ -3,30 +3,30 @@ WHATNOW
 What tam-pane is doing now and what comes next. Read this first; revise
 it at the end of every session (work/README-work).
 
-Updated: 2026-11-21, with W12
+Updated: 2026-11-21, with W13
 
 
 STATE
 
-  Version 0.1.1 on branch dev (Phase P2: Lua key bindings and dispatchers
-  accepted by Fred on 2026-11-21 on commit 5eb12fb; binary SHA-256:
-  7b7599ea44814b39441f398c64e06c19dd2c66ef50d65fbe1d0bcb8d4e3ace03).
-  0.1.0 was accepted on 2026-11-21; Phase P1 (0.0.1-0.0.5) was accepted
-  on 2026-11-21.
+  Version 0.1.2 on branch dev (Phase P2: Lua event hooks implemented,
+  awaiting Fred's brief nested check; candidate binary SHA-256:
+  54eaf9a00086574cd21a4c935d80c5767a418c88272325d4627f47fbb62f70b0).
+  0.1.1 was accepted on 2026-11-21; 0.1.0 was accepted on 2026-11-21;
+  Phase P1 (0.0.1-0.0.5) was accepted on 2026-11-21.
 
-  W12 completed 0.1.1 (plans/P2-lua.md): removed the compiled-in binding
-  table in src/bindings.c and moved all 60 default bindings into an
-  embedded Lua chunk loaded via tp.bind / tp.dsp.* (src/lua_bindings.c).
-  Added tp.bind, tp.unbind, tp.clear_binds, and callable tp.dsp.*
-  dispatcher values (spawn, terminal, close, quit, focus, swap, move,
-  resize, toggle_float, toggle_fullscreen, tag, monitor) plus plain Lua
-  callback bindings guarded by a 100 ms / 1,000,000-instruction runtime
-  watchdog. Bindings stage and roll back atomically with tp.config. Added
-  -c/-s flags to tools/nested-input and tools/demo-0.1.1 for quick nested
-  checks.
+  W13 implemented 0.1.2 (plans/P2-lua.md): added pure event types in
+  include/tam-pane/events.h and src/lua_events.c exposing tp.on(event,
+  fn), tp.off(id), and tp.clear_hooks([event]) for window.open,
+  window.close, window.focus, tag.change, monitor.add, and
+  monitor.remove. Added a bounded deferred FIFO queue drained via
+  wl_event_loop_add_idle() (src/events.c) so hooks run after compositor
+  state changes complete, each with a fresh event table and guarded by
+  the 100 ms / 1,000,000-instruction runtime watchdog. Hooks stage and
+  roll back atomically with tp.config and tp.bind. Added tools/demo-0.1.2
+  and tools/demo-0.1.2.lua for Fred's nested check.
 
   Automated checks pass with zero warnings: 28 tag checks, 133 dwindle
-  checks, 184 Lua checks, 204 headless input checks, both smoke checks,
+  checks, 248 Lua checks, 222 headless input checks, both smoke checks,
   nm -D symbol check, and tests/test_nested_input.py.
 
   Dependencies today: wlroots 0.20, wayland-server, xkbcommon, libtam
@@ -35,19 +35,23 @@ STATE
 
 NEXT
 
-  1. P2, 0.1.2 (event hooks): implement tp.on("window.open", fn) etc. for
-     window.open, window.close, window.focus, tag.change, monitor.add,
-     and monitor.remove, running hooks after the compositor finishes its
-     own state change and under the runtime watchdog (plans/P2-lua.md,
-     arch/lua-api.md).
+  1. Record Fred's nested acceptance of 0.1.2 once he runs
+     tools/demo-0.1.2.
 
-  2. Later: Tamlinux's desktop tests move from headless Sway to
+  2. P2, 0.1.3 (window rules): implement tp.rule{ match = { app_id = ...,
+     title = ... }, ... } using Lua patterns (no pcre2) to set tags,
+     floating, size, position, and monitor on matching windows
+     (plans/P2-lua.md, arch/lua-api.md).
+
+  3. Later: Tamlinux's desktop tests move from headless Sway to
      tam-pane's headless mode once it can serve them (ROADMAP.md).
 
 
 WAITING FOR FRED
 
-  Nothing.
+  - Brief nested check of tam-pane 0.1.2 with tools/demo-0.1.2 (candidate
+    binary SHA-256:
+    54eaf9a00086574cd21a4c935d80c5767a418c88272325d4627f47fbb62f70b0).
 
 
 WATCH OUT

@@ -1,6 +1,6 @@
 # tam-pane Lua API (`arch/lua-api.md`)
 
-**Status:** 0.1.0–0.1.1 shipped; 0.1.2–0.1.4 names are a draft for review.
+**Status:** 0.1.0–0.1.2 shipped; 0.1.3–0.1.4 names are a draft for review.
 
 tam-pane embeds **Lua 5.5.1** statically from `third_party/lua/` with no
 dynamic symbol exports (`lua_*` symbols stay internal to `tam-pane`).
@@ -130,11 +130,49 @@ callable (`tp.dsp.close()()`) inside plain Lua callbacks (calling one during
 | `tp.dsp.tag(op[, n])` | `"view"`, `"move"`, `"toggle_view"`, `"toggle_client"` with `n` in `1..9`; or `"back"` | Tag view / client tag operations |
 | `tp.dsp.monitor(op, dir)` | `"focus"` \| `"move"`, `"prev"` \| `"next"` | Focus or move focused window to adjacent monitor |
 
-## Draft for 0.1.2–0.1.4 (for review)
+## Shipped in 0.1.2
 
-- **0.1.2 Event hooks:** `tp.on("window.open", fn)` for `window.open`,
-  `window.close`, `window.focus`, `tag.change`, `monitor.add`,
-  `monitor.remove`.
+Event hooks register Lua callbacks for compositor lifecycle and state changes.
+Hooks run **after** the compositor finishes its own handling via a deferred
+Wayland idle callback (never re-entrantly inside a wlroots signal handler),
+and each invocation runs under the runtime watchdog (1,000,000 instructions /
+100 ms `CLOCK_MONOTONIC` deadline). An error or timeout in one hook is logged
+and does not stop remaining hooks on the same event.
+
+Hook registrations stage alongside `tp.config` and `tp.bind` during config
+load and roll back atomically if `init.lua` fails. Each config load starts
+from an empty staged hook set so reloads replace hooks without duplicating
+them.
+
+### `tp.on(event, fn)`
+
+Registers `fn(ev)` for `event` and returns an integer handle `id` (`>= 1`).
+Multiple hooks on the same event run in registration order; each receives a
+fresh plain table `ev` (value snapshot with no live compositor pointers).
+Raises a Lua error on an unknown event name, non-function callback, or call
+outside config load.
+
+| Event | Payload fields in `ev` |
+|---|---|
+| `"window.open"` | `event`, `app_id`, `title`, `monitor`, `tags` (bitmask), `tag` (`1..9` or `0`), `floating`, `fullscreen`, `x`, `y`, `w`, `h` |
+| `"window.close"` | `event`, `app_id`, `title`, `monitor`, `tags`, `tag`, `floating`, `fullscreen`, `x`, `y`, `w`, `h` |
+| `"window.focus"` | `event`, `focused` (`true`/`false`), `app_id`, `title`, `monitor`, `tags`, `tag`, `floating`, `fullscreen`, `x`, `y`, `w`, `h` (empty/zeroed when `focused == false`) |
+| `"tag.change"` | `event`, `monitor`, `tags` (new bitmask), `prev_tags` (previous bitmask), `tag` (lowest active `1..9`) |
+| `"monitor.add"` | `event`, `name`, `x`, `y`, `w`, `h`, `scale` |
+| `"monitor.remove"` | `event`, `name`, `x`, `y`, `w`, `h`, `scale` |
+
+### `tp.off(id)`
+
+Removes the staged hook with handle `id`. Returns `true` if removed, `false`
+otherwise. Callable only while loading config.
+
+### `tp.clear_hooks([event])`
+
+Removes all staged hooks, or only those for `event` when an event name is
+passed. Callable only while loading config.
+
+## Draft for 0.1.3–0.1.4 (for review)
+
 - **0.1.3 Window rules:** `tp.rule{ match = { app_id = "...", title = "..." }, ... }`.
 - **0.1.4 Reload:** `tp.dsp.reload()` / IPC reload keeping the last good
   configuration on error.

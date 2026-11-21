@@ -445,6 +445,33 @@ static void emit_button(struct tp_server *s, struct wlr_pointer *pointer,
 	wl_signal_emit_mutable(&s->cursor->events.button, &button);
 }
 
+static char hook_events[32][128];
+static int hook_event_count;
+
+static void record_hook_spawn(const char *cmd) {
+	if (hook_event_count < 32)
+		snprintf(hook_events[hook_event_count++], sizeof(hook_events[0]), "%s",
+				 cmd);
+}
+
+static bool has_hook_event(const char *prefix) {
+	size_t n = strlen(prefix);
+	for (int i = 0; i < hook_event_count; i++) {
+		if (strncmp(hook_events[i], prefix, n) == 0)
+			return true;
+	}
+	return false;
+}
+
+static int find_hook_event(const char *prefix) {
+	size_t n = strlen(prefix);
+	for (int i = 0; i < hook_event_count; i++) {
+		if (strncmp(hook_events[i], prefix, n) == 0)
+			return i;
+	}
+	return -1;
+}
+
 int main(void) {
 	struct tp_server server = {0};
 	struct wlr_keyboard keyboard;
@@ -995,6 +1022,116 @@ int main(void) {
 	/* Bindings rolled back too: Meta+q still toggles floating. */
 	chord(&keyboard, KEY_Q, false, false);
 	CHECK(c1->floating);
+
+	/*
+	 * Lua 0.1.2 integration: deferred event hooks for window.open,
+	 * window.close, window.focus, tag.change, monitor.add, monitor.remove,
+	 * dispatcher invocation from a hook, and runaway hook watchdog cutoff.
+	 */
+	tp_lua_set_spawn_fn(server.lua, record_hook_spawn);
+	hook_event_count = 0;
+	lf = fopen(lua_cfg, "wb");
+	CHECK(lf != NULL);
+	if (lf) {
+		fputs("tp.on('window.open', function(ev)\n"
+			  "  tp.spawn('open:' .. ev.app_id .. ':' .. ev.title .. ':' .. ev.monitor)\n"
+			  "  if ev.title == 'auto-float' then tp.dsp.toggle_float()() end\n"
+			  "end)\n"
+			  "tp.on('window.close', function(ev)\n"
+			  "  tp.spawn('close:' .. ev.title)\n"
+			  "end)\n"
+			  "tp.on('window.focus', function(ev)\n"
+			  "  tp.spawn('focus:' .. tostring(ev.focused) .. ':' .. ev.title)\n"
+			  "end)\n"
+			  "tp.on('tag.change', function(ev)\n"
+			  "  tp.spawn(string.format('tag:%s:%d->%d:%d', ev.monitor, ev.prev_tags, ev.tags, ev.tag))\n"
+			  "end)\n"
+			  "tp.on('monitor.add', function(ev)\n"
+			  "  tp.spawn(string.format('madd:%s:%dx%d', ev.name, ev.w, ev.h))\n"
+			  "end)\n"
+			  "tp.on('monitor.remove', function(ev)\n"
+			  "  tp.spawn(string.format('mrem:%s:%dx%d', ev.name, ev.w, ev.h))\n"
+			  "end)\n",
+			  lf);
+		fclose(lf);
+	}
+	CHECK(tp_lua_load_file(server.lua, lua_cfg, true, &server.settings,
+						   &server.settings));
+
+	/* Open a window titled 'auto-float': deferred window.open fires before
+	 * window.focus and safely toggles floating via tp.dsp.toggle_float()(). */
+	struct test_window hook_win;
+	configure_window(&client, &hook_win, "auto-float");
+	for (unsigned int i = 0; i < 100 && !hook_win.configured; i++)
+		if (!pump(&client, &server)) goto fail;
+	for (unsigned int i = 0; i < 20; i++)
+		if (!pump(&client, &server)) goto fail;
+	int idx_open = find_hook_event("open:tam-pane-test:auto-float:");
+	int idx_focus = find_hook_event("focus:true:auto-float");
+	CHECK(idx_open >= 0);
+	CHECK(idx_focus > idx_open);
+	struct tp_client *hook_c = tp_focused(&server);
+	CHECK(hook_c != NULL && hook_c->floating);
+
+	/* Tag change fires tag.change and focus clear (empty tag 5), then
+	 * Meta+Tab returns to previous tag and restores focus. */
+	hook_event_count = 0;
+	chord(&keyboard, KEY_5, false, false);
+	for (unsigned int i = 0; i < 10; i++)
+		if (!pump(&client, &server)) goto fail;
+	int idx_tag = find_hook_event("tag:");
+	int idx_unfocus = find_hook_event("focus:false:");
+	CHECK(idx_tag >= 0);
+	CHECK(idx_unfocus > idx_tag);
+	CHECK(has_hook_event("tag:") && strstr(hook_events[idx_tag], ":5") != NULL);
+
+	hook_event_count = 0;
+	chord(&keyboard, KEY_TAB, false, false);
+	for (unsigned int i = 0; i < 10; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(has_hook_event("tag:"));
+	CHECK(has_hook_event("focus:true:auto-float"));
+
+	/* Closing hook_win fires window.close before window.focus. */
+	hook_event_count = 0;
+	destroy_window(&hook_win);
+	for (unsigned int i = 0; i < 20; i++)
+		if (!pump(&client, &server)) goto fail;
+	int idx_close = find_hook_event("close:auto-float");
+	CHECK(idx_close >= 0);
+
+	/* Adding and removing a headless output fires monitor.add / monitor.remove. */
+	hook_event_count = 0;
+	struct wlr_output *o4 = wlr_headless_add_output(headless, 640, 480);
+	CHECK(o4 != NULL);
+	for (unsigned int i = 0; i < 10; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(has_hook_event("madd:HEADLESS-4:640x480"));
+	hook_event_count = 0;
+	wlr_output_destroy(o4);
+	for (unsigned int i = 0; i < 10; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(has_hook_event("mrem:HEADLESS-4:640x480"));
+
+	/* Runaway while true do end in a hook is cut off by the watchdog and the
+	 * compositor keeps handling subsequent input. */
+	lf = fopen(lua_cfg, "wb");
+	CHECK(lf != NULL);
+	if (lf) {
+		fputs("tp.on('tag.change', function() while true do end end)\n"
+			  "tp.on('tag.change', function() tp.spawn('after-watchdog') end)\n",
+			  lf);
+		fclose(lf);
+	}
+	CHECK(tp_lua_load_file(server.lua, lua_cfg, true, &server.settings,
+						   &server.settings));
+	hook_event_count = 0;
+	chord(&keyboard, KEY_4, false, false);
+	for (unsigned int i = 0; i < 10; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(has_hook_event("after-watchdog"));
+	CHECK(tp_tagview_current(&server.selmon->view) == tp_tag_mask(4));
+
 	unlink(lua_cfg);
 	rmdir(lua_dir);
 

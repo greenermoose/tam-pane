@@ -36,6 +36,7 @@ bool tp_server_init(struct tp_server *s) {
 	wl_list_init(&s->clients);
 	wl_list_init(&s->focus_stack);
 	wl_list_init(&s->keyboards);
+	tp_events_init(s);
 
 	if (!s->lua)
 		s->lua = tp_lua_create();
@@ -125,6 +126,7 @@ void tp_server_finish(struct tp_server *s) {
 		return;
 	}
 	s->stopping = true;
+	tp_events_finish(s);
 	wl_display_destroy_clients(s->display);
 
 	tp_pointer_finish(s);

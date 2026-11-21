@@ -7,8 +7,10 @@
 #include "tam-pane/layer.h"
 #include "tam-pane/layout/arrange.h"
 #include "tam-pane/server.h"
+#include "tam-pane/server_events.h"
 #include "viewporter-client-protocol.h"
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <tam.h>
@@ -200,6 +202,11 @@ static void on_destroy(struct wl_listener *l, void *data) {
 	struct tp_monitor *m = wl_container_of(l, m, destroy);
 	struct tp_server *s = m->server;
 	const char *name = m->output->name;
+	char mon_name[64] = {0};
+	if (name)
+		snprintf(mon_name, sizeof(mon_name), "%s", name);
+	struct tp_rect area = m->area;
+	float scale = m->output->scale;
 
 	if (s->grab.client && s->grab.client->mon == m)
 		tp_pointer_cancel_grab(s, NULL);
@@ -238,6 +245,7 @@ static void on_destroy(struct wl_listener *l, void *data) {
 		return;
 	if (heir)
 		tp_arrange(heir);
+	tp_events_emit_monitor(s, TP_EVENT_MONITOR_REMOVE, mon_name, area, scale);
 	tp_focus_refresh(s);
 }
 
@@ -342,6 +350,8 @@ static void on_new_output(struct wl_listener *l, void *data) {
 	}
 	tam_log_info("output %s: %dx%d at %d,%d scale %.2f", output->name,
 				 m->area.w, m->area.h, m->area.x, m->area.y, output->scale);
+	tp_events_emit_monitor(s, TP_EVENT_MONITOR_ADD, output->name, m->area,
+						   output->scale);
 }
 
 static void on_layout_change(struct wl_listener *l, void *data) {

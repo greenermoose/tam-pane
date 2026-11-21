@@ -1,0 +1,23 @@
+#!/bin/sh
+# Launch tam-pane 0.1.2 nested under Hyprland with tools/demo-0.1.2.lua
+# so event hook output streams in the host terminal.
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+startup='foot sh -c '\''
+cat << "EOF"
+=== tam-pane 0.1.2 interactive demo (tools/demo-0.1.2.lua) ===
+
+Watch the host terminal where you ran tools/demo-0.1.2 for [hook] lines:
+  Meta+Return     open a second terminal  -> window.open + window.focus
+  Meta+j / k      cycle focus             -> window.focus
+  Meta+2 / Tab    switch tags             -> tag.change + window.focus
+  Meta+9          trigger runaway hook    -> watchdog aborts it & next hook runs
+  Meta+w          close a terminal        -> window.close + window.focus
+  Meta+Shift+E    quit tam-pane (Ctrl+Alt+Esc restores host shortcuts)
+
+EOF
+exec "${SHELL:-/bin/sh}"
+'\'''
+
+exec "$ROOT/tools/nested-input" -c "$ROOT/tools/demo-0.1.2.lua" -s "$startup"

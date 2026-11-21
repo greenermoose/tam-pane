@@ -13,6 +13,8 @@
 
 static char last_spawned[256];
 static int spawn_count;
+static char spawn_log[16][256];
+static int spawn_log_count;
 
 static struct tp_action last_action;
 static int action_count;
@@ -20,6 +22,14 @@ static int action_count;
 static void mock_spawn(const char *cmd) {
 	spawn_count++;
 	snprintf(last_spawned, sizeof(last_spawned), "%s", cmd);
+	if (spawn_log_count < 16)
+		snprintf(spawn_log[spawn_log_count++], sizeof(spawn_log[0]), "%s", cmd);
+}
+
+static void reset_spawn_log(void) {
+	spawn_count = 0;
+	spawn_log_count = 0;
+	last_spawned[0] = '\0';
 }
 
 static void mock_action(const struct tp_action *act, void *userdata) {
@@ -522,6 +532,222 @@ static void test_custom_bindings_and_callbacks(void) {
 	tp_lua_destroy(lua);
 }
 
+static void test_event_hooks(void) {
+	/* Event name round-trips and invalid names. */
+	for (unsigned int i = 0; i < TP_EVENT_COUNT; i++) {
+		const char *name = tp_event_kind_name((enum tp_event_kind)i);
+		CHECK(name != NULL);
+		enum tp_event_kind parsed = TP_EVENT_COUNT;
+		CHECK(tp_event_kind_from_name(name, &parsed));
+		CHECK(parsed == (enum tp_event_kind)i);
+	}
+	enum tp_event_kind bad_kind = TP_EVENT_COUNT;
+	CHECK(tp_event_kind_name(TP_EVENT_COUNT) == NULL);
+	CHECK(!tp_event_kind_from_name("window.bogus", &bad_kind));
+	CHECK(!tp_event_kind_from_name("", &bad_kind));
+
+	struct tp_lua *lua = tp_lua_create();
+	CHECK(lua != NULL);
+	tp_lua_set_spawn_fn(lua, mock_spawn);
+	tp_lua_set_action_fn(lua, mock_action, NULL);
+
+	CHECK(tp_lua_hook_count(lua, TP_EVENT_COUNT) == 0);
+	CHECK(!tp_lua_has_hooks(lua, TP_EVENT_WINDOW_OPEN));
+
+	struct tp_settings base, out;
+	tp_settings_defaults(&base);
+	out = base;
+	char err[256] = {0};
+
+	/* Register hooks for all 6 events, test ordering, table isolation,
+	 * tp.off(id), and tp.clear_hooks(event). */
+	const char *cfg =
+		"local id1 = tp.on('window.open', function(ev)\n"
+		"  tp.spawn(string.format('open1:%s:%s:%s:%s:%d:%d:%s:%s:%d,%d,%d,%d',\n"
+		"    ev.event, ev.app_id, ev.title, ev.monitor, ev.tags, ev.tag,\n"
+		"    tostring(ev.floating), tostring(ev.fullscreen), ev.x, ev.y, ev.w, ev.h))\n"
+		"  ev.app_id = 'mutated'\n"
+		"end)\n"
+		"local id2 = tp.on('window.open', function(ev)\n"
+		"  tp.spawn('open2:' .. ev.app_id)\n"
+		"end)\n"
+		"local id3 = tp.on('window.open', function(ev)\n"
+		"  tp.spawn('open3:should-be-removed')\n"
+		"end)\n"
+		"assert(type(id1) == 'number' and id2 > id1 and id3 > id2)\n"
+		"assert(tp.off(id3) == true)\n"
+		"assert(tp.off(id3) == false)\n"
+		"assert(tp.off(99999) == false)\n"
+		"tp.on('window.close', function(ev)\n"
+		"  tp.spawn('close:' .. ev.event .. ':' .. ev.app_id .. ':' .. ev.title)\n"
+		"end)\n"
+		"tp.on('window.focus', function(ev)\n"
+		"  tp.spawn(string.format('focus:%s:%s:%s:%s',\n"
+		"    ev.event, tostring(ev.focused), ev.app_id, ev.monitor))\n"
+		"end)\n"
+		"tp.on('tag.change', function(ev)\n"
+		"  tp.spawn(string.format('tag:%s:%s:%d->%d:%d',\n"
+		"    ev.event, ev.monitor, ev.prev_tags, ev.tags, ev.tag))\n"
+		"end)\n"
+		"tp.on('monitor.add', function(ev)\n"
+		"  tp.spawn(string.format('madd:%s:%s:%d,%d,%d,%d:%.2f',\n"
+		"    ev.event, ev.name, ev.x, ev.y, ev.w, ev.h, ev.scale))\n"
+		"end)\n"
+		"tp.on('monitor.remove', function(ev)\n"
+		"  tp.spawn(string.format('mrem:%s:%s:%d,%d,%d,%d:%.2f',\n"
+		"    ev.event, ev.name, ev.x, ev.y, ev.w, ev.h, ev.scale))\n"
+		"end)\n";
+	CHECK(tp_lua_exec_string(lua, cfg, strlen(cfg), "hooks",
+							 TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+							 TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+							 sizeof(err)));
+	CHECK(tp_lua_has_hooks(lua, TP_EVENT_WINDOW_OPEN));
+	CHECK(tp_lua_hook_count(lua, TP_EVENT_WINDOW_OPEN) == 2);
+	CHECK(tp_lua_hook_count(lua, TP_EVENT_COUNT) == 7);
+
+	/* window.open: ordering and fresh table isolation. */
+	reset_spawn_log();
+	struct tp_event ev = {
+		.kind = TP_EVENT_WINDOW_OPEN,
+		.window = {
+			.app_id = "foot",
+			.title = "shell",
+			.monitor = "DP-1",
+			.tags = tp_tag_mask(2) | tp_tag_mask(4),
+			.floating = true,
+			.fullscreen = false,
+			.geom = {10, 20, 800, 600},
+		},
+	};
+	CHECK(tp_lua_emit_event(lua, &ev) == 2);
+	CHECK(spawn_log_count == 2);
+	CHECK(strcmp(spawn_log[0],
+				 "open1:window.open:foot:shell:DP-1:10:2:true:false:10,20,800,600") == 0);
+	CHECK(strcmp(spawn_log[1], "open2:foot") == 0);
+
+	/* window.close */
+	reset_spawn_log();
+	ev.kind = TP_EVENT_WINDOW_CLOSE;
+	CHECK(tp_lua_emit_event(lua, &ev) == 1);
+	CHECK(spawn_log_count == 1 &&
+		  strcmp(spawn_log[0], "close:window.close:foot:shell") == 0);
+
+	/* window.focus (focused = true and focused = false) */
+	reset_spawn_log();
+	ev.kind = TP_EVENT_WINDOW_FOCUS;
+	ev.window.focused = true;
+	CHECK(tp_lua_emit_event(lua, &ev) == 1);
+	CHECK(strcmp(spawn_log[0], "focus:window.focus:true:foot:DP-1") == 0);
+
+	struct tp_event ev_clear = {
+		.kind = TP_EVENT_WINDOW_FOCUS,
+		.window = {.monitor = "DP-1", .focused = false},
+	};
+	CHECK(tp_lua_emit_event(lua, &ev_clear) == 1);
+	CHECK(strcmp(spawn_log[1], "focus:window.focus:false::DP-1") == 0);
+
+	/* tag.change */
+	reset_spawn_log();
+	struct tp_event ev_tag = {
+		.kind = TP_EVENT_TAG_CHANGE,
+		.tag = {.monitor = "DP-1",
+				.prev_tags = tp_tag_mask(1),
+				.tags = tp_tag_mask(3)},
+	};
+	CHECK(tp_lua_emit_event(lua, &ev_tag) == 1);
+	CHECK(strcmp(spawn_log[0], "tag:tag.change:DP-1:1->4:3") == 0);
+
+	/* monitor.add and monitor.remove */
+	reset_spawn_log();
+	struct tp_event ev_mon = {
+		.kind = TP_EVENT_MONITOR_ADD,
+		.monitor = {.name = "HDMI-A-1", .area = {1920, 0, 1280, 720}, .scale = 1.5f},
+	};
+	CHECK(tp_lua_emit_event(lua, &ev_mon) == 1);
+	CHECK(strcmp(spawn_log[0], "madd:monitor.add:HDMI-A-1:1920,0,1280,720:1.50") == 0);
+	ev_mon.kind = TP_EVENT_MONITOR_REMOVE;
+	CHECK(tp_lua_emit_event(lua, &ev_mon) == 1);
+	CHECK(strcmp(spawn_log[1], "mrem:monitor.remove:HDMI-A-1:1920,0,1280,720:1.50") == 0);
+
+	/* Error & watchdog isolation: throwing hook and infinite loop do not
+	 * prevent subsequent hooks from running. */
+	const char *iso_cfg =
+		"tp.on('window.open', function() error('hook boom') end)\n"
+		"tp.on('window.open', function() while true do end end)\n"
+		"tp.on('window.open', function(e) tp.spawn('survived:' .. e.app_id) end)\n";
+	CHECK(tp_lua_exec_string(lua, iso_cfg, strlen(iso_cfg), "iso",
+							 TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+							 TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+							 sizeof(err)));
+	/* Reload replaced previous hooks cleanly (no duplicates from earlier cfg). */
+	CHECK(tp_lua_hook_count(lua, TP_EVENT_COUNT) == 3);
+	CHECK(!tp_lua_has_hooks(lua, TP_EVENT_TAG_CHANGE));
+
+	reset_spawn_log();
+	uint64_t t0 = now_ms();
+	ev.kind = TP_EVENT_WINDOW_OPEN;
+	CHECK(tp_lua_emit_event(lua, &ev) == 3);
+	CHECK(now_ms() - t0 < 500);
+	CHECK(spawn_log_count == 1 && strcmp(spawn_log[0], "survived:foot") == 0);
+
+	/* Atomic rollback: failed config keeps previous active hooks intact. */
+	const char *bad_reload =
+		"tp.on('tag.change', function() tp.spawn('never') end)\n"
+		"error('rollback hooks')\n";
+	CHECK(!tp_lua_exec_string(lua, bad_reload, strlen(bad_reload), "bad_reload",
+							  TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+							  TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+							  sizeof(err)));
+	CHECK(tp_lua_hook_count(lua, TP_EVENT_COUNT) == 3);
+	CHECK(!tp_lua_has_hooks(lua, TP_EVENT_TAG_CHANGE));
+	CHECK(tp_lua_has_hooks(lua, TP_EVENT_WINDOW_OPEN));
+
+	/* tp.clear_hooks(event) and tp.clear_hooks() */
+	const char *clear_cfg =
+		"tp.on('window.open', function() tp.spawn('a') end)\n"
+		"tp.on('tag.change', function() tp.spawn('b') end)\n"
+		"tp.clear_hooks('window.open')\n";
+	CHECK(tp_lua_exec_string(lua, clear_cfg, strlen(clear_cfg), "clear_one",
+							 TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+							 TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+							 sizeof(err)));
+	CHECK(!tp_lua_has_hooks(lua, TP_EVENT_WINDOW_OPEN));
+	CHECK(tp_lua_hook_count(lua, TP_EVENT_TAG_CHANGE) == 1);
+
+	/* Validation errors: unknown event, non-function, bad off arg, runtime call. */
+	const char *bad_hooks[] = {
+		"tp.on('nope.event', function() end)",
+		"tp.on('window.open', 'not-a-fn')",
+		"tp.off('not-an-int')",
+		"tp.clear_hooks('nope.event')",
+	};
+	for (size_t i = 0; i < sizeof(bad_hooks) / sizeof(bad_hooks[0]); i++) {
+		CHECK(!tp_lua_exec_string(lua, bad_hooks[i], strlen(bad_hooks[i]),
+								  "bad_hook", TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+								  TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+								  sizeof(err)));
+	}
+
+	/* Calling tp.on / tp.off / tp.clear_hooks at runtime inside a hook fails. */
+	const char *rt_cfg =
+		"tp.on('window.open', function()\n"
+		"  local ok1 = pcall(tp.on, 'window.close', function() end)\n"
+		"  local ok2 = pcall(tp.off, 1)\n"
+		"  local ok3 = pcall(tp.clear_hooks)\n"
+		"  tp.spawn(tostring(ok1) .. ':' .. tostring(ok2) .. ':' .. tostring(ok3))\n"
+		"end)\n";
+	CHECK(tp_lua_exec_string(lua, rt_cfg, strlen(rt_cfg), "rt",
+							 TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+							 TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+							 sizeof(err)));
+	reset_spawn_log();
+	CHECK(tp_lua_emit_event(lua, &ev) == 1);
+	CHECK(spawn_log_count == 1 &&
+		  strcmp(spawn_log[0], "false:false:false") == 0);
+
+	tp_lua_destroy(lua);
+}
+
 int main(void) {
 	tam_log_set_level(TAM_LOG_ERROR);
 	test_config_and_fallback();
@@ -531,5 +757,6 @@ int main(void) {
 	test_chord_parser();
 	test_default_bindings();
 	test_custom_bindings_and_callbacks();
+	test_event_hooks();
 	CHECK_DONE("test_lua");
 }

@@ -5,6 +5,7 @@
 #include "tam-pane/layout/arrange.h"
 #include "tam-pane/monitor.h"
 #include "tam-pane/server.h"
+#include "tam-pane/server_events.h"
 #include <stdlib.h>
 #include <tam.h>
 #include <wlr/types/wlr_compositor.h>
@@ -100,6 +101,7 @@ static void on_map(struct wl_listener *l, void *data) {
 	wl_list_insert(&s->focus_stack, &c->flink);
 	if (c->mon)
 		tp_arrange(c->mon);
+	tp_events_emit_window(s, TP_EVENT_WINDOW_OPEN, c, false);
 	tp_focus(s, c);
 	tam_log_debug("window mapped: %s, tags 0x%x, %s",
 				  c->toplevel->app_id ? c->toplevel->app_id : "(no app id)",
@@ -123,6 +125,7 @@ static void on_unmap(struct wl_listener *l, void *data) {
 		tp_monitor_forget(c->mon, c);
 		tp_arrange(c->mon);
 	}
+	tp_events_emit_window(s, TP_EVENT_WINDOW_CLOSE, c, false);
 	if (had_focus)
 		tp_focus_refresh(s);
 }

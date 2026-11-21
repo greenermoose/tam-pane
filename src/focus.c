@@ -4,6 +4,7 @@
 #include "tam-pane/layer.h"
 #include "tam-pane/monitor.h"
 #include "tam-pane/server.h"
+#include "tam-pane/server_events.h"
 #include <wlr/types/wlr_layer_shell_v1.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_seat.h>
@@ -72,6 +73,8 @@ void tp_focus_layer(struct tp_server *s, struct tp_layer_surface *ls) {
 	if (ls->mon)
 		s->selmon = ls->mon;
 	enter_keyboard(s, ls->layer_surface->surface);
+	if (old)
+		tp_events_emit_window(s, TP_EVENT_WINDOW_FOCUS, NULL, false);
 }
 
 void tp_focus(struct tp_server *s, struct tp_client *c) {
@@ -83,12 +86,16 @@ void tp_focus(struct tp_server *s, struct tp_client *c) {
 	}
 
 	struct tp_client *old = tp_focused(s);
+	bool had_surface = s->seat->keyboard_state.focused_surface != NULL;
+	bool had_layer = s->focused_layer != NULL;
 	if (old && old != c)
 		wlr_xdg_toplevel_set_activated(old->toplevel, false);
 	s->focused_layer = NULL;
 
 	if (!c) {
 		wlr_seat_keyboard_notify_clear_focus(s->seat);
+		if (old || (had_surface && !had_layer))
+			tp_events_emit_window(s, TP_EVENT_WINDOW_FOCUS, NULL, false);
 		return;
 	}
 
@@ -102,6 +109,8 @@ void tp_focus(struct tp_server *s, struct tp_client *c) {
 		c->mon->focus[tp_tags_slot(tp_tagview_current(&c->mon->view))] = c;
 
 	enter_keyboard(s, c->toplevel->base->surface);
+	if (old != c)
+		tp_events_emit_window(s, TP_EVENT_WINDOW_FOCUS, c, true);
 }
 
 struct tp_client *tp_focus_top(struct tp_server *s, struct tp_monitor *m) {
