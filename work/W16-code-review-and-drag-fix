@@ -11,6 +11,8 @@ GUIDANCE
   Fred: "Do a code review of tam-pane. Look for any architectural flaws,
   security issues, bugs, poorly factored code, etc."
   Fred approved the review plan, which ends with a fix list in order.
+  Fred: "Create a demo in the tools folder for 0.1.5 so I can put it
+  through its paces."
 
 
 DONE
@@ -32,6 +34,11 @@ DONE
     ASan build is clean.
   - make test: 28 tag, 143 dwindle, 408 Lua, 275 headless input checks,
     3 smoke checks, nm -D check; tests/test_nested_input.py passes.
+  - Added tools/demo-0.1.5 and tools/demo-0.1.5.lua for Fred's nested
+    check. Meta+O and Meta+I open windows that close themselves, so the
+    tree changes while a drag is held. The demo refuses to start if
+    build/tam-pane does not report VERSION. The config was checked by
+    loading it headless.
   - VERSION 0.1.5. Candidate binary SHA-256:
     c22466f328a30ba9bcbd62dd4f373c77cbb334550c5b71f63187852ae08e7b99
 

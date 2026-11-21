@@ -1,0 +1,66 @@
+#!/bin/sh
+# Launch tam-pane 0.1.5 nested under Hyprland to put the B1 fix through
+# its paces: a tiled Meta+Right-drag must survive other windows opening
+# and closing in the same tree while the drag is held.
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+want=$(tr -d '[:space:]' < "$ROOT/VERSION")
+have=$("$ROOT/build/tam-pane" -v 2>/dev/null | awk '{print $2}') || true
+if [ "$have" != "$want" ]; then
+	echo "build/tam-pane is '${have:-missing}', VERSION is $want: run make first" >&2
+	exit 1
+fi
+
+TMPDIR_DEMO=$(mktemp -d "${TMPDIR:-/tmp}/tam-pane-demo-0.1.5.XXXXXX")
+trap 'rm -rf "$TMPDIR_DEMO"' EXIT INT TERM
+
+CFG="$TMPDIR_DEMO/init.lua"
+BIN="$TMPDIR_DEMO/bin"
+GUIDE="$TMPDIR_DEMO/guide"
+mkdir -p "$BIN"
+cp "$ROOT/tools/demo-0.1.5.lua" "$CFG"
+
+# pane-blip N: a window that closes itself after N seconds (default 5).
+cat >"$BIN/pane-blip" <<'EOF'
+#!/bin/sh
+n=${1:-5}
+exec foot --title="blip ${n}s" sh -c "echo 'This window closes in $n seconds.'; sleep $n"
+EOF
+# pane-burst: three windows that close at 2, 4 and 6 seconds.
+cat >"$BIN/pane-burst" <<'EOF'
+#!/bin/sh
+pane-blip 2 & pane-blip 4 & pane-blip 6 &
+EOF
+chmod +x "$BIN/pane-blip" "$BIN/pane-burst"
+export PATH="$BIN:$PATH"
+
+cat >"$GUIDE" <<'EOF'
+=== tam-pane 0.1.5 demo: tiled drag survives windows leaving (B1) ===
+
+Drag = hold Meta and the right mouse button on a tiled window.
+New windows open beside the LAST window in the tree, not the focused
+one (R1 finding 12, not fixed yet), so "the window it split" below is
+the one a blip opens next to.
+
+ 1. Press Meta+Return: two terminals side by side.
+ 2. Type: pane-blip 5   A window opens beside one terminal. Drag that
+    terminal and keep dragging past the moment the blip closes. The
+    drag carries on resizing. (In 0.1.4 this wrote freed memory.)
+ 3. Start a drag on any tiled window and, still holding Meta and the
+    button, press O. A blip opens mid-drag and closes 3 s later. Keep
+    dragging through both.
+ 4. Press Meta+I (three blips closing at 2, 4 and 6 s). Drag the window
+    they split and keep dragging for about 7 seconds.
+ 5. Drag a blip itself until it closes: the drag simply stops.
+ 6. Meta+Shift+E quits. Ctrl+Alt+Escape restores host shortcuts.
+
+Pass: tam-pane never vanishes, and dragging keeps resizing after each
+blip closes. If the nested window disappears on its own, it crashed:
+note which step, and keep the host terminal's last lines.
+
+EOF
+
+startup="foot sh -c 'cat \"$GUIDE\"; exec \"\${SHELL:-/bin/sh}\"'"
+
+"$ROOT/tools/nested-input" -c "$CFG" -s "$startup"

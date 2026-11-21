@@ -47,11 +47,11 @@ NEXT
 
 WAITING FOR FRED
 
-  - A brief check of 0.1.5, nested: tile two windows, open
-    "foot -e sleep 5" so it splits one, Meta+Right-drag the window it
-    split, and keep dragging after the foot window closes. The drag
-    should carry on and tam-pane should not crash. If he accepts, set B1
-    to Verified with the build's SHA-256.
+  - A check of 0.1.5 with tools/demo-0.1.5 (nested): drags held while
+    short-lived "blip" windows open and close (Meta+O, Meta+I, or
+    pane-blip N in a terminal). Pass: tam-pane never vanishes and drags
+    keep resizing. If he accepts, set B1 to Verified with the build's
+    SHA-256.
 
 
 WATCH OUT
