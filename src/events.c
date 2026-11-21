@@ -25,23 +25,53 @@ static void copy_str(char *dst, size_t dst_size, const char *src) {
 	snprintf(dst, dst_size, "%s", src);
 }
 
-static void drain_events_idle(void *data) {
-	struct tp_server *s = data;
-	struct tp_event_queue *q = &s->events;
-	q->idle = NULL;
+static int drain_events_timer(void *data);
 
-	size_t to_drain = q->len;
-	for (size_t i = 0; i < to_drain && q->len > 0; i++) {
-		if (s->stopping || !s->lua)
-			break;
-		struct tp_event ev = q->items[q->head];
-		q->head = (q->head + 1) % q->cap;
-		q->len--;
-		tp_lua_emit_event(s->lua, &ev);
+/* Hook-caused events wait for the timer, so epoll runs between batches. */
+static void schedule_later(struct tp_server *s) {
+	struct tp_event_queue *q = &s->events;
+	if (!q->timer)
+		q->timer = wl_event_loop_add_timer(s->loop, drain_events_timer, s);
+	if (q->timer)
+		wl_event_source_timer_update(q->timer, 1);
+}
+
+/* Deliver the events queued now; events the hooks cause go to a later
+ * batch, one cascade round deeper. */
+static void drain_events(struct tp_server *s) {
+	struct tp_event_queue *q = &s->events;
+	if (s->stopping)
+		return;
+	if (!s->lua) {
+		q->head = q->len = 0;
+		return;
 	}
 
-	if (q->len > 0 && !q->idle && !s->stopping && s->loop)
-		q->idle = wl_event_loop_add_idle(s->loop, drain_events_idle, s);
+	size_t to_drain = q->len;
+	q->draining = true;
+	for (size_t i = 0; i < to_drain && q->len > 0 && s->lua; i++) {
+		struct tp_queued_event item = q->items[q->head];
+		q->head = (q->head + 1) % q->cap;
+		q->len--;
+		q->depth = item.depth;
+		tp_lua_emit_event(s->lua, &item.ev);
+	}
+	q->draining = false;
+	q->depth = 0;
+
+	if (q->len > 0 && !s->stopping && s->loop)
+		schedule_later(s);
+}
+
+static void drain_events_idle(void *data) {
+	struct tp_server *s = data;
+	s->events.idle = NULL;
+	drain_events(s);
+}
+
+static int drain_events_timer(void *data) {
+	drain_events(data);
+	return 0;
 }
 
 void tp_events_init(struct tp_server *s) {
@@ -53,6 +83,10 @@ void tp_events_finish(struct tp_server *s) {
 	if (q->idle) {
 		wl_event_source_remove(q->idle);
 		q->idle = NULL;
+	}
+	if (q->timer) {
+		wl_event_source_remove(q->timer);
+		q->timer = NULL;
 	}
 	free(q->items);
 	q->items = NULL;
@@ -68,8 +102,15 @@ void tp_events_emit(struct tp_server *s, const struct tp_event *ev) {
 		return;
 
 	struct tp_event_queue *q = &s->events;
+	const char *name = tp_event_kind_name(ev->kind);
+	unsigned int depth = q->draining ? q->depth + 1 : 0;
+	if (depth > TP_EVENT_CASCADE_MAX) {
+		tam_log_warn("lua hooks: dropping %s after %d rounds of events "
+					 "caused by hooks (does a hook re-trigger itself?)",
+					 name ? name : "event", TP_EVENT_CASCADE_MAX);
+		return;
+	}
 	if (q->len >= TP_EVENT_QUEUE_MAX) {
-		const char *name = tp_event_kind_name(ev->kind);
 		tam_log_warn("event queue full (%d); dropping %s", TP_EVENT_QUEUE_MAX,
 					 name ? name : "event");
 		return;
@@ -79,7 +120,7 @@ void tp_events_emit(struct tp_server *s, const struct tp_event *ev) {
 		size_t next_cap = q->cap ? q->cap * 2 : 16;
 		if (next_cap > TP_EVENT_QUEUE_MAX)
 			next_cap = TP_EVENT_QUEUE_MAX;
-		struct tp_event *grown = malloc(next_cap * sizeof(*grown));
+		struct tp_queued_event *grown = malloc(next_cap * sizeof(*grown));
 		if (!grown) {
 			tam_log_error("event queue: out of memory");
 			return;
@@ -92,10 +133,12 @@ void tp_events_emit(struct tp_server *s, const struct tp_event *ev) {
 		q->cap = next_cap;
 	}
 
-	q->items[(q->head + q->len) % q->cap] = *ev;
+	q->items[(q->head + q->len) % q->cap] =
+		(struct tp_queued_event){.ev = *ev, .depth = depth};
 	q->len++;
 
-	if (!q->idle)
+	/* While hooks run, drain_events schedules the next batch itself. */
+	if (!q->draining && !q->idle)
 		q->idle = wl_event_loop_add_idle(s->loop, drain_events_idle, s);
 }
 

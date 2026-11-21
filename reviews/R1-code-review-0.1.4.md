@@ -49,7 +49,7 @@ schedules are not findings here.
   `wl_event_loop_dispatch_idle`. Not yet reproduced.
 - **Fix:** drain from a zero-delay timer or eventfd so epoll runs between
   batches, and stop a cascade after a set number of generations.
-- **Status:** open
+- **Status:** became B2, fixed in 0.1.6
 
 ### 3. `tp.spawn` runs while the config loads (high)
 

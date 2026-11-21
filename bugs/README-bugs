@@ -89,3 +89,6 @@ IN THIS REPOSITORY
 
     B1-tiled-drag-use-after-free.md   tiled resize drag uses freed
                                       memory when another window leaves
+    B2-hook-feedback-loop-freezes-compositor.md
+                                      a hook that re-triggers itself
+                                      freezes the compositor

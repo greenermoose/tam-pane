@@ -13,6 +13,7 @@
 #include <wlr/types/wlr_scene.h>
 #include "tam-pane/server.h"
 #include <poll.h>
+#include <signal.h>
 #include <fcntl.h>
 #include <linux/input-event-codes.h>
 #include <stdlib.h>
@@ -475,6 +476,17 @@ static int find_hook_event(const char *prefix) {
 			return i;
 	}
 	return -1;
+}
+
+/* A hook feedback loop used to keep the event loop spinning forever; turn
+ * that hang into a test failure. */
+static void on_hang_alarm(int sig) {
+	(void)sig;
+	static const char msg[] = "test_input_headless: hung (event loop never "
+							  "returned)\n";
+	if (write(2, msg, sizeof(msg) - 1) < 0) {
+	}
+	_exit(1);
 }
 
 int main(void) {
@@ -1176,6 +1188,47 @@ int main(void) {
 	for (unsigned int i = 0; i < 10; i++)
 		if (!pump(&client, &server)) goto fail;
 	CHECK(has_hook_event("after-watchdog"));
+	CHECK(tp_tagview_current(&server.selmon->view) == tp_tag_mask(4));
+
+	/* A hook whose action emits its own event again (tag.change switching
+	 * tags) must not hang the event loop: the cascade is cut after
+	 * TP_EVENT_CASCADE_MAX rounds and the compositor keeps handling input. */
+	lf = fopen(lua_cfg, "wb");
+	CHECK(lf != NULL);
+	if (lf) {
+		fputs("local n = 0\n"
+			  "tp.on('tag.change', function(ev)\n"
+			  "  n = n + 1\n"
+			  "  tp.spawn('loop:' .. n)\n"
+			  "  tp.dsp.tag('view', ev.tag == 6 and 7 or 6)()\n"
+			  "end)\n",
+			  lf);
+		fclose(lf);
+	}
+	CHECK(tp_lua_load_file(server.lua, lua_cfg, true, &server.settings,
+						   &server.settings));
+	hook_event_count = 0;
+	signal(SIGALRM, on_hang_alarm);
+	alarm(10);
+	chord(&keyboard, KEY_6, false, false);
+	for (unsigned int i = 0; i < 200; i++)
+		if (!pump(&client, &server)) goto fail;
+	alarm(0);
+	CHECK(has_hook_event("loop:1"));
+	CHECK(hook_event_count >= 2);
+	CHECK(hook_event_count <= TP_EVENT_CASCADE_MAX + 1);
+	CHECK(server.events.len == 0);
+	lf = fopen(lua_cfg, "wb");
+	CHECK(lf != NULL);
+	if (lf) {
+		fputs("-- no hooks\n", lf);
+		fclose(lf);
+	}
+	CHECK(tp_lua_load_file(server.lua, lua_cfg, true, &server.settings,
+						   &server.settings));
+	chord(&keyboard, KEY_4, false, false);
+	for (unsigned int i = 0; i < 10; i++)
+		if (!pump(&client, &server)) goto fail;
 	CHECK(tp_tagview_current(&server.selmon->view) == tp_tag_mask(4));
 
 	/*

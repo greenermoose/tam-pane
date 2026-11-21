@@ -1,0 +1,45 @@
+#!/bin/sh
+# Launch tam-pane 0.1.6 nested under Hyprland with hooks that re-trigger
+# themselves, to show the compositor stays responsive (R1 finding 2).
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+want=$(tr -d '[:space:]' < "$ROOT/VERSION")
+have=$("$ROOT/build/tam-pane" -v 2>/dev/null | awk '{print $2}') || true
+if [ "$have" != "$want" ]; then
+	echo "build/tam-pane is '${have:-missing}', VERSION is $want: run make first" >&2
+	exit 1
+fi
+
+TMPDIR_DEMO=$(mktemp -d "${TMPDIR:-/tmp}/tam-pane-demo-0.1.6.XXXXXX")
+trap 'rm -rf "$TMPDIR_DEMO"' EXIT INT TERM
+
+CFG="$TMPDIR_DEMO/init.lua"
+GUIDE="$TMPDIR_DEMO/guide"
+cp "$ROOT/tools/demo-0.1.6.lua" "$CFG"
+
+cat >"$GUIDE" <<'EOF'
+=== tam-pane 0.1.6 demo: runaway hooks do not freeze tam-pane ===
+
+Watch the host terminal: it logs each round of the runaway hooks.
+
+ 1. Press Meta+Return: two terminals.
+ 2. Press Meta+8. A hook bounces between tags 8 and 9 by itself. The
+    host terminal shows "bounce 1" to "bounce 17", then "lua hooks:
+    dropping tag.change after 16 rounds". You end up on tag 8 or 9.
+    (Up to 0.1.5, tam-pane froze here.)
+ 3. Straight away, press Meta+1: you are back on tag 1 with your two
+    terminals, and typing works.
+ 4. Press Meta+Y (focus spin on), then click the other terminal. Focus
+    hops between the windows about 16 times, then stops with the same
+    kind of warning. Type something: the keys arrive.
+ 5. Press Meta+Y again (spin off). Meta+Shift+E quits.
+
+Pass: tam-pane never stops responding, each runaway ends with one
+warning, and input works right after.
+
+EOF
+
+startup="foot sh -c 'cat \"$GUIDE\"; exec \"\${SHELL:-/bin/sh}\"'"
+
+"$ROOT/tools/nested-input" -c "$CFG" -s "$startup"

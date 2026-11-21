@@ -140,6 +140,17 @@ and each invocation runs under the runtime watchdog (1,000,000 instructions /
 100 ms `CLOCK_MONOTONIC` deadline). An error or timeout in one hook is logged
 and does not stop remaining hooks on the same event.
 
+**Cascades (0.1.6).** An action taken inside a hook can raise another
+event, for example `tp.dsp.tag('view', 2)()` inside a `tag.change` hook.
+Those hook-caused events are delivered in a later batch, after the event
+loop has handled input and frames. A hook-caused event is one round
+deeper than the event whose hook caused it. After 16 rounds
+(`TP_EVENT_CASCADE_MAX`), tam-pane drops the event and logs `lua hooks:
+dropping <event> after 16 rounds ...` once. A hook that keeps
+re-triggering itself therefore stops after 16 rounds instead of freezing
+the compositor. Events that the compositor itself raises (input, windows
+mapping, monitors) always start again at round 0.
+
 Hook registrations stage alongside `tp.config` and `tp.bind` during config
 load and roll back atomically if `init.lua` fails. Each config load starts
 from an empty staged hook set so reloads replace hooks without duplicating

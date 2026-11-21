@@ -1,0 +1,50 @@
+W17 HOOK FEEDBACK LOOP NO LONGER FREEZES TAM-PANE (0.1.6)
+
+Date: 2026-11-21
+AI harness: Claude Code 2.1.330
+AI model: claude-opus-5-5
+Commits: the 0.1.6 commit that adds this record
+Continues: W16
+
+
+GUIDANCE
+
+  Fred: "All works. Next?" (after accepting 0.1.5)
+
+
+DONE
+
+  - Fixed R1 finding 2 as B2
+    (bugs/B2-hook-feedback-loop-freezes-compositor.md). src/events.c
+    drains the first batch of events on the idle loop as before. Events
+    raised while hooks run wait for a 1 ms timer instead of a new idle
+    source, so epoll runs between batches. Each queued event carries its
+    cascade depth (struct tp_queued_event in
+    include/tam-pane/server_events.h). Past TP_EVENT_CASCADE_MAX (16)
+    rounds it is dropped with one warning.
+  - Test: a tag.change hook that ping-pongs between tags 6 and 7, with
+    an alarm that turns a hang into a failure. Against 0.1.5 it hung;
+    with the fix it stops after 17 hook runs, the queue is empty, and
+    the next key press works.
+  - Documented cascades in arch/lua-api.md (hooks section).
+  - Added tools/demo-0.1.6 and tools/demo-0.1.6.lua: Meta+8 starts a
+    tag ping-pong, and Meta+Y switches on a focus spin. Checked by
+    loading the config headless.
+  - make test: 28 tag, 143 dwindle, 408 Lua, 284 headless input checks,
+    3 smoke checks, nm -D check; tests/test_nested_input.py passes; the
+    ASan build of the headless test is clean.
+  - VERSION 0.1.6. Candidate binary SHA-256:
+    4f292cbbb9933cab6370cf81d2c3c74815ea6fe205de9d63320e6f5bdd898080
+  - Accepted 0.1.5 in 66e48ef and reflowed two long lines in B1 and W16.
+
+
+FAILED
+
+  Nothing.
+
+
+HANDOFF
+
+  - B2 is "Fix available" until Fred checks 0.1.6 with tools/demo-0.1.6.
+  - Next in R1's order: findings 3 and 7 (spawn while loading, argv
+    spawn), see WHATNOW.

@@ -3,23 +3,24 @@ WHATNOW
 What tam-pane is doing now and what comes next. Read this first; revise
 it at the end of every session (work/README-work).
 
-Updated: 2026-11-21, with W16
+Updated: 2026-11-21, with W17
 
 
 STATE
 
-  Version 0.1.5 on branch dev, accepted by Fred on 2026-11-21 after his
-  nested tools/demo-0.1.5 check on commit 3b808fd. 0.1.4 (Phase P2) was
-  accepted on commit 0a98a51.
+  Version 0.1.6 on branch dev, a candidate. 0.1.5 was accepted by Fred
+  on 2026-11-21 after his nested tools/demo-0.1.5 check on commit
+  3b808fd; 0.1.4 (Phase P2) on commit 0a98a51.
 
-  W16 reviewed the code (reviews/R1-code-review-0.1.4.md) and fixed its
-  first finding, B1: a tiled resize drag used freed memory when another
-  window left the tree. 0.1.5 binary SHA-256:
-  c22466f328a30ba9bcbd62dd4f373c77cbb334550c5b71f63187852ae08e7b99
+  W16 reviewed the code (reviews/R1-code-review-0.1.4.md) and fixed B1,
+  the tiled drag use-after-free (verified). W17 fixed B2: a hook that
+  re-triggers itself froze the compositor. Hook-caused events now drain
+  on a timer and stop after 16 rounds. 0.1.6 binary SHA-256:
+  4f292cbbb9933cab6370cf81d2c3c74815ea6fe205de9d63320e6f5bdd898080
 
-  Automated checks pass: 28 tag, 143 dwindle, 408 Lua, 275 headless
+  Automated checks pass: 28 tag, 143 dwindle, 408 Lua, 284 headless
   input, 3 smoke, nm -D symbol check, tests/test_nested_input.py; the
-  B1 tests are clean under -fsanitize=address,undefined.
+  headless test is clean under -fsanitize=address,undefined.
 
   Dependencies today: wlroots 0.20, wayland-server, xkbcommon, libtam
   (static), and Lua 5.5.1 (vendored in third_party/lua/).
@@ -28,27 +29,28 @@ STATE
 NEXT
 
   Finish R1's fix order before P3, one bumped version each, with a
-  failing-first test and the record's status lines updated:
+  failing-first test, a tools/demo-<version> for Fred, and the record's
+  status lines updated:
 
-  1. R1 finding 2: hook feedback loops hang the compositor. Drain
-     events from a zero-delay timer or eventfd instead of re-adding an
-     idle source (src/events.c), and cap cascades. Test: a window.focus
-     hook that refocuses must not stop the event loop.
-  2. R1 findings 3 and 7: refuse tp.spawn while the config loads; add a
+  1. R1 findings 3 and 7: refuse tp.spawn while the config loads; add a
      run-once-at-startup hook; add tp.spawn{argv...} with no shell, and
      document it for event data (arch/lua-api.md).
-  3. R1 finding 8: capped Lua allocator; truncate rule subjects to 255
+  2. R1 finding 8: capped Lua allocator; truncate rule subjects to 255
      bytes.
-  4. R1 finding 10: VT switching and an emergency quit in C, before Lua.
-  5. R1 finding 13 (fixes 6), then 12, 4 and 5.
-  6. R1 findings 9, 11 and 15 to 17: write them into the P3 and P4
+  3. R1 finding 10: VT switching and an emergency quit in C, before Lua.
+  4. R1 finding 13 (fixes 6), then 12, 4 and 5.
+  5. R1 findings 9, 11 and 15 to 17: write them into the P3 and P4
      plans as design work.
-  7. Then P3, 0.2.0 (plans/P3-daily-parity.md).
+  6. Then P3, 0.2.0 (plans/P3-daily-parity.md).
 
 
 WAITING FOR FRED
 
-  Nothing.
+  - A check of 0.1.6 with tools/demo-0.1.6 (nested): Meta+8 starts a
+    tag ping-pong, and Meta+Y then a click starts a focus spin. Pass:
+    tam-pane never stops responding, each runaway ends with one warning
+    in the host terminal, and input works right after. If he accepts,
+    set B2 to Verified with the build's SHA-256.
 
 
 WATCH OUT
@@ -62,5 +64,7 @@ WATCH OUT
     liblua 5.4 at runtime); make test enforces nm -D build/tam-pane.
   - Never toggle anything on Fred's active monitor; the nested window is
     where he tests.
+  - A Fred demo must not need a key pressed while Meta and a mouse
+    button are held; use delays instead (W16).
   - Bumping VERSION does not rebuild main.o or lua.o; run
     make -B build/main.o build/lua.o and check tam-pane -v.
