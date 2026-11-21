@@ -62,6 +62,17 @@ static void on_destroy(struct wl_listener *l, void *data) {
 	tp_focus_refresh(s);
 }
 
+static float requested_scale(void) {
+	const char *env = getenv("TAM_PANE_SCALE");
+	if (!env || !*env)
+		return 0.0f;
+	char *end = NULL;
+	float scale = strtof(env, &end);
+	if (end == env || *end != '\0' || !(scale >= 0.5f && scale <= 8.0f))
+		return 0.0f;
+	return scale;
+}
+
 static void on_new_output(struct wl_listener *l, void *data) {
 	struct tp_server *s = wl_container_of(l, s, new_output);
 	struct wlr_output *output = data;
@@ -77,6 +88,9 @@ static void on_new_output(struct wl_listener *l, void *data) {
 	struct wlr_output_mode *mode = wlr_output_preferred_mode(output);
 	if (mode)
 		wlr_output_state_set_mode(&state, mode);
+	float scale = requested_scale();
+	if (scale > 0.0f)
+		wlr_output_state_set_scale(&state, scale);
 	bool ok = wlr_output_commit_state(output, &state);
 	wlr_output_state_finish(&state);
 	if (!ok) {
@@ -115,8 +129,8 @@ static void on_new_output(struct wl_listener *l, void *data) {
 	update_area(m);
 	if (!s->selmon)
 		s->selmon = m;
-	tam_log_info("output %s: %dx%d at %d,%d", output->name, m->area.w,
-				 m->area.h, m->area.x, m->area.y);
+	tam_log_info("output %s: %dx%d at %d,%d scale %.2f", output->name,
+				 m->area.w, m->area.h, m->area.x, m->area.y, output->scale);
 }
 
 static void on_layout_change(struct wl_listener *l, void *data) {

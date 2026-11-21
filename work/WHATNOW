@@ -20,7 +20,7 @@ STATE
   Automated checks pass with zero warnings: 28 tag checks, 133 dwindle
   checks, 142 headless input checks, both smoke checks, and
   tests/test_nested_input.py. Candidate build/tam-pane SHA-256:
-  bb39ec934968f31f42e4386d8935e3e1b7a2455548ca08444a99f1c4efd433c8.
+  8e55f7745aa9f67d14797ddb210c74aa362a413c2d0899247a7eaba1a8842277.
 
   Dynamic tiling (dwindle), resizing, directional swap/move, floating
   move/resize, fullscreen, and interactive tags work; Lua, panels,
@@ -52,7 +52,7 @@ NEXT
 WAITING FOR FRED
 
   - 0.0.4 brief nested try via tools/nested-input on build/tam-pane
-    (SHA-256 bb39ec934968f31f42e4386d8935e3e1b7a2455548ca08444a99f1c4efd433c8):
+    (SHA-256 8e55f7745aa9f67d14797ddb210c74aa362a413c2d0899247a7eaba1a8842277):
     open 3 terminals, try Meta+Alt+Arrow and Meta+Right-drag resize,
     Meta+Shift+Arrow swap, Meta+Ctrl+Arrow move, and Meta+v with
     Meta+Left/Right-drag on a floating window.

@@ -3,7 +3,7 @@ W9 TILING COMPLETE (0.0.4)
 Date: 2026-11-21
 AI harness: agy 1.5.14
 AI model: Gemini 4 Neon (Medium)
-Commits: 22bd484, plus the commit that updates this record
+Commits: 22bd484, 01039d4, plus the commit that updates this record
 
 
 GUIDANCE
@@ -34,14 +34,15 @@ DONE
   - Bumped VERSION to 0.0.4; updated README, arch/data-structures.md,
     and UPSTREAM.md.
   - Enabled wp_viewporter and wp_fractional_scale_manager_v1 in
-    src/server.c (driven automatically by wlr_scene) so clients like
-    foot render natively at fractional HiDPI scales (1.25x) inside
-    nested-input instead of being upscaled from 1x.
+    src/server.c (driven automatically by wlr_scene), honored
+    TAM_PANE_SCALE in src/monitor.c, and passed the focused Hyprland
+    monitor's scale from tools/nested-input so clients like foot render
+    natively at fractional HiDPI scales (1.25x) instead of 1x.
   - Zero-warning build and full test suite pass: 28 tag checks, 133
-    dwindle checks, 142 headless input checks, both smoke checks, and
-    test_nested_input.py.
+    dwindle checks, 142 headless input checks, both smoke checks (and
+    TAM_PANE_SCALE=1.25 smoke), and test_nested_input.py.
   - Candidate binary SHA-256 (0.0.4):
-    bb39ec934968f31f42e4386d8935e3e1b7a2455548ca08444a99f1c4efd433c8
+    8e55f7745aa9f67d14797ddb210c74aa362a413c2d0899247a7eaba1a8842277
 
 
 FAILED
