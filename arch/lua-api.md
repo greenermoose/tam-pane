@@ -1,6 +1,6 @@
 # tam-pane Lua API (`arch/lua-api.md`)
 
-**Status:** 0.1.0–0.1.4 shipped (Phase P2 complete, pending Fred's 0.1.4 nested check).
+**Status:** 0.1.0–0.1.4 shipped and accepted (Phase P2 complete).
 
 tam-pane embeds **Lua 5.5.1** statically from `third_party/lua/` with no
 dynamic symbol exports (`lua_*` symbols stay internal to `tam-pane`).

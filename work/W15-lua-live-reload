@@ -3,12 +3,16 @@ W15 LUA LIVE RELOAD (0.1.4)
 Date: 2026-11-21
 AI harness: agy 1.5.14
 AI model: Gemini 4 Neon (Medium)
+Commits: 0a98a51, 85161f5, 9100b78, plus the 0.1.4 acceptance commit
 
 
 GUIDANCE
 
   Fred: "/plan Do the next work slice of tam-pane."
   Fred: "Approved. Proceed."
+  Fred: "big says command not found"
+  Fred: "reset did not seem to work"
+  Fred: "works. Note acceptance."
 
 
 DONE
@@ -52,13 +56,17 @@ DONE
 
 FAILED
 
-  Nothing.
+  - First version of tools/demo-0.1.4 exported PATH only inside the first
+    terminal (not inherited by Meta+Return terminals) and named its
+    helper "reset", which collided with /usr/bin/reset. Fixed in 85161f5
+    and 9100b78 (exported PATH before nested-input and renamed to small).
 
 
 HANDOFF
 
-  - 0.1.4 (live reload) is implemented on branch dev and ready for Fred's
-    brief nested check via tools/demo-0.1.4.
-  - After Fred's acceptance of 0.1.4, Phase P2 is complete and the next
-    slice is P3, 0.2.0 (desktop shell protocols: foreign-toplevel,
+  - 0.1.4 accepted by Fred on 2026-11-21 after nested demo-0.1.4 check
+    passed on commit 0a98a51 (binary SHA-256
+    b3fceeaccb513ca7a45fd70557e927c90f36a93b53d8c48dfbf6288ee3f38ff4),
+    completing Phase P2 (Lua scripting 0.1.0-0.1.4).
+  - Next slice: P3, 0.2.0 (desktop shell protocols: foreign-toplevel,
     ext-workspace, session-lock, idle notify/inhibit, output power).

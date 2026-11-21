@@ -1,10 +1,9 @@
 # P2: Lua scripting (0.1.x)
 
-**Status:** in progress (0.1.4 live reload implemented on branch `dev`,
-pending Fred's nested check; 0.1.3 accepted on 2026-11-21 on commit
-`04522cc`, binary SHA-256
-`fd4029ca5a198b68a018111e5a509b70df84ebc2203a18acd6d847418d4a09a6`; 0.1.2,
-0.1.1, and 0.1.0 accepted on 2026-11-21).
+**Status:** complete (0.1.4 live reload accepted by Fred on 2026-11-21 on
+commit `0a98a51`, binary SHA-256
+`b3fceeaccb513ca7a45fd70557e927c90f36a93b53d8c48dfbf6288ee3f38ff4`; 0.1.3,
+0.1.2, 0.1.1, and 0.1.0 accepted on 2026-11-21).
 
 ## Goal
 
