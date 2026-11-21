@@ -3,7 +3,7 @@ W11 LUA 5.5 INTERPRETER AND INIT.LUA (0.1.0)
 Date: 2026-11-21
 AI harness: agy 1.5.14
 AI model: Gemini 4 Neon (Medium)
-Commits: ce27ba0, plus the smoke-headless.sh polling commit
+Commits: ce27ba0, 2a65257, plus the 0.1.0 acceptance commit
 
 
 GUIDANCE
@@ -12,6 +12,7 @@ GUIDANCE
   Fred: "Approved. Proceed."
   Fred: "How long do those tests take? How can they be sped up?"
   Fred: "Yes, replace the sleep with short polling loops."
+  Fred: "Perfect. Note the acceptance."
 
 
 DONE
@@ -67,6 +68,8 @@ FAILED
 
 HANDOFF
 
-  - 0.1.0 candidate ready for Fred's brief nested check (SHA-256
-    5d0e15497d3cd9a17618af1dcfbc09d7d2292a970e63055b8c16fa950eb685e7)
-    and review of arch/lua-api.md before 0.1.1 (bindings & dispatchers).
+  - 0.1.0 accepted by Fred on 2026-11-21 after nested init.lua check
+    passed on commit 2a65257 (binary SHA-256
+    5d0e15497d3cd9a17618af1dcfbc09d7d2292a970e63055b8c16fa950eb685e7).
+  - Next slice: P2, 0.1.1 (bindings and dispatchers in Lua; review
+    arch/lua-api.md with Fred before implementing).

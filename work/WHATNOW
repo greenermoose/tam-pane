@@ -9,8 +9,8 @@ Updated: 2026-11-21, with W11
 STATE
 
   Version 0.1.0 on branch dev (Phase P2 started: Lua 5.5.1 interpreter
-  and init.lua implemented in W11, awaiting Fred's nested check;
-  candidate binary SHA-256:
+  and init.lua accepted by Fred on 2026-11-21 on commit 2a65257; binary
+  SHA-256:
   5d0e15497d3cd9a17618af1dcfbc09d7d2292a970e63055b8c16fa950eb685e7).
   Phase P1 (foundation, 0.0.1-0.0.5) was accepted by Fred on 2026-11-21.
 
@@ -33,10 +33,11 @@ STATE
 
 NEXT
 
-  1. After Fred's nested check and acceptance of 0.1.0 (plus feedback on
-     arch/lua-api.md): start P2, 0.1.1 (bindings and dispatchers in Lua:
-     tp.bind, tp.dsp.* values, and plain Lua callback bindings;
-     plans/P2-lua.md).
+  1. P2, 0.1.1 (bindings and dispatchers in Lua): review proposed
+     tp.bind / tp.dsp.* names in arch/lua-api.md with Fred, then move
+     compiled-in bindings in src/bindings.c to Lua defaults and expose
+     dispatchers as values plus plain Lua callback bindings
+     (plans/P2-lua.md).
 
   2. Later: Tamlinux's desktop tests move from headless Sway to
      tam-pane's headless mode once it can serve them (ROADMAP.md).
@@ -44,9 +45,8 @@ NEXT
 
 WAITING FOR FRED
 
-  - Brief nested check and acceptance of 0.1.0 candidate (SHA-256
-    5d0e15497d3cd9a17618af1dcfbc09d7d2292a970e63055b8c16fa950eb685e7).
-  - Feedback on proposed 0.1.1+ API names in arch/lua-api.md.
+  - Feedback on proposed 0.1.1+ API names in arch/lua-api.md and go-ahead
+    for 0.1.1.
 
 
 WATCH OUT
