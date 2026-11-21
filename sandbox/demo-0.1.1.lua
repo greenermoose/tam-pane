@@ -1,5 +1,5 @@
 -- Interactive demo config for tam-pane 0.1.1 (Lua bindings & dispatchers).
--- Run with: tools/demo-0.1.1
+-- Run with: sandbox/demo-0.1.1
 
 tp.config{
 	gap_inner = 12,

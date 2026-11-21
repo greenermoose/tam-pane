@@ -1,6 +1,6 @@
 #!/bin/sh
 # Launch tam-pane 0.1.4 nested under Hyprland with a temporary copy of
-# tools/demo-0.1.4.lua to demonstrate live configuration reload and rollback.
+# sandbox/demo-0.1.4.lua to demonstrate live configuration reload and rollback.
 set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 TMPDIR_DEMO=$(mktemp -d "${TMPDIR:-/tmp}/tam-pane-demo-0.1.4.XXXXXX")
@@ -9,7 +9,7 @@ trap 'rm -rf "$TMPDIR_DEMO"' EXIT INT TERM
 CFG="$TMPDIR_DEMO/init.lua"
 BIN="$TMPDIR_DEMO/bin"
 mkdir -p "$BIN"
-cp "$ROOT/tools/demo-0.1.4.lua" "$CFG"
+cp "$ROOT/sandbox/demo-0.1.4.lua" "$CFG"
 
 cat >"$BIN/big" <<EOF
 #!/bin/sh
@@ -23,7 +23,7 @@ echo "Wrote broken config to $CFG — now press Meta+Shift+R"
 EOF
 cat >"$BIN/small" <<EOF
 #!/bin/sh
-cp "$ROOT/tools/demo-0.1.4.lua" "$CFG"
+cp "$ROOT/sandbox/demo-0.1.4.lua" "$CFG"
 echo "Reset $CFG to gaps=8 — now press Meta+Shift+R"
 EOF
 chmod +x "$BIN/big" "$BIN/broken" "$BIN/small"

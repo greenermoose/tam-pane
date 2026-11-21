@@ -1,5 +1,5 @@
 -- Demo configuration for tam-pane 0.1.9 (R1 finding 10: keys no config
--- can remove). Run with: tools/demo-0.1.9, which puts GUIDE above this.
+-- can remove). Run with: sandbox/demo-0.1.9, which puts GUIDE above this.
 
 tp.config{ gaps = 8 }
 

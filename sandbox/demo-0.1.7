@@ -24,7 +24,7 @@ MARK="$TMPDIR_DEMO/title-ran-a-command"
 mkdir -p "$BIN"
 {
 	printf 'local GUIDE = "%s"\nlocal LOG = "%s"\n' "$GUIDE" "$LOG"
-	cat "$ROOT/tools/demo-0.1.7.lua"
+	cat "$ROOT/sandbox/demo-0.1.7.lua"
 } >"$GOOD"
 cp "$GOOD" "$CFG"
 

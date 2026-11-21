@@ -1,0 +1,39 @@
+W22 SANDBOX FOLDER
+
+Date: 2026-11-21
+AI harness: Antigravity CLI
+AI model: Gemini 4 Hydrogen (Medium)
+Commits: the commit that adds this record
+
+
+GUIDANCE
+
+  Fred: "For the tam-pane repo there was no sandbox/ so we've been using
+  tools/. Add a sandbox/ to tam-pane and make a note in that repo that
+  sandbox is for demos and ways for me to play with tam-pane."
+  Confirmed: move existing demo-0.1.* scripts and Lua configs from
+  tools/ into sandbox/.
+
+
+DONE
+
+  - Added sandbox/README-sandbox (following tam-idol 1.1.0), noting
+    that sandbox/ is for demos and ways for Fred to play with tam-pane.
+  - Moved demo-0.1.1..demo-0.1.9 and demo-0.1.1.lua..demo-0.1.9.lua
+    from tools/ to sandbox/, updating their internal sandbox/demo-0.1.*
+    references while keeping tools/nested-input in tools/.
+  - Updated README (tam-idol 1.1.0 standard line and WHERE THINGS ARE)
+    and work/WHATNOW (sandbox/demo-<version>).
+  - No compositor code changed; VERSION stays 0.1.10.
+
+
+FAILED
+
+  - Nothing.
+
+
+HANDOFF
+
+  - New demos and interactive experiments go in sandbox/; developer
+    helpers (nested-input, pull-references) stay in tools/.
+  - Next code work remains R1 finding 12 in work/WHATNOW.

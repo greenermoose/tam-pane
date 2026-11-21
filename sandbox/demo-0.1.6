@@ -16,7 +16,7 @@ trap 'rm -rf "$TMPDIR_DEMO"' EXIT INT TERM
 
 CFG="$TMPDIR_DEMO/init.lua"
 GUIDE="$TMPDIR_DEMO/guide"
-cp "$ROOT/tools/demo-0.1.6.lua" "$CFG"
+cp "$ROOT/sandbox/demo-0.1.6.lua" "$CFG"
 
 cat >"$GUIDE" <<'EOF'
 === tam-pane 0.1.6 demo: runaway hooks do not freeze tam-pane ===

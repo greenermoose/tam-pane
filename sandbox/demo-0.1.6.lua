@@ -1,6 +1,6 @@
 -- Demo configuration for tam-pane 0.1.6 (R1 finding 2: a hook that keeps
 -- re-triggering itself no longer freezes the compositor).
--- Run with: tools/demo-0.1.6
+-- Run with: sandbox/demo-0.1.6
 
 tp.config{ gaps = 8 }
 

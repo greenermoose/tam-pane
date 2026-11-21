@@ -1,6 +1,6 @@
 -- Demo configuration for tam-pane 0.1.8 (R1 finding 8: Lua memory is
 -- capped, and pattern matching obeys the watchdog deadline).
--- Run with: tools/demo-0.1.8
+-- Run with: sandbox/demo-0.1.8
 
 tp.config{ gaps = 8 }
 

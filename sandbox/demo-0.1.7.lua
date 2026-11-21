@@ -1,6 +1,6 @@
 -- Demo configuration for tam-pane 0.1.7 (R1 findings 3 and 7: autostart
 -- in a startup hook, and tp.spawn{...} with no shell).
--- Run with: tools/demo-0.1.7, which puts GUIDE and LOG above this text.
+-- Run with: sandbox/demo-0.1.7, which puts GUIDE and LOG above this text.
 
 tp.config{ gaps = 8 }
 

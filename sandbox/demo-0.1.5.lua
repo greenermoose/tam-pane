@@ -1,5 +1,5 @@
 -- Demo configuration for tam-pane 0.1.5 (B1: a tiled resize drag
--- survives windows leaving the tree). Run with: tools/demo-0.1.5
+-- survives windows leaving the tree). Run with: sandbox/demo-0.1.5
 
 tp.config{ gaps = 8 }
 

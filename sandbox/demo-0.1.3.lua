@@ -1,5 +1,5 @@
 -- Interactive demo config for tam-pane 0.1.3 (Lua window rules).
--- Run with: tools/demo-0.1.3
+-- Run with: sandbox/demo-0.1.3
 
 tp.config{
 	gap_inner = 12,

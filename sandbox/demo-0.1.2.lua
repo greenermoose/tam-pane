@@ -1,5 +1,5 @@
 -- Interactive demo config for tam-pane 0.1.2 (Lua event hooks).
--- Run with: tools/demo-0.1.2
+-- Run with: sandbox/demo-0.1.2
 
 tp.config{
 	gap_inner = 12,
