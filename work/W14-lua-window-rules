@@ -3,12 +3,14 @@ W14 LUA WINDOW RULES (0.1.3)
 Date: 2026-11-21
 AI harness: agy 1.5.14
 AI model: Gemini 4 Neon (Medium)
+Commits: 04522cc, plus the 0.1.3 acceptance commit
 
 
 GUIDANCE
 
   Fred: "/plan Do the next work slice for tam-pane."
   Fred: "I see it. Approved. Proceed."
+  Fred: "All checks work great. Note acceptance."
 
 
 DONE
@@ -57,8 +59,8 @@ FAILED
 
 HANDOFF
 
-  - 0.1.3 is built, tested, and ready for Fred's brief nested check via
-    tools/demo-0.1.3 (binary SHA-256
+  - 0.1.3 accepted by Fred on 2026-11-21 after nested demo-0.1.3 check
+    passed on commit 04522cc (binary SHA-256
     fd4029ca5a198b68a018111e5a509b70df84ebc2203a18acd6d847418d4a09a6).
-  - Next slice after acceptance: P2, 0.1.4 (live configuration reload in
-    place, keeping the last good configuration on error).
+  - Next slice: P2, 0.1.4 (live configuration reload in place, keeping
+    the last good configuration on error).

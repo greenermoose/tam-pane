@@ -8,8 +8,8 @@ Updated: 2026-11-21, with W14
 
 STATE
 
-  Version 0.1.3 on branch dev (Phase P2: Lua window rules implemented and
-  ready for Fred's nested check; candidate binary SHA-256:
+  Version 0.1.3 on branch dev (Phase P2: Lua window rules accepted by
+  Fred on 2026-11-21 on commit 04522cc; binary SHA-256:
   fd4029ca5a198b68a018111e5a509b70df84ebc2203a18acd6d847418d4a09a6).
   0.1.2, 0.1.1, 0.1.0, and Phase P1 (0.0.1-0.0.5) were accepted by Fred
   on 2026-11-21.
@@ -35,21 +35,17 @@ STATE
 
 NEXT
 
-  1. Record Fred's acceptance of 0.1.3 after his brief nested check with
-     tools/demo-0.1.3.
-
-  2. P2, 0.1.4 (live reload): reload the configuration in place without
+  1. P2, 0.1.4 (live reload): reload the configuration in place without
      restarting, reporting errors and keeping the last good configuration
      on failure (plans/P2-lua.md, arch/lua-api.md).
 
-  3. Later: Tamlinux's desktop tests move from headless Sway to
+  2. Later: Tamlinux's desktop tests move from headless Sway to
      tam-pane's headless mode once it can serve them (ROADMAP.md).
 
 
 WAITING FOR FRED
 
-  Brief nested check of 0.1.3 via tools/demo-0.1.3 (binary SHA-256
-  fd4029ca5a198b68a018111e5a509b70df84ebc2203a18acd6d847418d4a09a6).
+  Nothing.
 
 
 WATCH OUT
