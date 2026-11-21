@@ -1,6 +1,6 @@
 # B4: Lua work inside C library calls escapes the watchdog
 
-- **Status:** Fix available
+- **Status:** Verified
 - **Severity:** critical
 - **Affected versions:** 0.1.0 to 0.1.7
 - **Fixed in:** 0.1.8
@@ -59,5 +59,8 @@ matcher runs in C with no way for the embedder to interrupt it.
   `title`, the same as event hooks.
 
 Tests: the case above. `make test` passes, and test_lua is clean under
-ASan and LeakSanitizer. `tools/demo-0.1.8` is Fred's nested check. Not
-yet checked in a build Fred runs.
+ASan and LeakSanitizer. Fred checked 0.1.8 nested with
+`tools/demo-0.1.8` on 2026-11-21 (commit 9b5f27b, binary SHA-256
+`a1704c534ad3f0c8cab4085648deb7f79191bd98e942b3b1f6498ab11feda819`). The
+runaway pattern was cut off, the memory bomb hit the cap, the long gsub
+ran, and the long-titled window stayed on its tag.

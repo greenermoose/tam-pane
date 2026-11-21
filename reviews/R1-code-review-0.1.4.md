@@ -108,7 +108,7 @@ schedules are not findings here.
   for seconds in C against a long client title.
 - **Fix:** a counting allocator with a cap, and rule subjects truncated to
   255 bytes as the events already are.
-- **Status:** became B4, fixed in 0.1.8
+- **Status:** became B4, fixed in 9b5f27b (0.1.8), verified by Fred
 
 ### 9. There is no privileged-protocol filter (medium)
 

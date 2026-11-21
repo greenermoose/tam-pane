@@ -14,6 +14,7 @@ GUIDANCE
   Lua" over limiting rule patterns without a patch.
   Fred: "Update the note in UPSTREAM.md. Make sure all the work you do is
   fully documented and no docs in the tam-pane repo are left wrong."
+  Fred: "All pass. Next?" (after his tools/demo-0.1.8 check)
 
 
 DONE
@@ -79,7 +80,10 @@ FAILED
 
 HANDOFF
 
-  - B4 is "Fix available" until Fred checks 0.1.8 with tools/demo-0.1.8.
+  - 0.1.8 accepted by Fred on 2026-11-21 after his tools/demo-0.1.8
+    check (commit 9b5f27b, binary SHA-256
+    a1704c534ad3f0c8cab4085648deb7f79191bd98e942b3b1f6498ab11feda819).
+    B4 is Verified.
   - Next in R1's order: finding 10 (VT switching and an emergency quit
     in C), see WHATNOW.
   - Known stale code comment: sync_tree in src/layout/arrange.c says
