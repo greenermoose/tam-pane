@@ -1,6 +1,6 @@
 # tam-pane Lua API (`arch/lua-api.md`)
 
-**Status:** 0.1.0–0.1.3 shipped; 0.1.4 names are a draft for review.
+**Status:** 0.1.0–0.1.4 shipped (Phase P2 complete, pending Fred's 0.1.4 nested check).
 
 tam-pane embeds **Lua 5.5.1** statically from `third_party/lua/` with no
 dynamic symbol exports (`lua_*` symbols stay internal to `tam-pane`).
@@ -129,6 +129,7 @@ callable (`tp.dsp.close()()`) inside plain Lua callbacks (calling one during
 | `tp.dsp.toggle_fullscreen()` | none | Toggle fullscreen on focused window |
 | `tp.dsp.tag(op[, n])` | `"view"`, `"move"`, `"toggle_view"`, `"toggle_client"` with `n` in `1..9`; or `"back"` | Tag view / client tag operations |
 | `tp.dsp.monitor(op, dir)` | `"focus"` \| `"move"`, `"prev"` \| `"next"` | Focus or move focused window to adjacent monitor |
+| `tp.dsp.reload()` | none | Reload the Lua configuration in place (deferred via Wayland idle) |
 
 ## Shipped in 0.1.2
 
@@ -216,7 +217,30 @@ otherwise. Callable only while loading config.
 
 Removes all staged window rules. Callable only while loading config.
 
-## Draft for 0.1.4 (for review)
+## Shipped in 0.1.4
 
-- **0.1.4 Reload:** `tp.dsp.reload()` / IPC reload keeping the last good
-  configuration on error.
+Live configuration reload re-reads the active configuration file (`-c <path>`,
+otherwise `$XDG_CONFIG_HOME/tam-pane/init.lua` or `~/.config/tam-pane/init.lua`)
+into a **fresh** sandboxed Lua state starting from compiled-in defaults
+(`settings`, default key bindings, empty event hooks, and empty window rules).
+
+- **Atomic rollback:** If the file is missing, unreadable, non-regular,
+  oversize, binary bytecode, fails to parse, raises a runtime error, or exceeds
+  the watchdog budget, the candidate Lua state is destroyed and the last good
+  configuration (settings, bindings, hooks, rules, and Lua VM) remains
+  completely untouched. The diagnostic is logged and returned through the C
+  error buffer (`tp_server_reload`) ready for 0.2.3 IPC.
+- **No lingering state:** Settings omitted on reload revert to defaults;
+  removed bindings, hooks, rules, and Lua globals disappear cleanly.
+- **Live application:** On success, `tam-pane` propagates `width_bias`,
+  `preserve_split`, and `proportional_split` to every monitor's layout trees,
+  updates keyboard `repeat_rate`/`repeat_delay` when changed, recreates the
+  xcursor manager when `cursor_theme`/`cursor_size` changed, and re-arranges
+  all monitors with the new gaps.
+- **Triggers:**
+  - `tp.dsp.reload()` (default binding `Meta+Shift+R`), scheduled via a
+    coalesced Wayland idle callback so calling `tp.dsp.reload()()` from a Lua
+    binding callback or event hook is always re-entrancy safe.
+  - `SIGHUP` (`pkill -HUP tam-pane`).
+  - Direct C entry point `tp_server_reload(s, err_buf, err_buf_size)` for 0.2.3
+    IPC.

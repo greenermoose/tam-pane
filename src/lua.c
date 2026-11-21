@@ -524,50 +524,112 @@ bool tp_lua_exec_string(struct tp_lua *lua, const char *code, size_t code_len,
 	return true;
 }
 
-bool tp_lua_load_file(struct tp_lua *lua, const char *path,
-					  bool warn_if_missing, const struct tp_settings *base,
-					  struct tp_settings *out) {
-	if (!lua || !path || !*path)
+static bool load_file_common(struct tp_lua *lua, const char *path,
+							 const struct tp_settings *base,
+							 struct tp_settings *out, int *out_errno,
+							 char *err_buf, size_t err_buf_size) {
+	if (out_errno)
+		*out_errno = 0;
+	if (!lua || !path || !*path) {
+		if (err_buf && err_buf_size > 0)
+			snprintf(err_buf, err_buf_size, "invalid config path");
 		return false;
+	}
 
 	char *buf = NULL;
 	size_t len = 0;
 	int err = 0;
 	if (!read_regular_file(path, TP_LUA_READ_FILE_MAX_CAP, true, &buf, &len,
 						   &err)) {
-		if (err == ENOENT) {
-			if (warn_if_missing)
-				tam_log_warn("config file not found: %s (using defaults)",
-							 path);
+		if (out_errno)
+			*out_errno = err;
+		if (err_buf && err_buf_size > 0) {
+			if (err == ENOENT)
+				snprintf(err_buf, err_buf_size, "config file not found: %s",
+						 path);
+			else if (err == EFBIG)
+				snprintf(err_buf, err_buf_size,
+						 "config file %s exceeds %d bytes", path,
+						 TP_LUA_READ_FILE_MAX_CAP);
+			else if (err == EINVAL)
+				snprintf(err_buf, err_buf_size,
+						 "config path %s is not a regular file", path);
 			else
-				tam_log_debug("no config file at %s (using defaults)", path);
-		} else if (err == EFBIG) {
-			tam_log_error("config file %s exceeds %d bytes (using defaults)",
-						  path, TP_LUA_READ_FILE_MAX_CAP);
-		} else if (err == EINVAL) {
-			tam_log_error("config path %s is not a regular file (using defaults)",
-						  path);
-		} else {
-			tam_log_error("cannot read config %s: %s (using defaults)", path,
-						  strerror(err));
+				snprintf(err_buf, err_buf_size, "cannot read config %s: %s",
+						 path, strerror(err));
 		}
 		return false;
 	}
 
 	char chunk_name[512];
 	snprintf(chunk_name, sizeof(chunk_name), "@%s", path);
-	char err_buf[512] = {0};
 
 	bool ok = tp_lua_exec_string(
 		lua, buf, len, chunk_name, TP_LUA_CONFIG_MAX_INSTRUCTIONS,
-		TP_LUA_CONFIG_TIMEOUT_MS, base, out, err_buf, sizeof(err_buf));
+		TP_LUA_CONFIG_TIMEOUT_MS, base, out, err_buf, err_buf_size);
 	free(buf);
+	return ok;
+}
 
-	if (!ok) {
-		tam_log_error("config %s failed: %s (using defaults)", path, err_buf);
+bool tp_lua_load_file(struct tp_lua *lua, const char *path,
+					  bool warn_if_missing, const struct tp_settings *base,
+					  struct tp_settings *out) {
+	int err = 0;
+	char err_buf[512] = {0};
+	if (!load_file_common(lua, path, base, out, &err, err_buf,
+						  sizeof(err_buf))) {
+		if (err == ENOENT) {
+			if (warn_if_missing)
+				tam_log_warn("config file not found: %s (using defaults)",
+							 path);
+			else
+				tam_log_debug("no config file at %s (using defaults)", path);
+		} else if (err != 0) {
+			tam_log_error("%s (using defaults)", err_buf);
+		} else {
+			tam_log_error("config %s failed: %s (using defaults)", path,
+						  err_buf);
+		}
 		return false;
 	}
 
 	tam_log_info("loaded config: %s", path);
+	return true;
+}
+
+bool tp_lua_reload_file(struct tp_lua **lua_slot, const char *path,
+						struct tp_settings *out, char *err_buf,
+						size_t err_buf_size) {
+	if (!lua_slot || !path || !*path || !out) {
+		if (err_buf && err_buf_size > 0)
+			snprintf(err_buf, err_buf_size, "invalid reload arguments");
+		return false;
+	}
+
+	struct tp_lua *next = tp_lua_create();
+	if (!next) {
+		if (err_buf && err_buf_size > 0)
+			snprintf(err_buf, err_buf_size, "cannot create Lua state");
+		return false;
+	}
+
+	if (*lua_slot) {
+		next->spawn_fn = (*lua_slot)->spawn_fn;
+		next->action_fn = (*lua_slot)->action_fn;
+		next->action_userdata = (*lua_slot)->action_userdata;
+	}
+
+	struct tp_settings next_settings;
+	tp_settings_defaults(&next_settings);
+	int err = 0;
+	if (!load_file_common(next, path, NULL, &next_settings, &err, err_buf,
+						  err_buf_size)) {
+		tp_lua_destroy(next);
+		return false;
+	}
+
+	tp_lua_destroy(*lua_slot);
+	*lua_slot = next;
+	*out = next_settings;
 	return true;
 }

@@ -363,13 +363,16 @@ static void test_default_bindings(void) {
 	CHECK(lua != NULL);
 	tp_lua_set_action_fn(lua, mock_action, NULL);
 
-	/* 12 core + 12 directional + 36 tag defaults = 60 bindings. */
-	CHECK(tp_lua_binding_count(lua) == 60);
+	/* 13 core + 12 directional + 36 tag defaults = 61 bindings. */
+	CHECK(tp_lua_binding_count(lua) == 61);
 	CHECK(!tp_lua_has_unmodified_bindings(lua));
 
 	action_count = 0;
 	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_Return));
 	CHECK(action_count == 1 && last_action.kind == TP_ACT_TERMINAL);
+
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT, XKB_KEY_r));
+	CHECK(action_count == 2 && last_action.kind == TP_ACT_RELOAD);
 
 	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_w));
 	CHECK(last_action.kind == TP_ACT_CLOSE);
@@ -928,6 +931,127 @@ static void test_window_rules(void) {
 	tp_lua_destroy(lua);
 }
 
+static void test_live_reload(void) {
+	struct tp_lua *lua = tp_lua_create();
+	CHECK(lua != NULL);
+	tp_lua_set_spawn_fn(lua, mock_spawn);
+	tp_lua_set_action_fn(lua, mock_action, NULL);
+
+	char dir[] = "/tmp/tam-pane-reload-test.XXXXXX";
+	CHECK(mkdtemp(dir) != NULL);
+	char cfg_path[256], fifo_path[256], missing_path[256];
+	snprintf(cfg_path, sizeof(cfg_path), "%s/init.lua", dir);
+	snprintf(fifo_path, sizeof(fifo_path), "%s/pipe", dir);
+	snprintf(missing_path, sizeof(missing_path), "%s/missing.lua", dir);
+	CHECK(mkfifo(fifo_path, 0600) == 0);
+
+	struct tp_settings cur;
+	tp_settings_defaults(&cur);
+	char err[256] = {0};
+
+	/* 1) Initial reload loads settings, custom binding, hook, rule, and global. */
+	const char *v1 =
+		"my_global = 'from_v1'\n"
+		"tp.config{ gap_inner = 18, gap_outer = 24, repeat_rate = 50 }\n"
+		"tp.bind('Meta+x', function()\n"
+		"  tp.spawn('v1:' .. tostring(my_global))\n"
+		"end)\n"
+		"tp.bind('Meta+Shift+y', function()\n"
+		"  tp.dsp.reload()()\n"
+		"end)\n"
+		"tp.on('window.open', function(ev) tp.spawn('h1:' .. ev.app_id) end)\n"
+		"tp.rule{ match = { app_id = '^alpha$' }, tag = 4, floating = true }\n";
+	CHECK(write_text(cfg_path, v1));
+	CHECK(tp_lua_reload_file(&lua, cfg_path, &cur, err, sizeof(err)));
+	CHECK(cur.gap_inner == 18 && cur.gap_outer == 24 && cur.repeat_rate == 50);
+	CHECK(tp_lua_binding_count(lua) == 63);
+	CHECK(tp_lua_hook_count(lua, TP_EVENT_WINDOW_OPEN) == 1);
+	CHECK(tp_lua_rule_count(lua) == 1);
+
+	/* Spawn and action handlers survived the swap. */
+	reset_spawn_log();
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_x));
+	CHECK(spawn_log_count == 1 && strcmp(spawn_log[0], "v1:from_v1") == 0);
+	action_count = 0;
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT, XKB_KEY_y));
+	CHECK(action_count == 1 && last_action.kind == TP_ACT_RELOAD);
+
+	/* 2) Second reload replaces config cleanly from fresh defaults:
+	 * removed gap_outer reverts to default (8), removed Meta+x is gone,
+	 * stale my_global is nil, old hook/rule replaced. */
+	const char *v2 =
+		"tp.config{ gap_inner = 4 }\n"
+		"tp.bind('Meta+z', function()\n"
+		"  tp.spawn('v2:' .. tostring(my_global))\n"
+		"end)\n"
+		"tp.on('window.open', function(ev) tp.spawn('h2:' .. ev.app_id) end)\n"
+		"tp.rule{ match = { app_id = '^beta$' }, tag = 2 }\n";
+	CHECK(write_text(cfg_path, v2));
+	CHECK(tp_lua_reload_file(&lua, cfg_path, &cur, err, sizeof(err)));
+	struct tp_settings defs;
+	tp_settings_defaults(&defs);
+	CHECK(cur.gap_inner == 4);
+	CHECK(cur.gap_outer == defs.gap_outer);
+	CHECK(cur.repeat_rate == defs.repeat_rate);
+	CHECK(tp_lua_binding_count(lua) == 62);
+	CHECK(!tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_x));
+	reset_spawn_log();
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_z));
+	CHECK(spawn_log_count == 1 && strcmp(spawn_log[0], "v2:nil") == 0);
+	struct tp_rule_result rr;
+	CHECK(!tp_lua_eval_rules(lua, "alpha", "", &rr));
+	CHECK(tp_lua_eval_rules(lua, "beta", "", &rr) && rr.has_tags &&
+		  rr.tags == tp_tag_mask(2));
+	struct tp_event ev = {.kind = TP_EVENT_WINDOW_OPEN};
+	snprintf(ev.window.app_id, sizeof(ev.window.app_id), "foot");
+	reset_spawn_log();
+	CHECK(tp_lua_emit_event(lua, &ev) == 1);
+	CHECK(spawn_log_count == 1 && strcmp(spawn_log[0], "h2:foot") == 0);
+
+	/* 3) Broken reloads fail atomically and preserve v2 completely. */
+	const char *broken[] = {
+		"tp.config{ gaps = ",
+		"tp.config{ gaps = 99 }\nerror('reload-boom')\n",
+		"tp.config{ gap_inner = -5 }\n",
+		"tp.bind('Bogus+a', tp.dsp.close())\n",
+		"tp.rule{ match = { app_id = '[broken' }, tag = 1 }\n",
+		"while true do end\n",
+		"\x1bLua\x55\x00",
+	};
+	for (size_t i = 0; i < sizeof(broken) / sizeof(broken[0]); i++) {
+		CHECK(write_text(cfg_path, broken[i]));
+		err[0] = '\0';
+		CHECK(!tp_lua_reload_file(&lua, cfg_path, &cur, err, sizeof(err)));
+		CHECK(err[0] != '\0');
+		CHECK(cur.gap_inner == 4);
+		CHECK(cur.gap_outer == defs.gap_outer);
+		CHECK(tp_lua_binding_count(lua) == 62);
+		CHECK(tp_lua_rule_count(lua) == 1);
+		CHECK(tp_lua_hook_count(lua, TP_EVENT_WINDOW_OPEN) == 1);
+	}
+
+	/* Missing file and FIFO fail cleanly without blocking or losing v2. */
+	err[0] = '\0';
+	CHECK(!tp_lua_reload_file(&lua, missing_path, &cur, err, sizeof(err)));
+	CHECK(strstr(err, "not found") != NULL);
+	CHECK(cur.gap_inner == 4);
+
+	err[0] = '\0';
+	CHECK(!tp_lua_reload_file(&lua, fifo_path, &cur, err, sizeof(err)));
+	CHECK(strstr(err, "not a regular file") != NULL);
+	CHECK(cur.gap_inner == 4);
+
+	/* v2 binding and hook still work after all failed reloads. */
+	reset_spawn_log();
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_z));
+	CHECK(spawn_log_count == 1 && strcmp(spawn_log[0], "v2:nil") == 0);
+
+	unlink(cfg_path);
+	unlink(fifo_path);
+	rmdir(dir);
+	tp_lua_destroy(lua);
+}
+
 int main(void) {
 	tam_log_set_level(TAM_LOG_ERROR);
 	test_config_and_fallback();
@@ -939,5 +1063,6 @@ int main(void) {
 	test_custom_bindings_and_callbacks();
 	test_event_hooks();
 	test_window_rules();
+	test_live_reload();
 	CHECK_DONE("test_lua");
 }

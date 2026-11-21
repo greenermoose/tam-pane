@@ -25,9 +25,9 @@ WHAT IT DOES
   several tags at once.
 
   Lua scripting built in, like Hyprland. Configuration, key bindings,
-  event hooks and window rules are loaded from ~/.config/tam-pane/init.lua
-  using the Lua 5.5 interpreter compiled statically into tam-pane
-  (0.1.0–0.1.3); live reload follows in 0.1.4.
+  event hooks, window rules and live reload are loaded from
+  ~/.config/tam-pane/init.lua using the Lua 5.5 interpreter compiled
+  statically into tam-pane (0.1.0–0.1.4).
 
 
 HOW IT IS BUILT
@@ -82,6 +82,7 @@ DEFAULT KEYS (CUSTOMIZABLE IN INIT.LUA)
   Meta+Tab              go back to the previous view
   Meta+, / Meta+.       focus the previous / next monitor
   Meta+Shift+, / .      move the focused window to the previous / next monitor
+  Meta+Shift+R          reload ~/.config/tam-pane/init.lua in place
   Meta+Shift+E          quit tam-pane
 
   Meta is the key with the logo on it.

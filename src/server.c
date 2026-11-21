@@ -3,10 +3,13 @@
 #include "tam-pane/client.h"
 #include "tam-pane/input.h"
 #include "tam-pane/layer.h"
+#include "tam-pane/layout/arrange.h"
 #include "tam-pane/lua.h"
 #include "tam-pane/monitor.h"
 #include <signal.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <tam.h>
 #include <wlr/backend.h>
 #include <wlr/render/allocator.h>
@@ -25,6 +28,20 @@ static int on_signal(int signo, void *data) {
 	tam_log_info("signal %d: shutting down", signo);
 	tp_server_quit(data);
 	return 0;
+}
+
+static int on_sighup(int signo, void *data) {
+	tam_log_info("signal %d (SIGHUP): reloading configuration", signo);
+	tp_server_request_reload(data);
+	return 0;
+}
+
+static void on_reload_idle(void *data) {
+	struct tp_server *s = data;
+	s->reload_idle = NULL;
+	if (s->stopping)
+		return;
+	tp_server_reload(s, NULL, 0);
 }
 
 static void server_run_action(const struct tp_action *act, void *userdata) {
@@ -51,6 +68,7 @@ bool tp_server_init(struct tp_server *s) {
 	s->loop = wl_display_get_event_loop(s->display);
 	s->sigterm = wl_event_loop_add_signal(s->loop, SIGTERM, on_signal, s);
 	s->sigint = wl_event_loop_add_signal(s->loop, SIGINT, on_signal, s);
+	s->sighup = wl_event_loop_add_signal(s->loop, SIGHUP, on_sighup, s);
 
 	s->backend = wlr_backend_autocreate(s->loop, &s->session);
 	if (!s->backend) {
@@ -114,6 +132,69 @@ void tp_server_quit(struct tp_server *s) {
 	wl_display_terminate(s->display);
 }
 
+void tp_server_set_config_path(struct tp_server *s, const char *path) {
+	if (!s)
+		return;
+	if (!path || !*path) {
+		s->config_path[0] = '\0';
+		return;
+	}
+	snprintf(s->config_path, sizeof(s->config_path), "%s", path);
+}
+
+bool tp_server_reload(struct tp_server *s, char *err_buf, size_t err_buf_size) {
+	if (!s || s->stopping) {
+		if (err_buf && err_buf_size > 0)
+			snprintf(err_buf, err_buf_size, "compositor is not running");
+		return false;
+	}
+
+	char resolved[PATH_MAX];
+	const char *path = NULL;
+	if (s->config_path[0]) {
+		path = s->config_path;
+	} else if (tp_lua_default_config_path(resolved, sizeof(resolved))) {
+		path = resolved;
+	} else {
+		const char *msg = "cannot determine config path (HOME/XDG_CONFIG_HOME unset)";
+		if (err_buf && err_buf_size > 0)
+			snprintf(err_buf, err_buf_size, "%s", msg);
+		tam_log_error("reload failed: %s (keeping previous configuration)", msg);
+		return false;
+	}
+
+	struct tp_settings prev = s->settings;
+	char local_err[512] = {0};
+	if (!tp_lua_reload_file(&s->lua, path, &s->settings, local_err,
+							sizeof(local_err))) {
+		if (err_buf && err_buf_size > 0)
+			snprintf(err_buf, err_buf_size, "%s", local_err);
+		tam_log_error("reload failed (%s): %s (keeping previous configuration)",
+					  path, local_err[0] ? local_err : "unknown error");
+		return false;
+	}
+
+	tp_monitors_apply_settings(s);
+	if (prev.repeat_rate != s->settings.repeat_rate ||
+		prev.repeat_delay != s->settings.repeat_delay) {
+		tp_keyboards_apply_settings(s);
+	}
+	if (prev.cursor_size != s->settings.cursor_size ||
+		strcmp(prev.cursor_theme, s->settings.cursor_theme) != 0) {
+		tp_pointer_apply_settings(s);
+	}
+	tp_arrange_all(s);
+
+	tam_log_info("reloaded config: %s", path);
+	return true;
+}
+
+void tp_server_request_reload(struct tp_server *s) {
+	if (!s || s->stopping || !s->loop || s->reload_idle)
+		return;
+	s->reload_idle = wl_event_loop_add_idle(s->loop, on_reload_idle, s);
+}
+
 /*
  * wlroots asserts that nobody still listens to an object it destroys, so
  * every module removes its listeners first, then objects go in reverse
@@ -126,6 +207,10 @@ void tp_server_finish(struct tp_server *s) {
 		return;
 	}
 	s->stopping = true;
+	if (s->reload_idle) {
+		wl_event_source_remove(s->reload_idle);
+		s->reload_idle = NULL;
+	}
 	tp_events_finish(s);
 	wl_display_destroy_clients(s->display);
 
@@ -142,6 +227,8 @@ void tp_server_finish(struct tp_server *s) {
 		wl_event_source_remove(s->sigterm);
 	if (s->sigint)
 		wl_event_source_remove(s->sigint);
+	if (s->sighup)
+		wl_event_source_remove(s->sighup);
 
 	/* Globals (shell, seat, layout, compositor) go with the display; the
 	 * scene, allocator and renderer outlive everything that used them. */

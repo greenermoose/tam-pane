@@ -1,0 +1,64 @@
+W15 LUA LIVE RELOAD (0.1.4)
+
+Date: 2026-11-21
+AI harness: agy 1.5.14
+AI model: Gemini 4 Neon (Medium)
+
+
+GUIDANCE
+
+  Fred: "/plan Do the next work slice of tam-pane."
+  Fred: "Approved. Proceed."
+
+
+DONE
+
+  - Added TP_ACT_RELOAD in include/tam-pane/bindings.h, tp.dsp.reload()
+    and default binding Meta+Shift+R in src/lua_bindings.c (61 default
+    bindings), and wired TP_ACT_RELOAD in src/bindings.c to schedule a
+    deferred reload via tp_server_request_reload().
+  - Added tp_lua_reload_file() in include/tam-pane/lua.h and src/lua.c.
+    Builds a fresh sandboxed Lua state from compiled-in defaults
+    (settings, default bindings, empty hooks and rules), preserves
+    spawn_fn/action_fn, and swaps it in only on success; on any read,
+    syntax, validation, runtime, or watchdog error, destroys only the
+    candidate state, reports the diagnostic in err_buf, and leaves the
+    last good configuration completely untouched.
+  - Added live settings application helpers: tp_monitors_apply_settings()
+    in src/monitor.c (width_bias, preserve_split, proportional_split on
+    all monitor trees), tp_keyboards_apply_settings() in
+    src/input/keyboard.c (repeat_rate, repeat_delay), and
+    tp_pointer_apply_settings() in src/input/pointer.c (cursor_theme,
+    cursor_size).
+  - Added config_path tracking, SIGHUP handler, coalesced Wayland idle
+    reload (tp_server_request_reload), and synchronous tp_server_reload()
+    (ready for 0.2.3 IPC) in include/tam-pane/server.h, src/server.c, and
+    src/main.c.
+  - Expanded tests/test_lua.c (408 checks), tests/test_input_headless.c
+    (265 checks), and tests/smoke-headless.sh (added sighup-reload check)
+    covering live relayout, dwindle/repeat updates, omitted-setting
+    reversion, fresh-VM global cleanup, deferred reload from Lua
+    callbacks, and atomic rollback on broken/missing/FIFO/watchdog configs.
+  - Added tools/demo-0.1.4 and tools/demo-0.1.4.lua for Fred's brief
+    nested check.
+  - Bumped VERSION to 0.1.4 and updated arch/lua-api.md, ROADMAP.md,
+    plans/P2-lua.md, and README.
+  - Clean build with zero warnings and full test suite pass: 28 tag, 133
+    dwindle, 408 Lua, 265 headless input, 3 smoke checks, nm -D symbol
+    check, and tests/test_nested_input.py.
+  - Candidate binary SHA-256 (0.1.4):
+    b3fceeaccb513ca7a45fd70557e927c90f36a93b53d8c48dfbf6288ee3f38ff4
+
+
+FAILED
+
+  Nothing.
+
+
+HANDOFF
+
+  - 0.1.4 (live reload) is implemented on branch dev and ready for Fred's
+    brief nested check via tools/demo-0.1.4.
+  - After Fred's acceptance of 0.1.4, Phase P2 is complete and the next
+    slice is P3, 0.2.0 (desktop shell protocols: foreign-toplevel,
+    ext-workspace, session-lock, idle notify/inhibit, output power).

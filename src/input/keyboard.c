@@ -128,3 +128,11 @@ void tp_keyboards_finish(struct tp_server *s) {
 	struct tp_keyboard *k, *tmp;
 	wl_list_for_each_safe(k, tmp, &s->keyboards, link) keyboard_free(k);
 }
+
+void tp_keyboards_apply_settings(struct tp_server *s) {
+	struct tp_keyboard *k;
+	wl_list_for_each(k, &s->keyboards, link) {
+		wlr_keyboard_set_repeat_info(k->wlr, s->settings.repeat_rate,
+									 s->settings.repeat_delay);
+	}
+}

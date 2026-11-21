@@ -62,15 +62,20 @@ int main(int argc, char *argv[]) {
 	tp_settings_defaults(&server.settings);
 
 	server.lua = tp_lua_create();
+	char default_path[PATH_MAX];
+	if (config_path) {
+		tp_server_set_config_path(&server, config_path);
+	} else if (tp_lua_default_config_path(default_path, sizeof(default_path))) {
+		tp_server_set_config_path(&server, default_path);
+	}
+
 	if (server.lua) {
-		char default_path[PATH_MAX];
 		if (config_path) {
 			tp_lua_load_file(server.lua, config_path, true, &server.settings,
 							 &server.settings);
-		} else if (tp_lua_default_config_path(default_path,
-											  sizeof(default_path))) {
-			tp_lua_load_file(server.lua, default_path, false, &server.settings,
-							 &server.settings);
+		} else if (server.config_path[0]) {
+			tp_lua_load_file(server.lua, server.config_path, false,
+							 &server.settings, &server.settings);
 		}
 	} else {
 		tam_log_error("cannot create Lua state (using compiled-in defaults)");

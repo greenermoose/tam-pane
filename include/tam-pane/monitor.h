@@ -64,4 +64,7 @@ struct tp_dwindle *tp_monitor_tree(struct tp_monitor *m);
 /* Drop a window from every layout tree on the monitor. */
 void tp_monitor_forget(struct tp_monitor *m, struct tp_client *c);
 
+/* Propagate live dwindle settings to every connected monitor's layout trees. */
+void tp_monitors_apply_settings(struct tp_server *s);
+
 #endif

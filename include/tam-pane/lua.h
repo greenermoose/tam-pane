@@ -54,6 +54,18 @@ bool tp_lua_load_file(struct tp_lua *lua, const char *path,
 					  struct tp_settings *out);
 
 /*
+ * Load path into a brand-new sandboxed Lua state starting from fresh defaults
+ * (settings, default bindings, empty hooks and rules). On success, transfers
+ * the existing spawn_fn and action_fn onto the new state, destroys *lua_slot,
+ * installs the new state, writes *out, and returns true. On failure, destroys
+ * only the candidate state, leaves *lua_slot and *out untouched, writes a
+ * diagnostic into err_buf (if non-NULL), and returns false.
+ */
+bool tp_lua_reload_file(struct tp_lua **lua_slot, const char *path,
+						struct tp_settings *out, char *err_buf,
+						size_t err_buf_size);
+
+/*
  * Execute a Lua source string under an explicit instruction budget and
  * monotonic wall-clock deadline. On success, commits staged settings (into
  * *out if non-NULL) and staged bindings, returning true. On failure, writes a

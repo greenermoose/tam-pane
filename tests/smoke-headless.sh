@@ -83,4 +83,35 @@ else
 	echo "smoke-headless: windows: skipped (foot is not installed)"
 fi
 
+# 3. Live reload via SIGHUP: valid reload succeeds, broken reload keeps running.
+name=sighup-reload
+dir=$(mktemp -d "${TMPDIR:-/tmp}/tam-pane-smoke.XXXXXX") || exit 1
+chmod 700 "$dir"
+cfg="$dir/init.lua"
+printf 'tp.config{ gaps = 10 }\n' >"$cfg"
+env -u WAYLAND_DISPLAY -u DISPLAY XDG_RUNTIME_DIR="$dir" \
+	XDG_CONFIG_HOME="$dir/config" \
+	WLR_BACKENDS=headless WLR_RENDERER=pixman WLR_HEADLESS_OUTPUTS=1 \
+	"$bin" -c "$cfg" >"$dir/log" 2>&1 &
+pid=$!
+wait_for 40 has_socket
+printf 'tp.config{ gaps = 24 }\n' >"$cfg"
+kill -HUP "$pid" 2>/dev/null
+wait_for 40 grep -q 'reloaded config:' "$dir/log"
+printf 'tp.config{ gaps = \n' >"$cfg"
+kill -HUP "$pid" 2>/dev/null
+wait_for 40 grep -q 'reload failed' "$dir/log"
+kill -TERM "$pid" 2>/dev/null
+wait "$pid"
+status=$?
+log=$(cat "$dir/log")
+rm -rf "$dir"
+if printf '%s\n' "$log" | grep -q 'reloaded config:' &&
+	printf '%s\n' "$log" | grep -q 'reload failed' &&
+	[ "$status" -eq 0 ]; then
+	report ok
+else
+	report bad "sighup reload check failed (exit status: $status)"
+fi
+
 exit "$fail"

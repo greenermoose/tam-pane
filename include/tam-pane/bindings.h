@@ -43,6 +43,7 @@ enum tp_action_kind {
 	TP_ACT_TAG_BACK,
 	TP_ACT_MONITOR_FOCUS,
 	TP_ACT_MONITOR_MOVE,
+	TP_ACT_RELOAD,
 };
 
 struct tp_action {

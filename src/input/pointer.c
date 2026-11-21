@@ -292,6 +292,22 @@ void tp_pointer_add(struct tp_server *s, struct wlr_input_device *dev) {
 	wlr_cursor_attach_input_device(s->cursor, dev);
 }
 
+void tp_pointer_apply_settings(struct tp_server *s) {
+	if (!s || !s->cursor)
+		return;
+	struct wlr_xcursor_manager *mgr = wlr_xcursor_manager_create(
+		tp_settings_cursor_theme(&s->settings), s->settings.cursor_size);
+	if (!mgr) {
+		tam_log_warn("reload: cannot create xcursor manager; keeping current cursor");
+		return;
+	}
+	if (s->cursor_mgr)
+		wlr_xcursor_manager_destroy(s->cursor_mgr);
+	s->cursor_mgr = mgr;
+	if (s->grab.mode == TP_GRAB_NONE)
+		wlr_cursor_set_xcursor(s->cursor, s->cursor_mgr, "default");
+}
+
 void tp_pointer_finish(struct tp_server *s) {
 	struct wl_listener *ls[] = {&s->cursor_motion, &s->cursor_motion_absolute,
 								&s->cursor_button, &s->cursor_axis,

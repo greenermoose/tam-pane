@@ -3,31 +3,31 @@ WHATNOW
 What tam-pane is doing now and what comes next. Read this first; revise
 it at the end of every session (work/README-work).
 
-Updated: 2026-11-21, with W14
+Updated: 2026-11-21, with W15
 
 
 STATE
 
-  Version 0.1.3 on branch dev (Phase P2: Lua window rules accepted by
-  Fred on 2026-11-21 on commit 04522cc; binary SHA-256:
-  fd4029ca5a198b68a018111e5a509b70df84ebc2203a18acd6d847418d4a09a6).
-  0.1.2, 0.1.1, 0.1.0, and Phase P1 (0.0.1-0.0.5) were accepted by Fred
-  on 2026-11-21.
+  Version 0.1.4 on branch dev (Phase P2: Lua live configuration reload
+  implemented, pending Fred's nested check; candidate binary SHA-256:
+  b3fceeaccb513ca7a45fd70557e927c90f36a93b53d8c48dfbf6288ee3f38ff4).
+  0.1.3, 0.1.2, 0.1.1, 0.1.0, and Phase P1 (0.0.1-0.0.5) were accepted by
+  Fred on 2026-11-21.
 
-  W14 implemented 0.1.3 (plans/P2-lua.md): added pure rule types in
-  include/tam-pane/rules.h and src/lua_rules.c exposing tp.rule(spec),
-  tp.remove_rule(id), and tp.clear_rules() using Lua's built-in
-  string.find pattern engine (no pcre2). Patterns validate at config load
-  time and run under the runtime watchdog (1,000,000 instructions /
-  100 ms deadline). Rules stage and roll back atomically alongside
-  tp.config, tp.bind, and tp.on, compose in registration order, and apply
-  in src/client.c on_map() for tag/tags, floating, size, position
-  (monitor-relative or "center"), and monitor (via tp_monitor_by_name()).
-  Added tools/demo-0.1.3 and tools/demo-0.1.3.lua for Fred's nested check.
+  W15 implemented 0.1.4 (plans/P2-lua.md, arch/lua-api.md): added
+  tp_lua_reload_file() (fresh sandboxed Lua VM swap from compiled-in
+  defaults with atomic rollback on error), tp.dsp.reload() with default
+  binding Meta+Shift+R, SIGHUP reload, coalesced Wayland idle deferral
+  (tp_server_request_reload) for re-entrancy safety, and synchronous
+  tp_server_reload(s, err_buf, cap) ready for 0.2.3 IPC. Live reloads
+  update monitor dwindle trees, keyboard repeat info, cursor theme/size,
+  and re-arrange all monitors. Added tools/demo-0.1.4 and
+  tools/demo-0.1.4.lua for Fred's nested check.
 
   Automated checks pass with zero warnings: 28 tag checks, 133 dwindle
-  checks, 316 Lua checks, 242 headless input checks, both smoke checks,
-  nm -D symbol check, and tests/test_nested_input.py.
+  checks, 408 Lua checks, 265 headless input checks, all 3 smoke checks
+  (including sighup-reload), nm -D symbol check, and
+  tests/test_nested_input.py.
 
   Dependencies today: wlroots 0.20, wayland-server, xkbcommon, libtam
   (static), and Lua 5.5.1 (vendored in third_party/lua/).
@@ -35,9 +35,9 @@ STATE
 
 NEXT
 
-  1. P2, 0.1.4 (live reload): reload the configuration in place without
-     restarting, reporting errors and keeping the last good configuration
-     on failure (plans/P2-lua.md, arch/lua-api.md).
+  1. After Fred accepts 0.1.4 (completing Phase P2): P3, 0.2.0 (desktop
+     shell protocols: foreign-toplevel, ext-workspace, session-lock, idle
+     notify and inhibit, output power; plans/P3-daily-parity.md).
 
   2. Later: Tamlinux's desktop tests move from headless Sway to
      tam-pane's headless mode once it can serve them (ROADMAP.md).
@@ -45,7 +45,9 @@ NEXT
 
 WAITING FOR FRED
 
-  Nothing.
+  - Brief nested check of 0.1.4 live reload via tools/demo-0.1.4
+    (candidate binary SHA-256:
+    b3fceeaccb513ca7a45fd70557e927c90f36a93b53d8c48dfbf6288ee3f38ff4).
 
 
 WATCH OUT

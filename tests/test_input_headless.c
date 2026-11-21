@@ -1280,6 +1280,109 @@ int main(void) {
 	destroy_window(&rw_float);
 	for (unsigned int i = 0; i < 20; i++)
 		if (!pump(&client, &server)) goto fail;
+
+	/* ---- 0.1.4 Live configuration reload ---- */
+	tp_server_set_config_path(&server, lua_cfg);
+
+	/* Map a tiled window on mon_primary so we can observe live gap relayout. */
+	struct test_window rw_live;
+	configure_window_app(&client, &rw_live, "live-tile", "LiveTile");
+	for (unsigned int i = 0; i < 100 && !rw_live.configured; i++)
+		if (!pump(&client, &server)) goto fail;
+	for (unsigned int i = 0; i < 15; i++)
+		if (!pump(&client, &server)) goto fail;
+	struct tp_client *c_live = tp_focused(&server);
+	CHECK(c_live != NULL && !c_live->floating);
+	int32_t orig_w = c_live->geom.w;
+
+	/* 1) Write updated config and trigger Meta+Shift+R (default reload bind). */
+	lf = fopen(lua_cfg, "wb");
+	CHECK(lf != NULL);
+	if (lf) {
+		fputs("tp.config{\n"
+			  "  gap_inner = 20,\n"
+			  "  gap_outer = 34,\n"
+			  "  width_bias = 1.5,\n"
+			  "  preserve_split = true,\n"
+			  "  proportional_split = true,\n"
+			  "  repeat_rate = 45,\n"
+			  "  repeat_delay = 250,\n"
+			  "}\n"
+			  "tp.bind('Meta+u', function() tp.spawn('reloaded-u') end)\n"
+			  "tp.bind('Meta+Shift+u', function() tp.dsp.reload()() end)\n"
+			  "tp.rule{ match = { app_id = '^post%-reload$' }, floating = true, size = { 420, 260 } }\n",
+			  lf);
+		fclose(lf);
+	}
+	chord(&keyboard, KEY_R, true, false);
+	for (unsigned int i = 0; i < 15; i++)
+		if (!pump(&client, &server)) goto fail;
+
+	CHECK(server.settings.gap_inner == 20 && server.settings.gap_outer == 34);
+	CHECK(c_live->geom.w == mon_primary->usable.w - 68);
+	CHECK(c_live->geom.w != orig_w);
+	CHECK(mon_primary->trees[1].preserve_split == true);
+	CHECK(mon_primary->trees[1].proportional_split == true);
+	CHECK(mon_primary->trees[1].width_bias > 1.49f &&
+		  mon_primary->trees[1].width_bias < 1.51f);
+	CHECK(keyboard.repeat_info.rate == 45 &&
+		  keyboard.repeat_info.delay == 250);
+	hook_event_count = 0;
+	chord(&keyboard, KEY_U, false, false);
+	for (unsigned int i = 0; i < 10; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(has_hook_event("reloaded-u"));
+	CHECK(tp_lua_rule_count(server.lua) == 1);
+
+	/* 2) Broken config via Meta+Shift+R keeps last good config untouched. */
+	lf = fopen(lua_cfg, "wb");
+	CHECK(lf != NULL);
+	if (lf) {
+		fputs("tp.config{ gap_outer = 2 }\nerror('bad-live-reload')\n", lf);
+		fclose(lf);
+	}
+	chord(&keyboard, KEY_R, true, false);
+	for (unsigned int i = 0; i < 15; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(server.settings.gap_outer == 34);
+	CHECK(c_live->geom.w == mon_primary->usable.w - 68);
+	CHECK(keyboard.repeat_info.rate == 45);
+	hook_event_count = 0;
+	chord(&keyboard, KEY_U, false, false);
+	for (unsigned int i = 0; i < 10; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(has_hook_event("reloaded-u"));
+
+	/* 3) Deferred reload from inside a Lua callback (Meta+Shift+U) works
+	 * safely without re-entrancy issues and reverts omitted settings. */
+	lf = fopen(lua_cfg, "wb");
+	CHECK(lf != NULL);
+	if (lf) {
+		fputs("tp.config{ gap_outer = 10 }\n"
+			  "tp.bind('Meta+y', function() tp.spawn('reloaded-y') end)\n",
+			  lf);
+		fclose(lf);
+	}
+	chord(&keyboard, KEY_U, true, false);
+	for (unsigned int i = 0; i < 15; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(server.settings.gap_outer == 10);
+	CHECK(c_live->geom.w == mon_primary->usable.w - 20);
+	CHECK(mon_primary->trees[1].preserve_split == false);
+	CHECK(keyboard.repeat_info.rate == 25 &&
+		  keyboard.repeat_info.delay == 600);
+	hook_event_count = 0;
+	chord(&keyboard, KEY_U, false, false);
+	chord(&keyboard, KEY_Y, false, false);
+	for (unsigned int i = 0; i < 10; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(!has_hook_event("reloaded-u"));
+	CHECK(has_hook_event("reloaded-y"));
+
+	destroy_window(&rw_live);
+	for (unsigned int i = 0; i < 15; i++)
+		if (!pump(&client, &server)) goto fail;
+
 	wlr_output_destroy(o5);
 	for (unsigned int i = 0; i < 10; i++)
 		if (!pump(&client, &server)) goto fail;

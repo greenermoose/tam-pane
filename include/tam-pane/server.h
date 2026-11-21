@@ -11,6 +11,7 @@
 #include "tam-pane/layout/dwindle.h"
 #include "tam-pane/server_events.h"
 #include "tam-pane/settings.h"
+#include <limits.h>
 #include <stdbool.h>
 #include <wayland-server-core.h>
 
@@ -66,6 +67,7 @@ enum tp_layer {
 struct tp_server {
 	struct tp_settings settings;
 	struct tp_lua *lua;
+	char config_path[PATH_MAX];
 	struct tp_event_queue events;
 
 	struct wl_display *display;
@@ -111,7 +113,8 @@ struct tp_server {
 	struct wl_listener cursor_frame;
 	struct tp_pointer_grab grab;
 
-	struct wl_event_source *sigterm, *sigint;
+	struct wl_event_source *sigterm, *sigint, *sighup;
+	struct wl_event_source *reload_idle;
 	bool stopping; /* set while tearing down: no more layout or focus */
 	const char *socket;
 };
@@ -126,6 +129,22 @@ bool tp_server_start(struct tp_server *s);
 /* Run until tp_server_quit or SIGTERM/SIGINT. */
 void tp_server_run(struct tp_server *s);
 void tp_server_quit(struct tp_server *s);
+
+/* Set the configuration path used for live reloads (empty = default path). */
+void tp_server_set_config_path(struct tp_server *s, const char *path);
+
+/*
+ * Reload the Lua configuration in place from s->config_path (or the default
+ * path if unset). On success, swaps in the new Lua state and settings,
+ * applies live changes, and returns true. On failure, keeps the last good
+ * configuration, logs the error, writes a diagnostic to err_buf (if non-NULL),
+ * and returns false.
+ */
+bool tp_server_reload(struct tp_server *s, char *err_buf, size_t err_buf_size);
+
+/* Schedule a coalesced reload on the Wayland idle loop (safe from inside key
+ * bindings, Lua callbacks, or event hooks). */
+void tp_server_request_reload(struct tp_server *s);
 
 /* Tear down in dependency order. */
 void tp_server_finish(struct tp_server *s);

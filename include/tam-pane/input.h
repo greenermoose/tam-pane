@@ -30,11 +30,13 @@ void tp_input_update_caps(struct tp_server *s);
 /* Keyboards (keyboard.c). */
 void tp_keyboard_add(struct tp_server *s, struct wlr_input_device *dev);
 void tp_keyboards_finish(struct tp_server *s);
+void tp_keyboards_apply_settings(struct tp_server *s);
 
 /* Cursor and pointer devices (pointer.c). */
 bool tp_pointer_init(struct tp_server *s);
 void tp_pointer_finish(struct tp_server *s);
 void tp_pointer_add(struct tp_server *s, struct wlr_input_device *dev);
+void tp_pointer_apply_settings(struct tp_server *s);
 
 /* Re-send pointer focus after windows move under a still cursor. */
 void tp_pointer_refocus(struct tp_server *s, uint32_t time_msec);

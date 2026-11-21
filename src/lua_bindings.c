@@ -20,6 +20,7 @@ static const char default_bindings_lua[] =
 	"tp.bind('Meta+Return', tp.dsp.terminal())\n"
 	"tp.bind('Meta+w', tp.dsp.close())\n"
 	"tp.bind('Meta+Shift+e', tp.dsp.quit())\n"
+	"tp.bind('Meta+Shift+r', tp.dsp.reload())\n"
 	"tp.bind('Meta+j', tp.dsp.focus('next'))\n"
 	"tp.bind('Meta+k', tp.dsp.focus('prev'))\n"
 	"tp.bind('Meta+v', tp.dsp.toggle_float())\n"
@@ -483,6 +484,11 @@ static int l_dsp_monitor(lua_State *L) {
 	return push_dispatcher(L, &act);
 }
 
+static int l_dsp_reload(lua_State *L) {
+	struct tp_action act = {.kind = TP_ACT_RELOAD};
+	return push_dispatcher(L, &act);
+}
+
 static int l_dsp_call(lua_State *L) {
 	struct tp_action *act = luaL_checkudata(L, 1, TP_DSP_MT);
 	struct tp_lua *lua = tp_lua_from_state(L);
@@ -579,6 +585,7 @@ static const luaL_Reg dsp_funcs[] = {
 	{"toggle_fullscreen", l_dsp_toggle_fullscreen},
 	{"tag", l_dsp_tag},
 	{"monitor", l_dsp_monitor},
+	{"reload", l_dsp_reload},
 	{NULL, NULL},
 };
 

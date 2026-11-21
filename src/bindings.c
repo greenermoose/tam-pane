@@ -141,6 +141,9 @@ void tp_action_run(struct tp_server *s, const struct tp_action *act) {
 			tp_client_set_monitor(c, m, false);
 		break;
 	}
+	case TP_ACT_RELOAD:
+		tp_server_request_reload(s);
+		break;
 	}
 }
 

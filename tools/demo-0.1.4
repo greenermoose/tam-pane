@@ -1,0 +1,47 @@
+#!/bin/sh
+# Launch tam-pane 0.1.4 nested under Hyprland with a temporary copy of
+# tools/demo-0.1.4.lua to demonstrate live configuration reload and rollback.
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+TMPDIR_DEMO=$(mktemp -d "${TMPDIR:-/tmp}/tam-pane-demo-0.1.4.XXXXXX")
+trap 'rm -rf "$TMPDIR_DEMO"' EXIT INT TERM
+
+CFG="$TMPDIR_DEMO/init.lua"
+BIN="$TMPDIR_DEMO/bin"
+mkdir -p "$BIN"
+cp "$ROOT/tools/demo-0.1.4.lua" "$CFG"
+
+cat >"$BIN/big" <<EOF
+#!/bin/sh
+printf 'tp.config{ gaps = 40 }\nprint("demo-0.1.4.lua reloaded (gaps=40)")\n' >"$CFG"
+echo "Wrote gaps=40 to $CFG — now press Meta+Shift+R"
+EOF
+cat >"$BIN/broken" <<EOF
+#!/bin/sh
+printf 'tp.config{ gaps = 4 }\nerror("intentional syntax/runtime failure")\n' >"$CFG"
+echo "Wrote broken config to $CFG — now press Meta+Shift+R"
+EOF
+cat >"$BIN/reset" <<EOF
+#!/bin/sh
+cp "$ROOT/tools/demo-0.1.4.lua" "$CFG"
+echo "Reset $CFG to gaps=8 — now press Meta+Shift+R"
+EOF
+chmod +x "$BIN/big" "$BIN/broken" "$BIN/reset"
+
+startup="foot sh -c '
+export PATH=\"$BIN:\$PATH\"
+cat << \"EOF\"
+=== tam-pane 0.1.4 interactive demo (live reload) ===
+
+Watch the host terminal for reload logs. Try in order:
+  1. Press Meta+Return to open a second window so gaps are visible.
+  2. Type: big      then press Meta+Shift+R -> gaps jump to 40 live.
+  3. Type: broken   then press Meta+Shift+R -> error logged, gaps stay 40.
+  4. Type: reset    then press Meta+Shift+R -> gaps return to 8.
+  5. Press Meta+Shift+E to quit (Ctrl+Alt+Esc restores host shortcuts).
+
+EOF
+exec \"\${SHELL:-/bin/sh}\"
+'"
+
+"$ROOT/tools/nested-input" -c "$CFG" -s "$startup"

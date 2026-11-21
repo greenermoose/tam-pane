@@ -450,3 +450,14 @@ void tp_monitor_forget(struct tp_monitor *m, struct tp_client *c) {
 	for (unsigned int i = 0; i < TP_TAG_SLOTS; i++)
 		tp_dwindle_remove(&m->trees[i], c);
 }
+
+void tp_monitors_apply_settings(struct tp_server *s) {
+	struct tp_monitor *m;
+	wl_list_for_each(m, &s->monitors, link) {
+		for (unsigned int i = 0; i < TP_TAG_SLOTS; i++) {
+			m->trees[i].width_bias = s->settings.width_bias;
+			m->trees[i].preserve_split = s->settings.preserve_split;
+			m->trees[i].proportional_split = s->settings.proportional_split;
+		}
+	}
+}
