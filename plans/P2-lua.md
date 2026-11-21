@@ -3,7 +3,11 @@
 **Status:** complete (0.1.4 live reload accepted by Fred on 2026-11-21 on
 commit `0a98a51`, binary SHA-256
 `b3fceeaccb513ca7a45fd70557e927c90f36a93b53d8c48dfbf6288ee3f38ff4`; 0.1.3,
-0.1.2, 0.1.1, and 0.1.0 accepted on 2026-11-21).
+0.1.2, 0.1.1, and 0.1.0 accepted on 2026-11-21). Review R1 then found
+ways a script could still freeze or crash the compositor, despite the
+goal below. They are fixed in 0.1.5 to 0.1.8: hook feedback loops,
+spawn at load, shell-only spawn, unbounded memory and unbounded pattern
+matching (ROADMAP.md).
 
 ## Goal
 
@@ -62,6 +66,9 @@ or crash the compositor.
   `tp.read_file` (bounded) instead.
 - The instruction budget catches runaway loops, but not a blocking C call.
   Expose no blocking C calls at all.
+- Nor does it see long work inside a C library call. Since 0.1.8 the
+  pattern matcher checks the deadline itself (a marked patch to
+  `lstrlib.c`), and a counting allocator caps Lua memory at 64 MiB.
 
 ## Acceptance
 

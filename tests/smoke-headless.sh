@@ -5,7 +5,10 @@
 #
 #   1. start, open the Wayland socket, exit 0 on SIGTERM;
 #   2. when foot is installed: map two windows, let one close, and still
-#      exit 0 on SIGTERM while the other is connected.
+#      exit 0 on SIGTERM while the other is connected;
+#   3. SIGHUP reloads a valid config and keeps running on a broken one;
+#   4. a startup hook runs once, after WAYLAND_DISPLAY is set, and not
+#      again on reload.
 set -u
 bin=${1:-build/tam-pane}
 fail=0

@@ -32,8 +32,11 @@ override CFLAGS += -std=c11 -Wall -Wextra -Wpedantic -Wno-unused-parameter \
 	-ffile-prefix-map=$(CURDIR)=. -MMD -MP
 # Vendored Lua 5.5: static object set, hidden visibility, no dlopen (-rdynamic
 # is never used), so lua_* symbols never collide with libinput's liblua 5.4.
+# LUAI_PATTERNCHECK names the deadline check that tam-pane's one patch to
+# lstrlib.c calls from the pattern matcher (UPSTREAM.md).
 LUA_CFLAGS = -O2 -g -std=c99 -Wall -Wextra -fvisibility=hidden \
-	-DLUA_USE_POSIX -ffile-prefix-map=$(CURDIR)=. -MMD -MP
+	-DLUA_USE_POSIX -DLUAI_PATTERNCHECK=tp_lua_pattern_check \
+	-ffile-prefix-map=$(CURDIR)=. -MMD -MP
 PKG_CFLAGS := $(shell $(PKG_CONFIG) --cflags $(PKGS))
 PKG_LIBS := $(shell $(PKG_CONFIG) --libs $(PKGS))
 XKB_CFLAGS := $(shell $(PKG_CONFIG) --cflags xkbcommon)
@@ -87,6 +90,9 @@ all: build/tam-pane
 
 build/tam-pane: $(CORE_OBJS) $(LUA_HOST_OBJS) $(WM_OBJS) $(PROTO_OBJS) $(LUA_OBJS) $(LIBTAM)
 	$(CC) $(LDFLAGS) -o $@ $(CORE_OBJS) $(LUA_HOST_OBJS) $(WM_OBJS) $(PROTO_OBJS) $(LUA_OBJS) $(LIBTAM) $(PKG_LIBS) -lm
+
+# TP_VERSION is compiled into these two, so a VERSION bump rebuilds them.
+build/main.o build/lua.o: VERSION
 
 $(LUA_OBJS): build/lua/%.o: third_party/lua/%.c
 	@mkdir -p $(@D)

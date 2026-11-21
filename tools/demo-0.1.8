@@ -1,0 +1,66 @@
+#!/bin/sh
+# Launch tam-pane 0.1.8 nested under Hyprland with Lua that would once
+# have hung or bloated the compositor (R1 finding 8).
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+want=$(tr -d '[:space:]' < "$ROOT/VERSION")
+have=$("$ROOT/build/tam-pane" -v 2>/dev/null | awk '{print $2}') || true
+if [ "$have" != "$want" ]; then
+	echo "build/tam-pane is '${have:-missing}', VERSION is $want: run make first" >&2
+	exit 1
+fi
+
+TMPDIR_DEMO=$(mktemp -d "${TMPDIR:-/tmp}/tam-pane-demo-0.1.8.XXXXXX")
+trap 'rm -rf "$TMPDIR_DEMO"' EXIT INT TERM
+
+CFG="$TMPDIR_DEMO/init.lua"
+BIN="$TMPDIR_DEMO/bin"
+GUIDE="$TMPDIR_DEMO/guide"
+mkdir -p "$BIN"
+{
+	printf 'local GUIDE = "%s"\n' "$GUIDE"
+	cat "$ROOT/tools/demo-0.1.8.lua"
+} >"$CFG"
+
+# pane-long-title: a window titled 300 a letters, then TAIL.
+title=$(printf '%300s' '' | tr ' ' a)TAIL
+cat >"$BIN/pane-long-title" <<SCRIPT
+#!/bin/sh
+exec foot --title="$title" sh -c 'echo "My title is 300 a letters, then TAIL. Close me with Meta+W."; sleep 600'
+SCRIPT
+# pane-mem: how much memory tam-pane holds now.
+cat >"$BIN/pane-mem" <<'SCRIPT'
+#!/bin/sh
+ps -o rss= -C tam-pane | awk '{ printf "tam-pane uses %d MiB\n", $1 / 1024 }'
+SCRIPT
+chmod +x "$BIN/pane-long-title" "$BIN/pane-mem"
+export PATH="$BIN:$PATH"
+
+cat >"$GUIDE" <<'GUIDE'
+=== tam-pane 0.1.8 demo: Lua memory cap and pattern deadline ===
+
+Watch the host terminal for the log lines. After each step, type a few
+letters here: they should appear at once.
+
+ 1. Press Meta+P. A runaway pattern starts and is cut off: the host
+    terminal shows "execution timed out in binding". (Up to 0.1.7 it
+    froze tam-pane for hours.)
+ 2. Type: pane-mem   and note the number. Press Meta+M: a memory bomb
+    runs, and the host terminal shows "lua: binding reached the 64 MiB
+    memory limit". Type pane-mem again: tam-pane has grown by well
+    under 100 MiB. (Up to 0.1.7 it grew until the system ran out.)
+ 3. Press Meta+G. The host terminal shows "[demo] gsub replaced 100000
+    letters": long matching that finishes in time still works.
+ 4. Press Meta+N. A window with a 304-letter title opens here, on this
+    tag. The host terminal shows the runaway rule timing out. The
+    window did not go to tag 2, because its "TAIL" lies beyond the 255
+    bytes that rules see. Close it with Meta+W.
+ 5. Meta+Shift+E quits.
+
+Pass: tam-pane never stops responding, steps 1 and 2 end with those
+messages, step 3 counts 100000, and step 4's window opens on this tag.
+
+GUIDE
+
+"$ROOT/tools/nested-input" -c "$CFG" -s ''

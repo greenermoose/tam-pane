@@ -78,8 +78,13 @@ static bool match_lua_pattern(struct tp_lua *lua, const char *subject,
 
 	lua_State *L = lua->L;
 	int top = lua_gettop(L);
+	/* Rules see the first TP_LUA_RULE_SUBJECT_MAX bytes, as event hooks do:
+	 * clients choose their titles, and matching time grows with them. */
+	size_t len = subject ? strlen(subject) : 0;
+	if (len > TP_LUA_RULE_SUBJECT_MAX)
+		len = TP_LUA_RULE_SUBJECT_MAX;
 	lua_rawgeti(L, LUA_REGISTRYINDEX, lua->string_find_ref);
-	lua_pushstring(L, subject ? subject : "");
+	lua_pushlstring(L, subject ? subject : "", len);
 	lua_pushstring(L, pat);
 	int rc = tp_lua_guarded_pcall(lua, 2, 1, TP_LUA_CALLBACK_MAX_INSTRUCTIONS,
 								  TP_LUA_CALLBACK_TIMEOUT_MS, "rule.match");

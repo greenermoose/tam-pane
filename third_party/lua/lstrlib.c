@@ -363,6 +363,7 @@ typedef struct MatchState {
   const char *p_end;  /* end ('\0') of pattern */
   lua_State *L;
   int matchdepth;  /* control for recursive depth (to avoid C stack overflow) */
+  unsigned int steps;  /* tam-pane patch: matcher steps, see luai_patterncheck */
   int level;  /* total number of captures (finished or unfinished) */
   struct {
     const char *init;
@@ -373,6 +374,20 @@ typedef struct MatchState {
 
 /* recursive function */
 static const char *match (MatchState *ms, const char *s, const char *p);
+
+
+/*
+** tam-pane patch (see UPSTREAM.md, "Lua 5.5.1 interpreter"): the matcher
+** runs in C, where Lua's count hook never fires, so a pathological
+** pattern could run for hours. Every 4096 steps it calls the embedder's
+** LUAI_PATTERNCHECK(L), which may raise a Lua error to stop it.
+*/
+#if defined(LUAI_PATTERNCHECK)
+void LUAI_PATTERNCHECK (lua_State *L);
+#define luai_patterncheck(L)	LUAI_PATTERNCHECK(L)
+#else
+#define luai_patterncheck(L)	((void)0)
+#endif
 
 
 /* maximum recursion depth for 'match' */
@@ -572,6 +587,8 @@ static const char *match_capture (MatchState *ms, const char *s, int l) {
 static const char *match (MatchState *ms, const char *s, const char *p) {
   if (l_unlikely(ms->matchdepth-- == 0))
     luaL_error(ms->L, "pattern too complex");
+  if (l_unlikely((++ms->steps & 0xfffu) == 0))  /* tam-pane patch */
+    luai_patterncheck(ms->L);
   init: /* using goto to optimize tail recursion */
   if (p != ms->p_end) {  /* end of pattern? */
     switch (*p) {
@@ -766,6 +783,7 @@ static void prepstate (MatchState *ms, lua_State *L,
   ms->src_init = s;
   ms->src_end = s + ls;
   ms->p_end = p + lp;
+  ms->steps = 0;  /* tam-pane patch */
 }
 
 

@@ -27,7 +27,8 @@ WHAT IT DOES
   Lua scripting built in, like Hyprland. Configuration, key bindings,
   event hooks, window rules and live reload are loaded from
   ~/.config/tam-pane/init.lua using the Lua 5.5 interpreter compiled
-  statically into tam-pane (0.1.0–0.1.4).
+  statically into tam-pane (0.1.0–0.1.4, hardened in 0.1.5–0.1.8 after
+  review R1). Autostart goes in a startup hook.
 
 
 HOW IT IS BUILT
@@ -37,7 +38,8 @@ HOW IT IS BUILT
   - Pure logic (tags, the layout tree) has no compositor code in it, so it
     is tested without a display.
   - The event loop never blocks: no waiting on child processes, and Lua
-    will run with an instruction budget and no blocking calls.
+    runs with an instruction budget, a wall-clock deadline (which also
+    covers pattern matching), a memory cap and no blocking calls.
   - Every dependency has to earn its place and has a planned exit. The goal
     is libc, the kernel's headers, libtam and code in this repository, with
     Mesa allowed so the GPU does the compositing.

@@ -69,7 +69,8 @@ and libgbm stay.
   object set with `-fvisibility=hidden` and `-DLUA_USE_POSIX` (no
   `-rdynamic`, no `lua_*` symbols exported to avoid clashing with
   `libinput`'s `liblua 5.4`). Unsafe libraries (`io`, `os`, `package`,
-  `debug`) are not compiled or linked.
+  `debug`) are not compiled or linked. One marked patch in `lstrlib.c`
+  (0.1.8) lets the watchdog stop the pattern matcher (`UPSTREAM.md`).
 
 ## Coming in later phases
 

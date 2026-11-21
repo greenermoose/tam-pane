@@ -84,11 +84,27 @@ updated with `tools/pull-references` (see `ideas/sources`):
   (`https://www.lua.org/ftp/lua-5.5.1.tar.gz`), SHA-256
   `1c4b4068d67061f2a2231ad2b5422e77acea1487ea9890f6320af614f4373dce`,
   MIT License (notice kept in `third_party/lua/lua.h`).
-- **How:** Copied unchanged from `lua-5.5.1/src/` excluding the standalone
-  CLI entry points (`lua.c`, `luac.c`, `onelua.c`). Built statically with
-  `-fvisibility=hidden` and `-DLUA_USE_POSIX` (without `-DLUA_USE_DLOPEN`
-  or `-rdynamic`), compiling only the core VM and safe standard libraries
+- **How:** Copied from `lua-5.5.1/src/`, excluding the standalone CLI
+  entry points (`lua.c`, `luac.c`, `onelua.c`). Every file is unchanged
+  except `lstrlib.c`, which carries one tam-pane patch (below). Built
+  statically with `-fvisibility=hidden`, `-DLUA_USE_POSIX` and
+  `-DLUAI_PATTERNCHECK=tp_lua_pattern_check` (without `-DLUA_USE_DLOPEN` or
+  `-rdynamic`), compiling only the core VM and safe standard libraries
   (omitting `linit.c`, `liolib.c`, `loslib.c`, `loadlib.c`, `ldblib.c`).
+- **Patch (0.1.8, R1 finding 8):** Lua's pattern matcher (`string.find`,
+  `match`, `gmatch`, `gsub`) runs in C, where the watchdog's count hook
+  never fires, so a pathological pattern could run for hours. In
+  `lstrlib.c`:
+  - `MatchState` gains a `steps` counter, which `prepstate` zeroes;
+  - `match()` calls `luai_patterncheck(L)` every 4096 steps;
+  - `luai_patterncheck` expands to the embedder's `LUAI_PATTERNCHECK`
+    when that is defined, and to nothing otherwise.
+
+  tam-pane defines it as `tp_lua_pattern_check` (`src/lua.c`), which
+  applies the watchdog's wall-clock deadline. Every patched line is
+  marked `tam-pane patch`. To update Lua, copy the new release and
+  re-apply these few lines. Retire the patch if Lua ever gains its own
+  way to interrupt the matcher.
 - **Why:** In-process Lua 5.5 scripting for configuration, bindings,
   hooks, rules, and layouts with no external library dependency and no
   symbol clash with `libinput`'s `liblua 5.4`.
@@ -100,8 +116,14 @@ updated with `tools/pull-references` (see `ideas/sources`):
   `watchdogHook`), commit `f3e0768`, BSD-3-Clause.
 - **How:** Rewritten in C11 for `struct tp_lua` with no globals, saving
   and restoring hook state across nested calls, and enforcing both an
-  instruction budget and a `CLOCK_MONOTONIC` wall-clock deadline.
-- **Why:** Prevents runaway Lua loops from stalling the compositor.
+  instruction budget and a `CLOCK_MONOTONIC` wall-clock deadline. tam-pane
+  adds two things of its own:
+  - since 0.1.8 the deadline also reaches into the pattern matcher,
+    through the Lua patch above (`tp_lua_pattern_check`);
+  - a counting allocator of tam-pane's own (`tp_lua_alloc`) caps a Lua
+    state at 64 MiB inside guarded calls.
+- **Why:** Prevents runaway Lua loops, runaway pattern matching and
+  runaway allocation from stalling or killing the compositor.
 
 ## Compared with, not taken
 

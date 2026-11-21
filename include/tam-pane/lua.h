@@ -4,7 +4,9 @@
  *
  * Pure module (no wlroots dependency), explicit state (no global variables),
  * safe standard libraries only (no io/os/package/debug), and every call
- * guarded by an instruction budget and a monotonic wall-clock deadline.
+ * guarded by an instruction budget and a monotonic wall-clock deadline
+ * (which also bounds pattern matching), with Lua memory capped at
+ * TP_LUA_MEMORY_MAX.
  */
 #ifndef TAM_PANE_LUA_H
 #define TAM_PANE_LUA_H
@@ -28,6 +30,8 @@ enum {
 	TP_LUA_READ_FILE_DEFAULT_CAP = 65536,
 	TP_LUA_READ_FILE_MAX_CAP = 1048576,
 	TP_LUA_SPAWN_ARGV_MAX = 64,
+	TP_LUA_MEMORY_MAX = 64 << 20, /* bytes, enforced inside guarded calls */
+	TP_LUA_RULE_SUBJECT_MAX = 255, /* bytes of app_id/title rules match */
 };
 
 typedef void (*tp_lua_action_fn)(const struct tp_action *act, void *userdata);

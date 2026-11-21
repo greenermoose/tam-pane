@@ -1,0 +1,87 @@
+W19 LUA MEMORY CAP AND PATTERN DEADLINE (0.1.8), AND A DOCS AUDIT
+
+Date: 2026-11-21
+AI harness: Claude Code 2.1.330
+AI model: claude-opus-5-5
+Commits: the 0.1.8 commit that adds this record
+Continues: W18
+
+
+GUIDANCE
+
+  Fred: "All pass. Next?" (after accepting 0.1.7)
+  Asked how to bound pattern-matching time, Fred chose "Patch vendored
+  Lua" over limiting rule patterns without a patch.
+  Fred: "Update the note in UPSTREAM.md. Make sure all the work you do is
+  fully documented and no docs in the tam-pane repo are left wrong."
+
+
+DONE
+
+  - Accepted 0.1.7 in bfffb25 (B3 Verified).
+  - Fixed R1 finding 8 as B4
+    (bugs/B4-lua-c-calls-escape-the-watchdog.md):
+      - one marked patch to third_party/lua/lstrlib.c: MatchState.steps,
+        and luai_patterncheck every 4096 matcher steps, which expands to
+        LUAI_PATTERNCHECK (Makefile: tp_lua_pattern_check);
+      - tp_lua_pattern_check in src/lua.c applies the watchdog deadline;
+        the watchdog's abort code is now shared (watchdog_abort,
+        watchdog_check_deadline);
+      - tp_lua_alloc, a counting allocator installed with lua_setallocf,
+        refuses growth past TP_LUA_MEMORY_MAX (64 MiB) inside guarded
+        calls only; guarded_pcall logs "reached the 64 MiB memory limit",
+        and a failing config reports "Lua memory limit (64 MiB)
+        reached";
+      - rules match the first TP_LUA_RULE_SUBJECT_MAX (255) bytes of
+        app_id and title (src/lua_rules.c).
+  - Makefile: build/main.o and build/lua.o now depend on VERSION, so a
+    version bump is never built with the old number (R1 finding 17).
+  - Tests: test_memory_and_pattern_limits in tests/test_lua.c covers the
+    doubling string, string.rep of 1 GiB, a runaway pattern in a
+    binding, a 100,000-letter gsub that must still run, and rules
+    (runaway rule cut off, title cut to 255 bytes). With the memory
+    cases left out, it hung against 0.1.7 code until its alarm fired.
+  - Docs audit of the whole repository for 0.1.5 to 0.1.8:
+      - UPSTREAM.md: the Lua patch, and the watchdog's additions;
+      - README: present tense, autostart, version range;
+      - ROADMAP.md: current version, and milestones 0.1.5 to 0.1.8;
+      - plans/P2-lua.md: status and safety rules;
+      - arch/lua-api.md: memory and pattern limits, the rule subject
+        cut, and a corrected claim (validation misses some malformed
+        patterns);
+      - arch/data-structures.md: event queue timer and depth, drag
+        generation, dwindle gen, Lua memory and spawn fields;
+      - arch/dependencies.md and arch/principles.md;
+      - the smoke test header and the server_events.h comment.
+  - Added tools/demo-0.1.8 and tools/demo-0.1.8.lua: Meta+P runaway
+    pattern, Meta+M memory bomb (pane-mem shows tam-pane's size),
+    Meta+G long gsub, Meta+N window with a 304-letter title. Config
+    checked by loading it headless.
+  - make test: 28 tag, 143 dwindle, 444 Lua, 284 headless input checks,
+    4 smoke checks, nm -D check; tests/test_nested_input.py passes;
+    test_lua and test_input_headless are clean under ASan.
+  - VERSION 0.1.8. Candidate binary SHA-256:
+    a1704c534ad3f0c8cab4085648deb7f79191bd98e942b3b1f6498ab11feda819
+
+
+FAILED
+
+  - Writing tools/demo-0.1.8 with one shell command, heredocs nested
+    inside a heredoc all used the same EOF delimiter. The outer heredoc
+    ended early, and the rest of the demo ran in the agent's own shell
+    with empty variables. Every step failed harmlessly: writes to / were
+    denied, and /tools/nested-input did not exist, so no compositor
+    started. Checked that no files were left behind, then wrote the file
+    with the editor instead.
+  - The memory cases of the new test were not run against 0.1.7: they
+    would allocate gigabytes on Fred's workstation.
+
+
+HANDOFF
+
+  - B4 is "Fix available" until Fred checks 0.1.8 with tools/demo-0.1.8.
+  - Next in R1's order: finding 10 (VT switching and an emergency quit
+    in C), see WHATNOW.
+  - Known stale code comment: sync_tree in src/layout/arrange.c says
+    newcomers go next to the focused window, which is R1 finding 12
+    (open). Fixing 12 makes the comment true.

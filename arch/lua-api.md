@@ -1,6 +1,6 @@
 # tam-pane Lua API (`arch/lua-api.md`)
 
-**Status:** 0.1.0–0.1.4 shipped and accepted (Phase P2 complete); 0.1.5–0.1.7 review fixes accepted.
+**Status:** 0.1.0–0.1.4 shipped and accepted (Phase P2 complete); 0.1.5–0.1.7 review fixes accepted; 0.1.8 (memory cap, pattern deadline) is a candidate.
 
 tam-pane embeds **Lua 5.5.1** statically from `third_party/lua/` with no
 dynamic symbol exports (`lua_*` symbols stay internal to `tam-pane`).
@@ -18,6 +18,16 @@ dynamic symbol exports (`lua_*` symbols stay internal to `tam-pane`).
   (10,000,000 for config load) and a `CLOCK_MONOTONIC` wall-clock deadline
   (1,500 ms for config load). Runaway loops abort with a Lua error and the
   compositor keeps running.
+- **Pattern matching (0.1.8):** `string.find`, `match`, `gmatch` and
+  `gsub` run in C, where the count hook never fires. A marked patch to
+  Lua's matcher checks the same wall-clock deadline every 4,096 steps.
+  A runaway pattern therefore ends with `execution timed out`, while
+  long legitimate matching within the deadline still runs.
+- **Memory (0.1.8):** a Lua state may hold at most 64 MiB
+  (`TP_LUA_MEMORY_MAX`) while Lua code runs. A growth past that raises
+  Lua's "not enough memory" error inside the call; the log says `lua: ...
+  reached the 64 MiB memory limit`, and a failing config reports
+  `Lua memory limit (64 MiB) reached`. The compositor keeps running.
 - **Not a security boundary.** The sandbox keeps a broken config from
   hanging or crashing the compositor. It does not make the config safe
   to run if you did not write it: `tp.spawn` starts any program, and
@@ -230,10 +240,16 @@ passed. Callable only while loading config.
 ## Shipped in 0.1.3
 
 Window rules match new toplevels on `app_id` and/or `title` using Lua's built-in
-`string.find` pattern engine (no `pcre2` dependency). Patterns are validated at
-config load time so malformed patterns fail loudly with atomic rollback; at map
-time each pattern runs under the runtime watchdog (1,000,000 instructions /
-100 ms `CLOCK_MONOTONIC` deadline) using a cached reference to `string.find`.
+`string.find` pattern engine (no `pcre2` dependency). Patterns are checked at
+config load time, so most malformed patterns fail loudly with atomic rollback.
+The check matches against an empty string, so a pattern that is malformed
+only after its first item (such as `"a%"`) passes it, then fails and is
+logged each time a window maps (R1 finding 17). At map time each pattern
+runs under the runtime watchdog (1,000,000 instructions / 100 ms
+`CLOCK_MONOTONIC` deadline, which also bounds the matcher since 0.1.8) using a
+cached reference to `string.find`. Rules see the first 255 bytes of
+`app_id` and `title` (`TP_LUA_RULE_SUBJECT_MAX`), the same as event hooks
+(0.1.8).
 
 Rule registrations stage alongside `tp.config`, `tp.bind`, and `tp.on`, starting
 from an empty set on each config load and rolling back atomically on error.

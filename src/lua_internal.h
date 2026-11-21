@@ -73,6 +73,8 @@ struct tp_lua {
 	uint64_t instructions_used;
 	const char *context;
 	const char *abort_reason;
+	size_t mem_used;   /* bytes the Lua state holds (tp_lua_alloc) */
+	bool mem_refused;  /* tp_lua_alloc refused a growth in this call */
 
 	struct tp_settings *staging;
 	void (*spawn_fn)(const char *cmd);
@@ -98,6 +100,8 @@ struct tp_lua {
 };
 
 struct tp_lua *tp_lua_from_state(lua_State *L);
+/* Deadline check for the patched pattern matcher (LUAI_PATTERNCHECK). */
+void tp_lua_pattern_check(lua_State *L);
 int tp_lua_guarded_pcall(struct tp_lua *lua, int nargs, int nresults,
 						 uint64_t max_instructions, uint32_t timeout_ms,
 						 const char *context);

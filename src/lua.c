@@ -31,34 +31,80 @@ struct tp_lua *tp_lua_from_state(lua_State *L) {
 	return lua;
 }
 
+static void watchdog_hook(lua_State *L, lua_Debug *ar);
+
+/* Stop the running call: raise the error, and switch to a 1-instruction
+ * hook so a nested pcall/xpcall cannot trap it. */
+static void watchdog_abort(lua_State *L, struct tp_lua *lua,
+						   const char *reason) {
+	if (reason) {
+		lua->watchdog_aborted = true;
+		lua->abort_reason = reason;
+	}
+	lua_sethook(L, watchdog_hook, LUA_MASKCOUNT, 1);
+	luaL_error(L, "%s in %s",
+			   lua->abort_reason ? lua->abort_reason : "execution aborted",
+			   lua->context ? lua->context : "lua");
+}
+
+static void watchdog_check_deadline(lua_State *L, struct tp_lua *lua) {
+	if (lua->watchdog_aborted)
+		watchdog_abort(L, lua, NULL);
+	if (lua->deadline_ns > 0 && now_monotonic_ns() >= lua->deadline_ns)
+		watchdog_abort(L, lua, "execution timed out");
+}
+
 static void watchdog_hook(lua_State *L, lua_Debug *ar) {
 	struct tp_lua *lua = tp_lua_from_state(L);
 	if (!lua || !lua->watchdog_active)
 		return;
-
-	if (lua->watchdog_aborted) {
-		luaL_error(L, "%s in %s",
-				   lua->abort_reason ? lua->abort_reason : "execution aborted",
-				   lua->context ? lua->context : "lua");
-	}
+	if (lua->watchdog_aborted)
+		watchdog_abort(L, lua, NULL);
 
 	lua->instructions_used += TP_LUA_HOOK_INTERVAL;
 	if (lua->max_instructions > 0 &&
-		lua->instructions_used > lua->max_instructions) {
-		lua->watchdog_aborted = true;
-		lua->abort_reason = "execution exceeded instruction budget";
-		/* Switch to 1-instruction hook so nested pcall/xpcall cannot trap it. */
-		lua_sethook(L, watchdog_hook, LUA_MASKCOUNT, 1);
-		luaL_error(L, "%s in %s", lua->abort_reason,
-				   lua->context ? lua->context : "lua");
+		lua->instructions_used > lua->max_instructions)
+		watchdog_abort(L, lua, "execution exceeded instruction budget");
+	watchdog_check_deadline(L, lua);
+}
+
+/*
+ * Called by the patched Lua pattern matcher (third_party/lua/lstrlib.c,
+ * LUAI_PATTERNCHECK) every 4096 steps. Matching runs in C, where the count
+ * hook never fires, so this applies the same wall-clock deadline to it.
+ */
+void tp_lua_pattern_check(lua_State *L) {
+	struct tp_lua *lua = tp_lua_from_state(L);
+	if (lua && lua->watchdog_active)
+		watchdog_check_deadline(L, lua);
+}
+
+/*
+ * Lua's allocator, counting what the state holds. Inside a guarded call a
+ * growth past TP_LUA_MEMORY_MAX is refused, which Lua turns into a "not
+ * enough memory" error that the call's pcall catches. Outside guarded
+ * calls nothing is refused, because the host's own small pushes there are
+ * unprotected, and a memory error would make Lua panic and abort.
+ */
+static void *tp_lua_alloc(void *ud, void *ptr, size_t osize, size_t nsize) {
+	struct tp_lua *lua = ud;
+	size_t old = ptr ? osize : 0;
+	if (old > lua->mem_used)
+		old = lua->mem_used; /* never wrap, even if counts ever disagree */
+	if (nsize == 0) {
+		free(ptr);
+		lua->mem_used -= old;
+		return NULL;
 	}
-	if (lua->deadline_ns > 0 && now_monotonic_ns() >= lua->deadline_ns) {
-		lua->watchdog_aborted = true;
-		lua->abort_reason = "execution timed out";
-		lua_sethook(L, watchdog_hook, LUA_MASKCOUNT, 1);
-		luaL_error(L, "%s in %s", lua->abort_reason,
-				   lua->context ? lua->context : "lua");
+	if (nsize > old && lua->watchdog_active &&
+		lua->mem_used - old + nsize > (size_t)TP_LUA_MEMORY_MAX) {
+		lua->mem_refused = true;
+		return NULL;
 	}
+	void *p = realloc(ptr, nsize);
+	if (p)
+		lua->mem_used = lua->mem_used - old + nsize;
+	return p;
 }
 
 int tp_lua_guarded_pcall(struct tp_lua *lua, int nargs, int nresults,
@@ -93,7 +139,11 @@ int tp_lua_guarded_pcall(struct tp_lua *lua, int nargs, int nresults,
 	else
 		lua_sethook(L, NULL, 0, 0);
 
+	lua->mem_refused = false;
 	int rc = lua_pcall(L, nargs, nresults, 0);
+	if (rc == LUA_ERRMEM && lua->mem_refused)
+		tam_log_warn("lua: %s reached the %d MiB memory limit",
+					 context ? context : "lua", TP_LUA_MEMORY_MAX >> 20);
 
 	lua_sethook(L, prev_hook, prev_mask, prev_count);
 	lua->watchdog_active = prev_active;
@@ -436,6 +486,10 @@ struct tp_lua *tp_lua_create(void) {
 		free(lua);
 		return NULL;
 	}
+	/* Count from here on; what luaL_newstate allocated is already in use. */
+	lua->mem_used = (size_t)lua_gc(lua->L, LUA_GCCOUNT) * 1024 +
+					(size_t)lua_gc(lua->L, LUA_GCCOUNTB);
+	lua_setallocf(lua->L, tp_lua_alloc, lua);
 	lua->spawn_fn = tp_spawn;
 	lua->spawn_argv_fn = tp_spawn_argv;
 
@@ -553,7 +607,10 @@ bool tp_lua_exec_string(struct tp_lua *lua, const char *code, size_t code_len,
 
 	if (rc != LUA_OK) {
 		const char *msg = lua_tostring(L, -1);
-		if (err_buf && err_buf_size > 0)
+		if (err_buf && err_buf_size > 0 && rc == LUA_ERRMEM && lua->mem_refused)
+			snprintf(err_buf, err_buf_size, "Lua memory limit (%d MiB) reached",
+					 TP_LUA_MEMORY_MAX >> 20);
+		else if (err_buf && err_buf_size > 0)
 			snprintf(err_buf, err_buf_size, "%s", msg ? msg : "runtime error");
 		tp_lua_rules_stage_abort(lua);
 		tp_lua_hooks_stage_abort(lua);

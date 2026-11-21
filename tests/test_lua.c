@@ -3,6 +3,7 @@
 #include "check.h"
 #include "tam-pane/lua.h"
 #include <math.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -830,6 +831,87 @@ static void test_startup_hook(void) {
 	tp_lua_destroy(lua);
 }
 
+/* A pathological pattern used to run in C for hours, past the watchdog. */
+static void on_hang_alarm(int sig) {
+	(void)sig;
+	static const char msg[] = "test_lua: hung in Lua pattern matching\n";
+	if (write(2, msg, sizeof(msg) - 1) < 0) {
+	}
+	_exit(1);
+}
+
+/* Work that Lua does inside C library calls stays within the limits:
+ * memory is capped, and pattern matching obeys the wall-clock deadline. */
+static void test_memory_and_pattern_limits(void) {
+	struct tp_lua *lua = tp_lua_create();
+	CHECK(lua != NULL);
+	tp_lua_set_spawn_fn(lua, mock_spawn);
+	struct tp_settings base, out;
+	tp_settings_defaults(&base);
+	char err[256] = {0};
+
+	/* Doubling a string reaches 64 MiB in 26 steps: refused, reported as
+	 * the memory limit, and the state still works afterwards. */
+	const char *grow = "local s = 'x'\nwhile true do s = s .. s end\n";
+	CHECK(!tp_lua_exec_string(lua, grow, strlen(grow), "grow",
+							  TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+							  TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+							  sizeof(err)));
+	CHECK(strstr(err, "memory limit") != NULL);
+	const char *big_rep = "local s = string.rep('x', 1 << 30)\n";
+	CHECK(!tp_lua_exec_string(lua, big_rep, strlen(big_rep), "rep",
+							  TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+							  TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+							  sizeof(err)));
+	CHECK(strstr(err, "memory limit") != NULL);
+
+	signal(SIGALRM, on_hang_alarm);
+	alarm(20);
+	const char *cfg =
+		"local subject = string.rep('a', 255)\n"
+		"tp.bind('Meta+p', function()\n"
+		"  string.find(subject, '.-.-.-.-.-.-b')\n"
+		"  tp.spawn('not-reached')\n"
+		"end)\n"
+		"tp.bind('Meta+g', function()\n"
+		"  local n = select(2, string.rep('ab', 100000):gsub('a', 'c'))\n"
+		"  tp.spawn('gsub:' .. n)\n"
+		"end)\n"
+		"tp.rule{ match = { title = '.-.-.-.-.-.-b' }, floating = true }\n"
+		"tp.rule{ match = { title = 'TAIL' }, tag = 2 }\n"
+		"tp.rule{ match = { title = 'a$' }, tag = 3 }\n";
+	CHECK(tp_lua_exec_string(lua, cfg, strlen(cfg), "limits",
+							 TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+							 TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+							 sizeof(err)));
+
+	/* A runaway pattern in a callback stops at the 100 ms deadline. */
+	reset_spawn_log();
+	uint64_t t0 = now_ms();
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_p));
+	CHECK(now_ms() - t0 < 1000);
+	CHECK(spawn_count == 0);
+
+	/* Long legitimate matching within the deadline still runs. */
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_g));
+	CHECK(spawn_count == 1 && strcmp(last_spawned, "gsub:100000") == 0);
+
+	/* Rules: the runaway rule is cut off and does not match. Subjects are
+	 * cut to TP_LUA_RULE_SUBJECT_MAX bytes, so a long title's tail is not
+	 * seen but its first 255 bytes are. */
+	char title[4096];
+	memset(title, 'a', sizeof(title) - 5);
+	memcpy(title + sizeof(title) - 5, "TAIL", 5);
+	struct tp_rule_result res;
+	t0 = now_ms();
+	CHECK(tp_lua_eval_rules(lua, "app", title, &res));
+	CHECK(now_ms() - t0 < 1000);
+	CHECK(!res.has_floating);
+	CHECK(res.has_tags && res.tags == tp_tag_mask(3));
+	alarm(0);
+	tp_lua_destroy(lua);
+}
+
 static void test_window_rules(void) {
 	struct tp_lua *lua = tp_lua_create();
 	CHECK(lua != NULL);
@@ -1142,6 +1224,7 @@ int main(void) {
 	test_custom_bindings_and_callbacks();
 	test_event_hooks();
 	test_startup_hook();
+	test_memory_and_pattern_limits();
 	test_window_rules();
 	test_live_reload();
 	CHECK_DONE("test_lua");

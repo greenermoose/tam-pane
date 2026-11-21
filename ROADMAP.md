@@ -5,8 +5,9 @@ of versions. Versions follow semantic versioning: during 0.x, the minor
 number marks a phase's big step and the patch number marks each
 milestone inside it.
 
-**Current version:** 0.1.4 (Phase P2 complete: Lua live reload accepted by
-Fred on 2026-11-21; development continues on branch `dev`).
+**Current version:** 0.1.8, a candidate (Phase P2 complete at 0.1.4,
+then hardened in 0.1.5–0.1.8 to fix review R1's findings; 0.1.5–0.1.7
+accepted by Fred on 2026-11-21; development continues on branch `dev`).
 
 ## Tamlinux timing
 
@@ -50,6 +51,22 @@ Fred decided this on 2026-11-17:
   floating, size and monitor.
 - **0.1.4** Reload the configuration without restarting, with errors
   reported and the last good configuration kept.
+
+After P2, review R1 (`reviews/R1-code-review-0.1.4.md`) found bugs that
+are fixed before P3, one version each:
+
+- **0.1.5** A tiled resize drag no longer uses freed memory when another
+  window leaves the tree (B1).
+- **0.1.6** A hook that re-triggers itself no longer freezes the
+  compositor: hook-caused events drain on a timer and stop after 16
+  rounds (B2).
+- **0.1.7** Autostart goes in `tp.on('startup', ...)`, `tp.spawn` is
+  refused while the config loads, and `tp.spawn{prog, arg, ...}` runs a
+  program with no shell (B3).
+- **0.1.8** Lua memory is capped at 64 MiB, and pattern matching obeys
+  the watchdog deadline (B4).
+- Next: VT switching and an emergency quit in C, then R1's remaining
+  fixes (`work/WHATNOW`).
 
 ### Phase P3: daily-driver parity (0.2.x), `plans/P3-daily-parity.md`
 

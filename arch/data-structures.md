@@ -18,7 +18,11 @@ the same commit as any change to them.
     `selmon`, the monitor that receives new windows;
   - the listeners, grouped by the module that owns them;
   - `grab` (`struct tp_pointer_grab`), explicit state for an active
-    `Meta+Left/Right` pointer move or resize drag (no globals).
+    `Meta+Left/Right` pointer move or resize drag (no globals). A tiled
+    drag (`struct tp_dwindle_drag`) holds split-node pointers, plus the
+    tree and generation it began on. When `tp_dwindle_drag_valid` fails,
+    the drag begins again from the pointer, so it never touches a freed
+    node (0.1.5).
   - `layer_shell` (`struct wlr_layer_shell_v1`) and `focused_layer`
     (`struct tp_layer_surface *`) for exclusive or on-demand layer keyboard
     focus.
@@ -33,7 +37,11 @@ the same commit as any change to them.
 - **Lua runtime:** `lua` (`struct tp_lua *`, `include/tam-pane/lua.h`,
   `src/lua.c`, `src/lua_bindings.c`, `src/lua_events.c`, `src/lua_rules.c`)
   owns the embedded Lua 5.5 `lua_State`, watchdog state (instruction budget
-  and monotonic deadline), staged and active key-binding tables
+  and monotonic deadline, also checked by the patched pattern matcher),
+  the memory count of its counting allocator (`mem_used`, capped at
+  `TP_LUA_MEMORY_MAX` inside guarded calls), the spawn handlers
+  (`spawn_fn` for `tp.spawn(cmd)`, `spawn_argv_fn` for
+  `tp.spawn{...}`), staged and active key-binding tables
   (`active_binds` / `staged_binds`, seeded from Lua defaults on creation),
   staged and active event hook lists (`active_hooks` / `staged_hooks`),
   staged and active window-rule lists (`active_rules` / `staged_rules`,
@@ -43,10 +51,16 @@ the same commit as any change to them.
   lightuserdata key; no globals and no wlroots dependency.
 - **Deferred event queue:** `events` (`struct tp_event_queue`,
   `include/tam-pane/server_events.h`, `src/events.c`) holds a heap-backed
-  ring buffer of plain value snapshots (`struct tp_event`, capped at 256
-  entries) plus a one-shot `wl_event_source *idle` scheduled via
-  `wl_event_loop_add_idle()`. Events are enqueued only when hooks exist for
-  that event kind and drained after wlroots callbacks return.
+  ring buffer, capped at 256 entries, of `struct tp_queued_event`: a plain
+  value snapshot (`struct tp_event`) plus its cascade `depth`. Events are
+  enqueued only when hooks exist for that event kind.
+  - Events the compositor raises (depth 0) are drained by a one-shot
+    `idle` source after the wlroots callbacks return.
+  - Events raised while hooks run (`draining`) are one round deeper. They
+    are drained by the `timer` source, so epoll runs between batches, and
+    past `TP_EVENT_CASCADE_MAX` (16) rounds they are dropped with a
+    warning (0.1.6).
+  - The `startup` event is emitted once by `tp_server_start` (0.1.7).
 
 ## tp_monitor (`include/tam-pane/monitor.h`)
 
@@ -110,6 +124,9 @@ the same commit as any change to them.
   - `split_h`, true when the children are side by side;
   - `locked`, true when the orientation is never re-chosen;
   - `box`, the area assigned at the last layout.
+- **Generation:** `gen` changes whenever the tree frees a node (remove,
+  clear), so holders of node pointers can tell when they may be stale
+  (0.1.5).
 - **Insert `x` next to `y`:** `y`'s leaf is replaced by a new inner node,
   with children `x` and `y` (or `y` and `x`). When `y` is unknown, the
   last leaf is used.

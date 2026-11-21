@@ -95,3 +95,6 @@ IN THIS REPOSITORY
     B3-spawn-at-load-and-shell-only-spawn.md
                                       tp.spawn runs at config load, and
                                       only through a shell
+    B4-lua-c-calls-escape-the-watchdog.md
+                                      Lua work inside C library calls
+                                      escapes the watchdog

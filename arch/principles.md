@@ -40,7 +40,10 @@ their structure. These rules decide how code is written here.
 
 - Child processes are double-forked and never waited on (`tp_spawn`).
 - Lua (from P2) runs under an instruction budget and a deadline, and it
-  gets no blocking calls: no `io.popen`, no `os.execute`.
+  gets no blocking calls: no `io.popen`, no `os.execute`. The deadline
+  also covers pattern matching, and Lua memory is capped (0.1.8).
+- Events that Lua hooks cause are drained on a timer, never by
+  re-adding an idle source, so epoll always runs between batches (0.1.6).
 - Files are read with a size cap.
 
 ## Every dependency earns its place

@@ -51,7 +51,8 @@ void tp_events_finish(struct tp_server *s);
 /* Enqueue a pre-built event for deferred idle dispatch. */
 void tp_events_emit(struct tp_server *s, const struct tp_event *ev);
 
-/* Snapshot helpers for the six compositor events. */
+/* Snapshot helpers for the window, tag and monitor events; tp_server_start
+ * emits the startup event directly. */
 void tp_events_emit_window(struct tp_server *s, enum tp_event_kind kind,
 						   const struct tp_client *c, bool focused);
 void tp_events_emit_tag(struct tp_server *s, const struct tp_monitor *m,

@@ -3,48 +3,55 @@ WHATNOW
 What tam-pane is doing now and what comes next. Read this first; revise
 it at the end of every session (work/README-work).
 
-Updated: 2026-11-21, with W18
+Updated: 2026-11-21, with W19
 
 
 STATE
 
-  Version 0.1.7 on branch dev, accepted by Fred on 2026-11-21 after his
-  nested tools/demo-0.1.7 check on commit 51b0425. 0.1.6 was accepted
-  on 0735f35, 0.1.5 on 3b808fd and 0.1.4 (Phase P2) on 0a98a51.
+  Version 0.1.8 on branch dev, a candidate. 0.1.7 was accepted by Fred
+  on 2026-11-21 after his nested tools/demo-0.1.7 check on commit
+  51b0425; 0.1.6 on 0735f35; 0.1.5 on 3b808fd; 0.1.4 (Phase P2) on
+  0a98a51.
 
-  Review R1 (reviews/R1-code-review-0.1.4.md) is being worked through:
-  B1 (tiled drag use-after-free, W16) and B2 (hook feedback loop froze
-  the compositor, W17) are verified. W18 fixed B3: tp.spawn is refused
-  while the config loads, autostart goes in tp.on('startup', ...), and
-  tp.spawn{prog, arg, ...} runs a program with no shell. 0.1.7 binary
-  SHA-256:
-  7ad7e6a94943c01c222f5c4950cbfd5048d36d456008b4814279136f6e54784d
+  Review R1 (reviews/R1-code-review-0.1.4.md) is being worked through.
+  Verified: B1 (tiled drag use-after-free, W16), B2 (hook feedback loop
+  froze the compositor, W17) and B3 (spawn at load, shell-only spawn,
+  W18). W19 fixed B4: Lua memory is capped at 64 MiB, pattern matching
+  obeys the watchdog deadline (one marked patch to vendored lstrlib.c,
+  UPSTREAM.md), and rules see 255 bytes of a title. W19 also audited
+  every doc in the repository. 0.1.8 binary SHA-256:
+  a1704c534ad3f0c8cab4085648deb7f79191bd98e942b3b1f6498ab11feda819
 
-  Automated checks pass: 28 tag, 143 dwindle, 429 Lua, 284 headless
+  Automated checks pass: 28 tag, 143 dwindle, 444 Lua, 284 headless
   input, 4 smoke, nm -D symbol check, tests/test_nested_input.py.
 
   Dependencies today: wlroots 0.20, wayland-server, xkbcommon, libtam
-  (static), and Lua 5.5.1 (vendored in third_party/lua/).
+  (static), and Lua 5.5.1 (vendored in third_party/lua/, one patch).
 
 
 NEXT
 
   Finish R1's fix order before P3, one bumped version each, with a
-  failing-first test, a tools/demo-<version> for Fred, and the record's
-  status lines updated:
+  failing-first test, a tools/demo-<version> for Fred, the record's
+  status lines, and every affected doc updated (W19 lists them):
 
-  1. R1 finding 8: a counting Lua allocator with a cap, and rule
-     subjects truncated to 255 bytes (src/lua.c, src/lua_rules.c).
-  2. R1 finding 10: VT switching and an emergency quit in C, before Lua.
-  3. R1 finding 13 (fixes 6), then 12, 4 and 5.
-  4. R1 findings 9, 11 and 15 to 17: write them into the P3 and P4
+  1. R1 finding 10: VT switching (wlr_session_change_vt on
+     Ctrl+Alt+F1..F12) and an emergency quit, handled in C in
+     src/input/keyboard.c before Lua sees the key.
+  2. R1 finding 13 (fixes 6), then 12 (also makes the sync_tree comment
+     in src/layout/arrange.c true), 4 and 5.
+  3. R1 findings 9, 11 and 15 to 17: write them into the P3 and P4
      plans as design work.
-  5. Then P3, 0.2.0 (plans/P3-daily-parity.md).
+  4. Then P3, 0.2.0 (plans/P3-daily-parity.md).
 
 
 WAITING FOR FRED
 
-  Nothing.
+  - A check of 0.1.8 with tools/demo-0.1.8 (nested): Meta+P (runaway
+    pattern cut off), Meta+M with pane-mem before and after (memory
+    capped), Meta+G (long gsub still works), Meta+N (long-titled window
+    opens on the current tag). Pass: tam-pane never stops responding.
+    If he accepts, set B4 to Verified with the build's SHA-256.
 
 
 WATCH OUT
@@ -60,5 +67,7 @@ WATCH OUT
     where he tests.
   - A Fred demo must not need a key pressed while Meta and a mouse
     button are held; use delays instead (W16).
-  - Bumping VERSION does not rebuild main.o or lua.o; run
-    make -B build/main.o build/lua.o and check tam-pane -v.
+  - third_party/lua/lstrlib.c carries one patch (lines marked
+    "tam-pane patch"); re-apply it when updating Lua (UPSTREAM.md).
+  - Every change updates every doc it makes wrong: README, ROADMAP.md,
+    UPSTREAM.md, arch/, plans/, and test headers (Fred, W19).

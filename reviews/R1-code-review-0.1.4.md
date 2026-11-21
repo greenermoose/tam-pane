@@ -108,7 +108,7 @@ schedules are not findings here.
   for seconds in C against a long client title.
 - **Fix:** a counting allocator with a cap, and rule subjects truncated to
   255 bytes as the events already are.
-- **Status:** open
+- **Status:** became B4, fixed in 0.1.8
 
 ### 9. There is no privileged-protocol filter (medium)
 
@@ -204,7 +204,7 @@ schedules are not findings here.
   - The Makefile does not rebuild `main.o` and `lua.o` when `VERSION`
     changes, so a bumped build can still report the old version (seen
     while building 0.1.5).
-- **Status:** open
+- **Status:** open; the Makefile point is fixed in 0.1.8
 
 ## Limits
 
