@@ -1,6 +1,6 @@
 # tam-pane Lua API (`arch/lua-api.md`)
 
-**Status:** 0.1.0–0.1.2 shipped; 0.1.3–0.1.4 names are a draft for review.
+**Status:** 0.1.0–0.1.3 shipped; 0.1.4 names are a draft for review.
 
 tam-pane embeds **Lua 5.5.1** statically from `third_party/lua/` with no
 dynamic symbol exports (`lua_*` symbols stay internal to `tam-pane`).
@@ -171,8 +171,52 @@ otherwise. Callable only while loading config.
 Removes all staged hooks, or only those for `event` when an event name is
 passed. Callable only while loading config.
 
-## Draft for 0.1.3–0.1.4 (for review)
+## Shipped in 0.1.3
 
-- **0.1.3 Window rules:** `tp.rule{ match = { app_id = "...", title = "..." }, ... }`.
+Window rules match new toplevels on `app_id` and/or `title` using Lua's built-in
+`string.find` pattern engine (no `pcre2` dependency). Patterns are validated at
+config load time so malformed patterns fail loudly with atomic rollback; at map
+time each pattern runs under the runtime watchdog (1,000,000 instructions /
+100 ms `CLOCK_MONOTONIC` deadline) using a cached reference to `string.find`.
+
+Rule registrations stage alongside `tp.config`, `tp.bind`, and `tp.on`, starting
+from an empty set on each config load and rolling back atomically on error.
+Multiple matching rules evaluate in registration order and compose, with later
+rules overriding earlier ones for fields they set.
+
+### `tp.rule(spec)`
+
+Registers a window rule and returns an integer handle `id` (`>= 1`). Callable
+only while loading config.
+
+- **`match`** (required table): must contain `app_id` and/or `title` (non-empty
+  Lua pattern strings, max 255 bytes). When both are set, both must match.
+- **Properties** (at least one required; unknown keys raise an error):
+
+| Key | Type | Notes |
+|---|---|---|
+| `tag` | integer `1..9` | Assign window to a single tag (mutually exclusive with `tags`) |
+| `tags` | table of integers `1..9` | Non-empty array of tag numbers (mutually exclusive with `tag`) |
+| `floating` | boolean | Force floating (`true`) or tiled (`false`), overriding dialog auto-float |
+| `size` | `{ w, h }` or `{ w = ..., h = ... }` | Floating dimensions in pixels (`64..16384`); remembered even when tiled |
+| `position` | `{ x, y }`, `{ x = ..., y = ... }`, or `"center"` | Floating offset relative to target monitor `usable` area (`-16384..16384`), or centered on `usable` |
+| `monitor` | string (max 127 bytes) | Target output name (e.g. `"DP-2"`); falls back to active monitor with a warning if disconnected |
+
+When a rule routes a new window to a non-visible tag or a monitor other than
+the active one, it is placed on that tag/monitor without stealing keyboard focus
+from the currently active window. `window.open` hooks observe the final
+rule-applied state.
+
+### `tp.remove_rule(id)`
+
+Removes the staged rule with handle `id`. Returns `true` if removed, `false`
+otherwise. Callable only while loading config.
+
+### `tp.clear_rules()`
+
+Removes all staged window rules. Callable only while loading config.
+
+## Draft for 0.1.4 (for review)
+
 - **0.1.4 Reload:** `tp.dsp.reload()` / IPC reload keeping the last good
   configuration on error.

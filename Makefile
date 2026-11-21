@@ -59,7 +59,8 @@ LUA_OBJS = $(patsubst third_party/lua/%.c,build/lua/%.o,$(LUA_SRCS))
 
 # Pure logic: no wlroots, so the unit tests build without it.
 CORE_SRCS = src/tags.c src/layout/dwindle.c
-LUA_HOST_SRCS = src/lua.c src/lua_bindings.c src/lua_events.c src/settings.c src/spawn.c
+LUA_HOST_SRCS = src/lua.c src/lua_bindings.c src/lua_events.c src/lua_rules.c \
+	src/settings.c src/spawn.c
 # The compositor proper.
 WM_SRCS = src/main.c src/server.c src/events.c src/monitor.c src/layer.c \
 	src/client.c src/focus.c src/bindings.c src/layout/arrange.c \

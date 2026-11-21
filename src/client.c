@@ -3,6 +3,7 @@
 #include "tam-pane/focus.h"
 #include "tam-pane/input.h"
 #include "tam-pane/layout/arrange.h"
+#include "tam-pane/lua.h"
 #include "tam-pane/monitor.h"
 #include "tam-pane/server.h"
 #include "tam-pane/server_events.h"
@@ -79,9 +80,29 @@ static void on_map(struct wl_listener *l, void *data) {
 	struct tp_client *c = wl_container_of(l, c, map);
 	struct tp_server *s = c->server;
 
+	struct tp_rule_result rule = {0};
+	if (s->lua) {
+		tp_lua_eval_rules(s->lua, c->toplevel->app_id, c->toplevel->title,
+						  &rule);
+	}
+
 	c->mapped = true;
 	c->mon = s->selmon;
-	c->tags = c->mon ? tp_tagview_current(&c->mon->view) : tp_tag_mask(1);
+	if (rule.has_monitor) {
+		struct tp_monitor *target = tp_monitor_by_name(s, rule.monitor);
+		if (target)
+			c->mon = target;
+		else
+			tam_log_warn(
+				"window rule: monitor '%s' not found, using active monitor",
+				rule.monitor);
+	}
+
+	if (rule.has_tags)
+		c->tags = rule.tags;
+	else
+		c->tags = c->mon ? tp_tagview_current(&c->mon->view) : tp_tag_mask(1);
+
 	struct wlr_box g = c->toplevel->base->geometry;
 	c->geom = c->float_geom = (struct tp_rect){0, 0, g.width, g.height};
 	/* Dialogs and fixed-size windows float, as in every tiling manager. */
@@ -91,18 +112,49 @@ static void on_map(struct wl_listener *l, void *data) {
 					   c->toplevel->current.max_width &&
 				   c->toplevel->current.min_height ==
 					   c->toplevel->current.max_height);
-	if (c->floating && c->mon) {
-		c->float_geom.x = c->mon->area.x + (c->mon->area.w - g.width) / 2;
-		c->float_geom.y = c->mon->area.y + (c->mon->area.h - g.height) / 2;
+	if (rule.has_floating)
+		c->floating = rule.floating;
+
+	if (rule.has_size) {
+		c->float_geom.w = rule.width;
+		c->float_geom.h = rule.height;
+	} else if (c->floating && c->mon &&
+			   (c->float_geom.w < TP_FLOAT_MIN_W ||
+				c->float_geom.h < TP_FLOAT_MIN_H)) {
+		int32_t w = c->mon->usable.w / 2;
+		int32_t h = c->mon->usable.h / 2;
+		if (w < TP_FLOAT_MIN_W)
+			w = TP_FLOAT_MIN_W;
+		if (h < TP_FLOAT_MIN_H)
+			h = TP_FLOAT_MIN_H;
+		c->float_geom.w = w;
+		c->float_geom.h = h;
+	}
+
+	if (c->mon) {
+		if (rule.pos_mode == TP_RULE_POS_COORDS) {
+			c->float_geom.x = c->mon->usable.x + rule.x;
+			c->float_geom.y = c->mon->usable.y + rule.y;
+		} else if (rule.pos_mode == TP_RULE_POS_CENTER || c->floating) {
+			c->float_geom.x =
+				c->mon->usable.x + (c->mon->usable.w - c->float_geom.w) / 2;
+			c->float_geom.y =
+				c->mon->usable.y + (c->mon->usable.h - c->float_geom.h) / 2;
+		}
 	}
 	apply_floating(c);
 
+	bool focus_now = tp_client_visible(c) && c->mon == s->selmon;
 	wl_list_insert(&s->clients, &c->link);
-	wl_list_insert(&s->focus_stack, &c->flink);
+	if (focus_now)
+		wl_list_insert(&s->focus_stack, &c->flink);
+	else
+		wl_list_insert(s->focus_stack.prev, &c->flink);
 	if (c->mon)
 		tp_arrange(c->mon);
 	tp_events_emit_window(s, TP_EVENT_WINDOW_OPEN, c, false);
-	tp_focus(s, c);
+	if (focus_now)
+		tp_focus(s, c);
 	tam_log_debug("window mapped: %s, tags 0x%x, %s",
 				  c->toplevel->app_id ? c->toplevel->app_id : "(no app id)",
 				  c->tags, c->floating ? "floating" : "tiled");

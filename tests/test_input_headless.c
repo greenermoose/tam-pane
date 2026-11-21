@@ -367,8 +367,8 @@ static int create_shm_buffer(struct test_client *client) {
 	return client->buffer ? 0 : -1;
 }
 
-static void configure_window(struct test_client *client,
-		struct test_window *window, const char *title) {
+static void configure_window_app(struct test_client *client,
+		struct test_window *window, const char *app_id, const char *title) {
 	*window = (struct test_window){ .client = client };
 	window->surface = wl_compositor_create_surface(client->compositor);
 	window->xdg_surface = xdg_wm_base_get_xdg_surface(client->wm_base,
@@ -377,8 +377,13 @@ static void configure_window(struct test_client *client,
 	window->toplevel = xdg_surface_get_toplevel(window->xdg_surface);
 	xdg_toplevel_add_listener(window->toplevel, &toplevel_listener, window);
 	xdg_toplevel_set_title(window->toplevel, title);
-	xdg_toplevel_set_app_id(window->toplevel, "tam-pane-test");
+	xdg_toplevel_set_app_id(window->toplevel, app_id);
 	wl_surface_commit(window->surface);
+}
+
+static void configure_window(struct test_client *client,
+		struct test_window *window, const char *title) {
+	configure_window_app(client, window, "tam-pane-test", title);
 }
 
 static void destroy_window(struct test_window *window) {
@@ -1131,6 +1136,153 @@ int main(void) {
 		if (!pump(&client, &server)) goto fail;
 	CHECK(has_hook_event("after-watchdog"));
 	CHECK(tp_tagview_current(&server.selmon->view) == tp_tag_mask(4));
+
+	/*
+	 * Lua window rules (0.1.3): floating/size/position, tag routing without
+	 * stealing focus, multi-tag, multi-monitor, unknown-monitor fallback,
+	 * and window.open observing rule-applied state.
+	 */
+	chord(&keyboard, KEY_1, false, false);
+	for (unsigned int i = 0; i < 10; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(tp_tagview_current(&server.selmon->view) == tp_tag_mask(1));
+
+	struct wlr_output *o5 = wlr_headless_add_output(headless, 800, 600);
+	CHECK(o5 != NULL);
+	for (unsigned int i = 0; i < 10; i++)
+		if (!pump(&client, &server)) goto fail;
+	struct tp_monitor *mon_primary = server.selmon;
+	struct tp_monitor *mon_second = tp_monitor_by_name(&server, "HEADLESS-5");
+	CHECK(mon_primary != NULL && mon_second != NULL && mon_primary != mon_second);
+
+	lf = fopen(lua_cfg, "wb");
+	CHECK(lf != NULL);
+	if (lf) {
+		fputs("tp.rule{\n"
+			  "  match = { app_id = '^rule%-float$' },\n"
+			  "  floating = true,\n"
+			  "  size = { 500, 320 },\n"
+			  "  position = { 40, 50 },\n"
+			  "}\n"
+			  "tp.rule{\n"
+			  "  match = { title = '^RuleTag2$' },\n"
+			  "  tag = 2,\n"
+			  "}\n"
+			  "tp.rule{\n"
+			  "  match = { app_id = '^rule%-multi$' },\n"
+			  "  tags = { 1, 3 },\n"
+			  "  floating = false,\n"
+			  "}\n"
+			  "tp.rule{\n"
+			  "  match = { app_id = '^rule%-mon2$' },\n"
+			  "  monitor = 'HEADLESS-5',\n"
+			  "  floating = true,\n"
+			  "  size = { 300, 200 },\n"
+			  "  position = 'center',\n"
+			  "}\n"
+			  "tp.rule{\n"
+			  "  match = { app_id = '^rule%-badmon$' },\n"
+			  "  monitor = 'NO-SUCH-MON',\n"
+			  "  floating = true,\n"
+			  "}\n"
+			  "tp.on('window.open', function(ev)\n"
+			  "  tp.spawn(string.format('ropen:%s:%s:%d:%s:%dx%d+%d+%d',\n"
+			  "    ev.app_id, ev.monitor, ev.tag, tostring(ev.floating),\n"
+			  "    ev.w, ev.h, ev.x, ev.y))\n"
+			  "end)\n",
+			  lf);
+		fclose(lf);
+	}
+	CHECK(tp_lua_load_file(server.lua, lua_cfg, true, &server.settings,
+						   &server.settings));
+	CHECK(tp_lua_rule_count(server.lua) == 5);
+
+	/* 1) Floating + size + position rule on primary monitor. */
+	hook_event_count = 0;
+	struct test_window rw_float;
+	configure_window_app(&client, &rw_float, "rule-float", "FloatWin");
+	for (unsigned int i = 0; i < 100 && !rw_float.configured; i++)
+		if (!pump(&client, &server)) goto fail;
+	for (unsigned int i = 0; i < 15; i++)
+		if (!pump(&client, &server)) goto fail;
+	struct tp_client *c_float = tp_focused(&server);
+	CHECK(c_float != NULL && c_float->floating);
+	CHECK(c_float->geom.w == 500 && c_float->geom.h == 320);
+	CHECK(c_float->geom.x == mon_primary->usable.x + 40);
+	CHECK(c_float->geom.y == mon_primary->usable.y + 50);
+	char expected_ropen[128];
+	snprintf(expected_ropen, sizeof(expected_ropen),
+			 "ropen:rule-float:%s:1:true:500x320+%d+%d",
+			 mon_primary->output->name,
+			 mon_primary->usable.x + 40, mon_primary->usable.y + 50);
+	CHECK(has_hook_event(expected_ropen));
+
+	/* 2) Title rule routes window to tag 2 without stealing focus on tag 1. */
+	struct test_window rw_tag2;
+	configure_window_app(&client, &rw_tag2, "tam-pane-test", "RuleTag2");
+	for (unsigned int i = 0; i < 100 && !rw_tag2.configured; i++)
+		if (!pump(&client, &server)) goto fail;
+	for (unsigned int i = 0; i < 15; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(tp_focused(&server) == c_float);
+	chord(&keyboard, KEY_2, false, false);
+	for (unsigned int i = 0; i < 10; i++)
+		if (!pump(&client, &server)) goto fail;
+	struct tp_client *c_tag2 = tp_focused(&server);
+	CHECK(c_tag2 != NULL && c_tag2 != c_float);
+	CHECK(c_tag2->tags == tp_tag_mask(2) && tp_client_visible(c_tag2));
+	chord(&keyboard, KEY_1, false, false);
+	for (unsigned int i = 0; i < 10; i++)
+		if (!pump(&client, &server)) goto fail;
+
+	/* 3) Multi-tag rule { 1, 3 } with floating = false. */
+	struct test_window rw_multi;
+	configure_window_app(&client, &rw_multi, "rule-multi", "Multi");
+	for (unsigned int i = 0; i < 100 && !rw_multi.configured; i++)
+		if (!pump(&client, &server)) goto fail;
+	for (unsigned int i = 0; i < 15; i++)
+		if (!pump(&client, &server)) goto fail;
+	struct tp_client *c_multi = tp_focused(&server);
+	CHECK(c_multi != NULL && !c_multi->floating);
+	CHECK(c_multi->tags == (tp_tag_mask(1) | tp_tag_mask(3)));
+
+	/* 4) Monitor rule places centered floating window on HEADLESS-5 without
+	 * stealing focus from mon_primary. */
+	hook_event_count = 0;
+	struct test_window rw_mon2;
+	configure_window_app(&client, &rw_mon2, "rule-mon2", "Mon2");
+	for (unsigned int i = 0; i < 100 && !rw_mon2.configured; i++)
+		if (!pump(&client, &server)) goto fail;
+	for (unsigned int i = 0; i < 15; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(server.selmon == mon_primary);
+	CHECK(tp_focused(&server) == c_multi);
+	int32_t exp_cx = mon_second->usable.x + (mon_second->usable.w - 300) / 2;
+	int32_t exp_cy = mon_second->usable.y + (mon_second->usable.h - 200) / 2;
+	snprintf(expected_ropen, sizeof(expected_ropen),
+			 "ropen:rule-mon2:HEADLESS-5:1:true:300x200+%d+%d", exp_cx, exp_cy);
+	CHECK(has_hook_event(expected_ropen));
+
+	/* 5) Unknown monitor falls back to active monitor while applying other fields. */
+	struct test_window rw_badmon;
+	configure_window_app(&client, &rw_badmon, "rule-badmon", "BadMon");
+	for (unsigned int i = 0; i < 100 && !rw_badmon.configured; i++)
+		if (!pump(&client, &server)) goto fail;
+	for (unsigned int i = 0; i < 15; i++)
+		if (!pump(&client, &server)) goto fail;
+	struct tp_client *c_badmon = tp_focused(&server);
+	CHECK(c_badmon != NULL && c_badmon->mon == mon_primary && c_badmon->floating);
+
+	destroy_window(&rw_badmon);
+	destroy_window(&rw_mon2);
+	destroy_window(&rw_multi);
+	destroy_window(&rw_tag2);
+	destroy_window(&rw_float);
+	for (unsigned int i = 0; i < 20; i++)
+		if (!pump(&client, &server)) goto fail;
+	wlr_output_destroy(o5);
+	for (unsigned int i = 0; i < 10; i++)
+		if (!pump(&client, &server)) goto fail;
 
 	unlink(lua_cfg);
 	rmdir(lua_dir);

@@ -1,0 +1,64 @@
+W14 LUA WINDOW RULES (0.1.3)
+
+Date: 2026-11-21
+AI harness: agy 1.5.14
+AI model: Gemini 4 Neon (Medium)
+
+
+GUIDANCE
+
+  Fred: "/plan Do the next work slice for tam-pane."
+  Fred: "I see it. Approved. Proceed."
+
+
+DONE
+
+  - Added pure rule result types in include/tam-pane/rules.h (no wlroots
+    or Wayland dependency) and declared tp_lua_rule_count() and
+    tp_lua_eval_rules() in include/tam-pane/lua.h.
+  - Added src/lua_rules.c implementing tp.rule(spec), tp.remove_rule(id),
+    and tp.clear_rules(). Matches windows on app_id and/or title using
+    Lua's built-in string.find pattern engine (no pcre2), cached in the
+    Lua registry so user scripts cannot shadow it. Patterns validate at
+    config load time; runtime matching runs under the runtime watchdog
+    (1,000,000 instructions / 100 ms deadline). Rules stage and roll back
+    atomically alongside tp.config, tp.bind, and tp.on, and compose in
+    registration order with later rules overriding earlier fields.
+  - Supported properties: tag (1..9), tags ({ 1..9 }), floating (bool),
+    size ({ w, h } or { w = ..., h = ... }), position ({ x, y },
+    { x = ..., y = ... }, or "center" relative to target monitor usable
+    area), and monitor (output name).
+  - Added tp_monitor_by_name() in include/tam-pane/monitor.h and
+    src/monitor.c, and wired rule evaluation into src/client.c on_map().
+    Windows routed to a non-visible tag or non-active monitor map without
+    stealing keyboard focus; window.open hooks observe the rule-applied
+    state.
+  - Updated Makefile to compile src/lua_rules.c into LUA_HOST_SRCS.
+  - Expanded tests/test_lua.c (316 checks) and tests/test_input_headless.c
+    (242 checks) covering pattern matching, rule composition, validation,
+    atomic rollback, string.find shadowing resilience, floating/size/pos,
+    tag routing without focus steal, multi-tag, multi-monitor, unknown
+    monitor fallback, and window.open hook observation.
+  - Added tools/demo-0.1.3 and tools/demo-0.1.3.lua for Fred's brief
+    nested check.
+  - Bumped VERSION to 0.1.3 and updated arch/lua-api.md,
+    arch/data-structures.md, ROADMAP.md, plans/P2-lua.md, and README.
+  - Clean build with zero warnings and full test suite pass: 28 tag, 133
+    dwindle, 316 Lua, 242 headless input, both smoke checks, nm -D symbol
+    check, and tests/test_nested_input.py.
+  - Candidate binary SHA-256 (0.1.3):
+    fd4029ca5a198b68a018111e5a509b70df84ebc2203a18acd6d847418d4a09a6
+
+
+FAILED
+
+  Nothing.
+
+
+HANDOFF
+
+  - 0.1.3 is built, tested, and ready for Fred's brief nested check via
+    tools/demo-0.1.3 (binary SHA-256
+    fd4029ca5a198b68a018111e5a509b70df84ebc2203a18acd6d847418d4a09a6).
+  - Next slice after acceptance: P2, 0.1.4 (live configuration reload in
+    place, keeping the last good configuration on error).

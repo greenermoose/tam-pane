@@ -381,6 +381,18 @@ struct tp_monitor *tp_monitor_at(struct tp_server *s, double x, double y) {
 	return o ? o->data : NULL;
 }
 
+struct tp_monitor *tp_monitor_by_name(struct tp_server *s, const char *name) {
+	if (!s || !name || !*name)
+		return NULL;
+	struct tp_monitor *m;
+	wl_list_for_each(m, &s->monitors, link) {
+		if (m->output && m->output->name &&
+			strcmp(m->output->name, name) == 0)
+			return m;
+	}
+	return NULL;
+}
+
 struct tp_monitor *tp_monitor_cycle(struct tp_server *s, int dir) {
 	if (!s->selmon || wl_list_length(&s->monitors) < 2)
 		return NULL;

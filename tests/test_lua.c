@@ -748,6 +748,186 @@ static void test_event_hooks(void) {
 	tp_lua_destroy(lua);
 }
 
+static void test_window_rules(void) {
+	struct tp_lua *lua = tp_lua_create();
+	CHECK(lua != NULL);
+	tp_lua_set_spawn_fn(lua, mock_spawn);
+
+	struct tp_settings base, out;
+	tp_settings_defaults(&base);
+	out = base;
+	char err[256] = {0};
+
+	/* Initially no rules; eval fast-path returns false. */
+	struct tp_rule_result res;
+	CHECK(tp_lua_rule_count(lua) == 0);
+	CHECK(!tp_lua_eval_rules(lua, "foot", "shell", &res));
+	CHECK(!res.matched);
+
+	/* Pattern matching, composition, later-rule precedence, remove_rule,
+	 * array & keyed size/position, center, tag vs tags, monitor, floating. */
+	const char *cfg =
+		"local r1 = tp.rule{\n"
+		"  match = { app_id = '^foot$' },\n"
+		"  tag = 2,\n"
+		"  size = { 800, 500 },\n"
+		"}\n"
+		"local r2 = tp.rule{\n"
+		"  match = { app_id = '^foot$', title = 'float%-%d+' },\n"
+		"  floating = true,\n"
+		"  position = { 40, 60 },\n"
+		"  monitor = 'DP-2',\n"
+		"}\n"
+		"local r_drop = tp.rule{\n"
+		"  match = { app_id = '^foot$' },\n"
+		"  tag = 9,\n"
+		"}\n"
+		"assert(r1 == 1 and r2 == 2 and r_drop == 3)\n"
+		"assert(tp.remove_rule(r_drop) == true)\n"
+		"assert(tp.remove_rule(999) == false)\n"
+		"tp.rule{\n"
+		"  match = { title = '^Dialog:' },\n"
+		"  tags = { 1, 3, 5 },\n"
+		"  floating = false,\n"
+		"  size = { w = 640, h = 480 },\n"
+		"  position = 'center',\n"
+		"}\n"
+		"tp.rule{\n"
+		"  match = { app_id = 'pavu.*' },\n"
+		"  floating = true,\n"
+		"  position = { x = -10, y = 25 },\n"
+		"}\n";
+	CHECK(tp_lua_exec_string(lua, cfg, strlen(cfg), "rules_cfg",
+							 TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+							 TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+							 sizeof(err)));
+	CHECK(tp_lua_rule_count(lua) == 4);
+
+	/* Rule 1 only: app_id='foot', title='shell'. */
+	CHECK(tp_lua_eval_rules(lua, "foot", "shell", &res));
+	CHECK(res.matched);
+	CHECK(res.has_tags && res.tags == tp_tag_mask(2));
+	CHECK(!res.has_floating);
+	CHECK(res.has_size && res.width == 800 && res.height == 500);
+	CHECK(res.pos_mode == TP_RULE_POS_NONE);
+	CHECK(!res.has_monitor);
+
+	/* Rules 1 + 2 compose: tag & size from r1, floating/pos/monitor from r2. */
+	CHECK(tp_lua_eval_rules(lua, "foot", "float-42", &res));
+	CHECK(res.matched);
+	CHECK(res.has_tags && res.tags == tp_tag_mask(2));
+	CHECK(res.has_floating && res.floating == true);
+	CHECK(res.has_size && res.width == 800 && res.height == 500);
+	CHECK(res.pos_mode == TP_RULE_POS_COORDS && res.x == 40 && res.y == 60);
+	CHECK(res.has_monitor && strcmp(res.monitor, "DP-2") == 0);
+
+	/* Rule 3: multi-tag bitmask, floating=false, keyed size, position='center'. */
+	CHECK(tp_lua_eval_rules(lua, "other", "Dialog: Save", &res));
+	CHECK(res.matched);
+	CHECK(res.has_tags &&
+		  res.tags == (tp_tag_mask(1) | tp_tag_mask(3) | tp_tag_mask(5)));
+	CHECK(res.has_floating && res.floating == false);
+	CHECK(res.has_size && res.width == 640 && res.height == 480);
+	CHECK(res.pos_mode == TP_RULE_POS_CENTER);
+
+	/* Rule 4: keyed position with negative x, NULL title handled safely. */
+	CHECK(tp_lua_eval_rules(lua, "pavucontrol", NULL, &res));
+	CHECK(res.matched);
+	CHECK(res.has_floating && res.floating == true);
+	CHECK(res.pos_mode == TP_RULE_POS_COORDS && res.x == -10 && res.y == 25);
+
+	/* Non-matching window returns false (NULL app_id & title safe). */
+	CHECK(!tp_lua_eval_rules(lua, "firefox", "Home", &res));
+	CHECK(!res.matched);
+	CHECK(!tp_lua_eval_rules(lua, NULL, NULL, &res));
+
+	/* Atomic rollback: failed config keeps previous 4 active rules intact. */
+	const char *bad_reload =
+		"tp.rule{ match = { app_id = 'firefox' }, tag = 4 }\n"
+		"error('rollback rules')\n";
+	CHECK(!tp_lua_exec_string(lua, bad_reload, strlen(bad_reload), "bad_rules",
+							  TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+							  TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+							  sizeof(err)));
+	CHECK(tp_lua_rule_count(lua) == 4);
+	CHECK(!tp_lua_eval_rules(lua, "firefox", "Home", &res));
+	CHECK(tp_lua_eval_rules(lua, "foot", "shell", &res));
+
+	/* User shadowing global string.find does not break rule matching. */
+	const char *shadow_cfg =
+		"string.find = function() error('shadowed') end\n"
+		"tp.rule{ match = { app_id = '^kitty$' }, tag = 3 }\n";
+	CHECK(tp_lua_exec_string(lua, shadow_cfg, strlen(shadow_cfg), "shadow",
+							 TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+							 TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+							 sizeof(err)));
+	CHECK(tp_lua_eval_rules(lua, "kitty", "term", &res));
+	CHECK(res.has_tags && res.tags == tp_tag_mask(3));
+
+	/* tp.clear_rules() empties staged rules. */
+	const char *clear_cfg =
+		"tp.rule{ match = { app_id = 'a' }, tag = 1 }\n"
+		"tp.clear_rules()\n";
+	CHECK(tp_lua_exec_string(lua, clear_cfg, strlen(clear_cfg), "clear_rules",
+							 TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+							 TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+							 sizeof(err)));
+	CHECK(tp_lua_rule_count(lua) == 0);
+
+	/* Validation errors: bad specs, malformed Lua patterns, conflicts. */
+	const char *bad_rules[] = {
+		"tp.rule('not-a-table')",
+		"tp.rule{ tag = 1 }",
+		"tp.rule{ match = {}, tag = 1 }",
+		"tp.rule{ match = { app_id = '' }, tag = 1 }",
+		"tp.rule{ match = { appid = 'foot' }, tag = 1 }",
+		"tp.rule{ match = { app_id = '[unclosed' }, tag = 1 }",
+		"tp.rule{ match = { title = '%b' }, tag = 1 }",
+		"tp.rule{ match = { app_id = 'foot' } }",
+		"tp.rule{ match = { app_id = 'foot' }, tag = 0 }",
+		"tp.rule{ match = { app_id = 'foot' }, tag = 10 }",
+		"tp.rule{ match = { app_id = 'foot' }, tags = 2 }",
+		"tp.rule{ match = { app_id = 'foot' }, tags = {} }",
+		"tp.rule{ match = { app_id = 'foot' }, tags = { 1, 10 } }",
+		"tp.rule{ match = { app_id = 'foot' }, tag = 1, tags = { 2 } }",
+		"tp.rule{ match = { app_id = 'foot' }, floating = 'yes' }",
+		"tp.rule{ match = { app_id = 'foot' }, size = { 32, 200 } }",
+		"tp.rule{ match = { app_id = 'foot' }, size = { 200 } }",
+		"tp.rule{ match = { app_id = 'foot' }, size = { 200, h = 200 } }",
+		"tp.rule{ match = { app_id = 'foot' }, position = 'top-left' }",
+		"tp.rule{ match = { app_id = 'foot' }, position = { 10 } }",
+		"tp.rule{ match = { app_id = 'foot' }, monitor = '' }",
+		"tp.rule{ match = { app_id = 'foot' }, float = true }",
+		"tp.remove_rule('bad')",
+	};
+	for (size_t i = 0; i < sizeof(bad_rules) / sizeof(bad_rules[0]); i++) {
+		CHECK(!tp_lua_exec_string(lua, bad_rules[i], strlen(bad_rules[i]),
+								  "bad_rule", TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+								  TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+								  sizeof(err)));
+	}
+
+	/* Calling tp.rule / tp.remove_rule / tp.clear_rules at runtime fails. */
+	const char *rt_cfg =
+		"tp.on('window.open', function()\n"
+		"  local ok1 = pcall(tp.rule, { match = { app_id = 'a' }, tag = 1 })\n"
+		"  local ok2 = pcall(tp.remove_rule, 1)\n"
+		"  local ok3 = pcall(tp.clear_rules)\n"
+		"  tp.spawn(tostring(ok1) .. ':' .. tostring(ok2) .. ':' .. tostring(ok3))\n"
+		"end)\n";
+	CHECK(tp_lua_exec_string(lua, rt_cfg, strlen(rt_cfg), "rt_rules",
+							 TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+							 TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+							 sizeof(err)));
+	struct tp_event ev = { .kind = TP_EVENT_WINDOW_OPEN };
+	reset_spawn_log();
+	CHECK(tp_lua_emit_event(lua, &ev) == 1);
+	CHECK(spawn_log_count == 1 &&
+		  strcmp(spawn_log[0], "false:false:false") == 0);
+
+	tp_lua_destroy(lua);
+}
+
 int main(void) {
 	tam_log_set_level(TAM_LOG_ERROR);
 	test_config_and_fallback();
@@ -758,5 +938,6 @@ int main(void) {
 	test_default_bindings();
 	test_custom_bindings_and_callbacks();
 	test_event_hooks();
+	test_window_rules();
 	CHECK_DONE("test_lua");
 }

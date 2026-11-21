@@ -1,0 +1,22 @@
+#!/bin/sh
+# Launch tam-pane 0.1.3 nested under Hyprland with tools/demo-0.1.3.lua
+# to demonstrate Lua window rules (floating, size, position, tags).
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+startup='foot sh -c '\''
+cat << "EOF"
+=== tam-pane 0.1.3 interactive demo (tools/demo-0.1.3.lua) ===
+
+Press these keys inside the nested window (watch host terminal for [rule]):
+  Meta+u          open floating terminal (app_id=demo-float, 640x400 at 80,60)
+  Meta+t          open terminal titled "Tag2 Demo" -> sent to tag 2 (no focus steal)
+  Meta+2 / Meta+1 switch to tag 2 to see it, back to tag 1
+  Meta+w          close focused window
+  Meta+Shift+E    quit tam-pane (Ctrl+Alt+Esc restores host shortcuts)
+
+EOF
+exec "${SHELL:-/bin/sh}"
+'\'''
+
+exec "$ROOT/tools/nested-input" -c "$ROOT/tools/demo-0.1.3.lua" -s "$startup"

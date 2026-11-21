@@ -45,6 +45,9 @@ void tp_monitors_finish(struct tp_server *s);
 /* The monitor under a layout point, or NULL. */
 struct tp_monitor *tp_monitor_at(struct tp_server *s, double x, double y);
 
+/* The connected monitor with output->name matching `name`, or NULL. */
+struct tp_monitor *tp_monitor_by_name(struct tp_server *s, const char *name);
+
 /* The next (dir > 0) or previous monitor from s->selmon, or NULL if < 2. */
 struct tp_monitor *tp_monitor_cycle(struct tp_server *s, int dir);
 

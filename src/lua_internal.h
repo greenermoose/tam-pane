@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-/* Private interface shared between src/lua.c, src/lua_bindings.c, and src/lua_events.c. */
+/* Private interface shared between src/lua.c, src/lua_bindings.c,
+ * src/lua_events.c, and src/lua_rules.c. */
 #ifndef TAM_PANE_LUA_INTERNAL_H
 #define TAM_PANE_LUA_INTERNAL_H
 
@@ -35,6 +36,33 @@ struct tp_lua_hook_list {
 	size_t counts[TP_EVENT_COUNT];
 };
 
+struct tp_lua_rule {
+	uint64_t id;
+	bool has_app_id;
+	char app_id[TP_RULE_PATTERN_MAX];
+	bool has_title;
+	char title[TP_RULE_PATTERN_MAX];
+
+	bool has_tags;
+	tp_tags_t tags;
+	bool has_floating;
+	bool floating;
+	bool has_size;
+	int32_t width;
+	int32_t height;
+	enum tp_rule_pos_mode pos_mode;
+	int32_t x;
+	int32_t y;
+	bool has_monitor;
+	char monitor[TP_RULE_MONITOR_MAX];
+};
+
+struct tp_lua_rule_list {
+	struct tp_lua_rule *items;
+	size_t len;
+	size_t cap;
+};
+
 struct tp_lua {
 	lua_State *L;
 
@@ -60,6 +88,12 @@ struct tp_lua {
 	struct tp_lua_hook_list staged_hooks;
 	uint64_t next_hook_id;
 	bool staging_hooks;
+
+	struct tp_lua_rule_list active_rules;
+	struct tp_lua_rule_list staged_rules;
+	uint64_t next_rule_id;
+	bool staging_rules;
+	int string_find_ref;
 };
 
 struct tp_lua *tp_lua_from_state(lua_State *L);
@@ -91,5 +125,16 @@ void tp_lua_hooks_stage_abort(struct tp_lua *lua);
 
 /* Release all hook lists and Lua registry references before lua_close. */
 void tp_lua_hooks_finish(struct tp_lua *lua);
+
+/* Register tp.rule, tp.remove_rule, and tp.clear_rules on table at -1. */
+void tp_lua_rules_open(lua_State *L);
+
+/* Atomic staging for window rules during config load. */
+void tp_lua_rules_stage_begin(struct tp_lua *lua);
+void tp_lua_rules_stage_commit(struct tp_lua *lua);
+void tp_lua_rules_stage_abort(struct tp_lua *lua);
+
+/* Release all rule lists and Lua registry references before lua_close. */
+void tp_lua_rules_finish(struct tp_lua *lua);
 
 #endif

@@ -418,12 +418,13 @@ struct tp_lua *tp_lua_create(void) {
 	lua_pushcfunction(L, l_print);
 	lua_setglobal(L, "print");
 
-	/* Expose the tp table (config, spawn, read_file, bind/unbind/dsp, on/off). */
+	/* Expose the tp table (config, spawn, read_file, bind/unbind/dsp, on/off, rule). */
 	luaL_newlib(L, tp_funcs);
 	lua_pushliteral(L, TP_VERSION);
 	lua_setfield(L, -2, "version");
 	tp_lua_bindings_open(L);
 	tp_lua_events_open(L);
+	tp_lua_rules_open(L);
 	lua_setglobal(L, "tp");
 
 	tp_lua_bindings_load_defaults(lua);
@@ -433,6 +434,7 @@ struct tp_lua *tp_lua_create(void) {
 void tp_lua_destroy(struct tp_lua *lua) {
 	if (!lua)
 		return;
+	tp_lua_rules_finish(lua);
 	tp_lua_hooks_finish(lua);
 	tp_lua_bindings_finish(lua);
 	if (lua->L)
@@ -494,6 +496,7 @@ bool tp_lua_exec_string(struct tp_lua *lua, const char *code, size_t code_len,
 		return false;
 	}
 	tp_lua_hooks_stage_begin(lua);
+	tp_lua_rules_stage_begin(lua);
 
 	struct tp_settings *prev_staging = lua->staging;
 	lua->staging = &staged;
@@ -505,12 +508,14 @@ bool tp_lua_exec_string(struct tp_lua *lua, const char *code, size_t code_len,
 		const char *msg = lua_tostring(L, -1);
 		if (err_buf && err_buf_size > 0)
 			snprintf(err_buf, err_buf_size, "%s", msg ? msg : "runtime error");
+		tp_lua_rules_stage_abort(lua);
 		tp_lua_hooks_stage_abort(lua);
 		tp_lua_bindings_stage_abort(lua);
 		lua_settop(L, top);
 		return false;
 	}
 
+	tp_lua_rules_stage_commit(lua);
 	tp_lua_hooks_stage_commit(lua);
 	tp_lua_bindings_stage_commit(lua);
 	if (out)

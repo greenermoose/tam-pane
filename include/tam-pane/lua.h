@@ -11,6 +11,7 @@
 
 #include "tam-pane/bindings.h"
 #include "tam-pane/events.h"
+#include "tam-pane/rules.h"
 #include "tam-pane/settings.h"
 #include <stdbool.h>
 #include <stddef.h>
@@ -97,5 +98,16 @@ size_t tp_lua_hook_count(const struct tp_lua *lua, enum tp_event_kind kind);
  * timeouts are logged without stopping remaining hooks. Returns hooks invoked.
  */
 size_t tp_lua_emit_event(struct tp_lua *lua, const struct tp_event *ev);
+
+/* Number of currently active window rules. */
+size_t tp_lua_rule_count(const struct tp_lua *lua);
+
+/*
+ * Evaluate active window rules in registration order against (app_id, title)
+ * using Lua patterns under the runtime watchdog. Matching rules merge into
+ * *out with later rules taking precedence. Returns true if any rule matched.
+ */
+bool tp_lua_eval_rules(struct tp_lua *lua, const char *app_id,
+					   const char *title, struct tp_rule_result *out);
 
 #endif
