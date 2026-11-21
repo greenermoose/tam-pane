@@ -1,10 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-#include "tam-pane/lua.h"
+#include "lua_internal.h"
 #include "tam-pane/spawn.h"
 #include <errno.h>
 #include <fcntl.h>
-#include <lauxlib.h>
-#include <lua.h>
 #include <lualib.h>
 #include <math.h>
 #include <stdio.h>
@@ -18,21 +16,6 @@
 /* Unique address used as a lightuserdata key in LUA_REGISTRYINDEX. */
 static char tp_lua_registry_key;
 
-struct tp_lua {
-	lua_State *L;
-
-	bool watchdog_active;
-	bool watchdog_aborted;
-	uint64_t deadline_ns;
-	uint64_t max_instructions;
-	uint64_t instructions_used;
-	const char *context;
-	const char *abort_reason;
-
-	struct tp_settings *staging;
-	void (*spawn_fn)(const char *cmd);
-};
-
 static uint64_t now_monotonic_ns(void) {
 	struct timespec ts;
 	if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
@@ -40,7 +23,7 @@ static uint64_t now_monotonic_ns(void) {
 	return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
 }
 
-static struct tp_lua *lua_from_state(lua_State *L) {
+struct tp_lua *tp_lua_from_state(lua_State *L) {
 	lua_pushlightuserdata(L, &tp_lua_registry_key);
 	lua_rawget(L, LUA_REGISTRYINDEX);
 	struct tp_lua *lua = lua_touserdata(L, -1);
@@ -49,7 +32,7 @@ static struct tp_lua *lua_from_state(lua_State *L) {
 }
 
 static void watchdog_hook(lua_State *L, lua_Debug *ar) {
-	struct tp_lua *lua = lua_from_state(L);
+	struct tp_lua *lua = tp_lua_from_state(L);
 	if (!lua || !lua->watchdog_active)
 		return;
 
@@ -78,7 +61,7 @@ static void watchdog_hook(lua_State *L, lua_Debug *ar) {
 	}
 }
 
-static int guarded_pcall(struct tp_lua *lua, int nargs, int nresults,
+int tp_lua_guarded_pcall(struct tp_lua *lua, int nargs, int nresults,
 						 uint64_t max_instructions, uint32_t timeout_ms,
 						 const char *context) {
 	lua_State *L = lua->L;
@@ -283,7 +266,7 @@ static void check_string_buf(lua_State *L, int idx, const char *key,
 }
 
 static int l_tp_config(lua_State *L) {
-	struct tp_lua *lua = lua_from_state(L);
+	struct tp_lua *lua = tp_lua_from_state(L);
 	if (!lua || !lua->staging)
 		return luaL_error(L, "tp.config can only be called while loading config");
 
@@ -346,7 +329,7 @@ static int l_tp_config(lua_State *L) {
 }
 
 static int l_tp_spawn(lua_State *L) {
-	struct tp_lua *lua = lua_from_state(L);
+	struct tp_lua *lua = tp_lua_from_state(L);
 	size_t len = 0;
 	const char *cmd = luaL_checklstring(L, 1, &len);
 	if (len == 0)
@@ -435,18 +418,21 @@ struct tp_lua *tp_lua_create(void) {
 	lua_pushcfunction(L, l_print);
 	lua_setglobal(L, "print");
 
-	/* Expose the tp table. */
+	/* Expose the tp table (config, spawn, read_file, bind/unbind/dsp). */
 	luaL_newlib(L, tp_funcs);
 	lua_pushliteral(L, TP_VERSION);
 	lua_setfield(L, -2, "version");
+	tp_lua_bindings_open(L);
 	lua_setglobal(L, "tp");
 
+	tp_lua_bindings_load_defaults(lua);
 	return lua;
 }
 
 void tp_lua_destroy(struct tp_lua *lua) {
 	if (!lua)
 		return;
+	tp_lua_bindings_finish(lua);
 	if (lua->L)
 		lua_close(lua->L);
 	free(lua);
@@ -499,20 +485,29 @@ bool tp_lua_exec_string(struct tp_lua *lua, const char *code, size_t code_len,
 		return false;
 	}
 
+	if (!tp_lua_bindings_stage_begin(lua)) {
+		if (err_buf && err_buf_size > 0)
+			snprintf(err_buf, err_buf_size, "out of memory staging bindings");
+		lua_settop(L, top);
+		return false;
+	}
+
 	struct tp_settings *prev_staging = lua->staging;
 	lua->staging = &staged;
-	rc = guarded_pcall(lua, 0, 0, max_instructions, timeout_ms,
-					   chunk_name ? chunk_name : "lua");
+	rc = tp_lua_guarded_pcall(lua, 0, 0, max_instructions, timeout_ms,
+							  chunk_name ? chunk_name : "lua");
 	lua->staging = prev_staging;
 
 	if (rc != LUA_OK) {
 		const char *msg = lua_tostring(L, -1);
 		if (err_buf && err_buf_size > 0)
 			snprintf(err_buf, err_buf_size, "%s", msg ? msg : "runtime error");
+		tp_lua_bindings_stage_abort(lua);
 		lua_settop(L, top);
 		return false;
 	}
 
+	tp_lua_bindings_stage_commit(lua);
 	if (out)
 		*out = staged;
 	lua_settop(L, top);

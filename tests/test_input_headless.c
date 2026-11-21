@@ -937,11 +937,11 @@ int main(void) {
 	CHECK(c1->tags == saved_tags);
 
 	/*
-	 * Lua 0.1.0 integration: load a real init.lua setting custom gaps,
-	 * re-arrange, and verify tiled geometry updates; then verify a runaway
-	 * init.lua is cut off and keeps the previous settings.
+	 * Lua 0.1.0 + 0.1.1 integration: load a real init.lua setting custom gaps,
+	 * custom bindings, unbinding a default, and plain Lua callbacks (including
+	 * a runaway callback guarded by the watchdog); then verify a runaway
+	 * init.lua rolls back both settings and bindings atomically.
 	 */
-	server.lua = tp_lua_create();
 	CHECK(server.lua != NULL);
 	char lua_dir[] = "/tmp/tam-pane-headless-lua.XXXXXX";
 	CHECK(mkdtemp(lua_dir) != NULL);
@@ -950,7 +950,11 @@ int main(void) {
 	FILE *lf = fopen(lua_cfg, "wb");
 	CHECK(lf != NULL);
 	if (lf) {
-		fputs("tp.config{ gap_inner = 20, gap_outer = 30 }\n", lf);
+		fputs("tp.config{ gap_inner = 20, gap_outer = 30 }\n"
+			  "tp.unbind('Meta+v')\n"
+			  "tp.bind('Meta+q', function() tp.dsp.toggle_float()() end)\n"
+			  "tp.bind('Meta+b', function() while true do end end)\n",
+			  lf);
 		fclose(lf);
 	}
 	CHECK(tp_lua_load_file(server.lua, lua_cfg, true, &server.settings,
@@ -963,15 +967,34 @@ int main(void) {
 	CHECK(c1->geom.w == c1->mon->usable.w - 60);
 	CHECK(c1->geom.h == c1->mon->usable.h - 60);
 
+	/* Meta+v was unbound so it no longer toggles floating; Meta+q callback
+	 * invokes tp.dsp.toggle_float()() and does toggle floating. */
+	tp_focus(&server, c1);
+	CHECK(!c1->floating);
+	chord(&keyboard, KEY_V, false, false);
+	CHECK(!c1->floating);
+	chord(&keyboard, KEY_Q, false, false);
+	CHECK(c1->floating);
+	/* Runaway Lua callback on Meta+b is cut off cleanly; compositor stays live. */
+	chord(&keyboard, KEY_B, false, false);
+	chord(&keyboard, KEY_Q, false, false);
+	CHECK(!c1->floating);
+
 	lf = fopen(lua_cfg, "wb");
 	CHECK(lf != NULL);
 	if (lf) {
-		fputs("tp.config{ gap_outer = 99 }\nwhile true do end\n", lf);
+		fputs("tp.config{ gap_outer = 99 }\n"
+			  "tp.clear_binds()\n"
+			  "while true do end\n",
+			  lf);
 		fclose(lf);
 	}
 	CHECK(!tp_lua_load_file(server.lua, lua_cfg, true, &server.settings,
 							&server.settings));
 	CHECK(server.settings.gap_outer == 30);
+	/* Bindings rolled back too: Meta+q still toggles floating. */
+	chord(&keyboard, KEY_Q, false, false);
+	CHECK(c1->floating);
 	unlink(lua_cfg);
 	rmdir(lua_dir);
 

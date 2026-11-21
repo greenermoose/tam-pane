@@ -27,11 +27,20 @@ static int on_signal(int signo, void *data) {
 	return 0;
 }
 
+static void server_run_action(const struct tp_action *act, void *userdata) {
+	tp_action_run(userdata, act);
+}
+
 bool tp_server_init(struct tp_server *s) {
 	wl_list_init(&s->monitors);
 	wl_list_init(&s->clients);
 	wl_list_init(&s->focus_stack);
 	wl_list_init(&s->keyboards);
+
+	if (!s->lua)
+		s->lua = tp_lua_create();
+	if (s->lua)
+		tp_lua_set_action_fn(s->lua, server_run_action, s);
 
 	s->display = wl_display_create();
 	if (!s->display) {

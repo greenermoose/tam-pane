@@ -14,9 +14,18 @@
 static char last_spawned[256];
 static int spawn_count;
 
+static struct tp_action last_action;
+static int action_count;
+
 static void mock_spawn(const char *cmd) {
 	spawn_count++;
 	snprintf(last_spawned, sizeof(last_spawned), "%s", cmd);
+}
+
+static void mock_action(const struct tp_action *act, void *userdata) {
+	(void)userdata;
+	action_count++;
+	last_action = *act;
 }
 
 static uint64_t now_ms(void) {
@@ -293,11 +302,234 @@ static void test_default_path(void) {
 	}
 }
 
+static void test_chord_parser(void) {
+	struct tp_key_spec spec;
+	char err[128] = {0};
+
+	CHECK(tp_binding_parse_chord("Meta+Return", &spec, err, sizeof(err)));
+	CHECK(spec.mods == TP_MOD_META && spec.sym == XKB_KEY_Return);
+
+	/* Uppercase letter canonicalizes to level-0 lowercase keysym. */
+	CHECK(tp_binding_parse_chord("Meta+Shift+E", &spec, err, sizeof(err)));
+	CHECK(spec.mods == (TP_MOD_META | TP_MOD_SHIFT) && spec.sym == XKB_KEY_e);
+
+	/* Modifier and key aliases, case-insensitivity, whitespace trimming. */
+	CHECK(tp_binding_parse_chord(" super + control + mod1 + shift + Enter ",
+								 &spec, err, sizeof(err)));
+	CHECK(spec.mods ==
+			  (TP_MOD_META | TP_MOD_CTRL | TP_MOD_ALT | TP_MOD_SHIFT) &&
+		  spec.sym == XKB_KEY_Return);
+
+	CHECK(tp_binding_parse_chord("Meta+,", &spec, err, sizeof(err)));
+	CHECK(spec.mods == TP_MOD_META && spec.sym == XKB_KEY_comma);
+	CHECK(tp_binding_parse_chord("Meta+.", &spec, err, sizeof(err)));
+	CHECK(spec.mods == TP_MOD_META && spec.sym == XKB_KEY_period);
+	CHECK(tp_binding_parse_chord("Meta++", &spec, err, sizeof(err)));
+	CHECK(spec.mods == TP_MOD_META && spec.sym == XKB_KEY_plus);
+	CHECK(tp_binding_parse_chord("+", &spec, err, sizeof(err)));
+	CHECK(spec.mods == 0 && spec.sym == XKB_KEY_plus);
+	CHECK(tp_binding_parse_chord("Logo+Esc", &spec, err, sizeof(err)));
+	CHECK(spec.mods == TP_MOD_META && spec.sym == XKB_KEY_Escape);
+	CHECK(tp_binding_parse_chord("Mod4+Space", &spec, err, sizeof(err)));
+	CHECK(spec.mods == TP_MOD_META && spec.sym == XKB_KEY_space);
+	CHECK(tp_binding_parse_chord("XF86AudioRaiseVolume", &spec, err,
+								 sizeof(err)));
+	CHECK(spec.mods == 0 && spec.sym == XKB_KEY_XF86AudioRaiseVolume);
+
+	/* Invalid chords must fail cleanly with a diagnostic. */
+	const char *bad[] = {
+		"",		 "   ",		  "Meta+",			"+a",
+		"++",	 "Meta++a",	  "Bogus+Return",	"Meta+NotARealKeySym",
+	};
+	for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++) {
+		err[0] = '\0';
+		CHECK(!tp_binding_parse_chord(bad[i], &spec, err, sizeof(err)));
+		CHECK(err[0] != '\0');
+	}
+}
+
+static void test_default_bindings(void) {
+	struct tp_lua *lua = tp_lua_create();
+	CHECK(lua != NULL);
+	tp_lua_set_action_fn(lua, mock_action, NULL);
+
+	/* 12 core + 12 directional + 36 tag defaults = 60 bindings. */
+	CHECK(tp_lua_binding_count(lua) == 60);
+	CHECK(!tp_lua_has_unmodified_bindings(lua));
+
+	action_count = 0;
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_Return));
+	CHECK(action_count == 1 && last_action.kind == TP_ACT_TERMINAL);
+
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_w));
+	CHECK(last_action.kind == TP_ACT_CLOSE);
+
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT, XKB_KEY_e));
+	CHECK(last_action.kind == TP_ACT_QUIT);
+
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_j));
+	CHECK(last_action.kind == TP_ACT_FOCUS && last_action.dir == +1);
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_k));
+	CHECK(last_action.kind == TP_ACT_FOCUS && last_action.dir == -1);
+
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_v));
+	CHECK(last_action.kind == TP_ACT_TOGGLE_FLOAT);
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_f));
+	CHECK(last_action.kind == TP_ACT_TOGGLE_FULLSCREEN);
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_Tab));
+	CHECK(last_action.kind == TP_ACT_TAG_BACK);
+
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_comma));
+	CHECK(last_action.kind == TP_ACT_MONITOR_FOCUS && last_action.dir == -1);
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT, XKB_KEY_period));
+	CHECK(last_action.kind == TP_ACT_MONITOR_MOVE && last_action.dir == +1);
+
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT, XKB_KEY_Left));
+	CHECK(last_action.kind == TP_ACT_SWAP && last_action.dir == TP_DIR_LEFT);
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_CTRL, XKB_KEY_Right));
+	CHECK(last_action.kind == TP_ACT_MOVE && last_action.dir == TP_DIR_RIGHT);
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_ALT, XKB_KEY_Up));
+	CHECK(last_action.kind == TP_ACT_RESIZE && last_action.dir == TP_DIR_UP &&
+		  last_action.step == 0);
+
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_3));
+	CHECK(last_action.kind == TP_ACT_TAG_VIEW && last_action.tag == 3);
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT, XKB_KEY_5));
+	CHECK(last_action.kind == TP_ACT_TAG_MOVE && last_action.tag == 5);
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_CTRL, XKB_KEY_7));
+	CHECK(last_action.kind == TP_ACT_TAG_TOGGLE_VIEW && last_action.tag == 7);
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT | TP_MOD_CTRL,
+							XKB_KEY_9));
+	CHECK(last_action.kind == TP_ACT_TAG_TOGGLE_CLIENT &&
+		  last_action.tag == 9);
+
+	/* Unbound key returns false. */
+	CHECK(!tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_z));
+
+	tp_lua_destroy(lua);
+}
+
+static void test_custom_bindings_and_callbacks(void) {
+	struct tp_lua *lua = tp_lua_create();
+	CHECK(lua != NULL);
+	tp_lua_set_spawn_fn(lua, mock_spawn);
+	tp_lua_set_action_fn(lua, mock_action, NULL);
+
+	struct tp_settings base, out;
+	tp_settings_defaults(&base);
+	out = base;
+	char err[256] = {0};
+
+	const char *cfg =
+		"tp.bind('Meta+Return', tp.dsp.spawn('kitty'))\n"
+		"tp.bind('Meta+Alt+Down', tp.dsp.resize('down', 80))\n"
+		"tp.bind('XF86AudioRaiseVolume', tp.dsp.spawn('vol-up'))\n"
+		"assert(tp.unbind('Meta+v') == true)\n"
+		"assert(tp.unbind('Meta+v') == false)\n"
+		"tp.bind('Meta+x', function()\n"
+		"  tp.dsp.tag('view', 2)()\n"
+		"  tp.spawn('from-callback')\n"
+		"end)\n"
+		"tp.bind('Meta+y', function() error('callback boom') end)\n"
+		"tp.bind('Meta+z', function() while true do end end)\n";
+	CHECK(tp_lua_exec_string(lua, cfg, strlen(cfg), "custom_binds",
+							 TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+							 TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+							 sizeof(err)));
+	CHECK(tp_lua_has_unmodified_bindings(lua));
+
+	/* Overridden dispatcher + explicit resize step + unmodified key. */
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_Return));
+	CHECK(last_action.kind == TP_ACT_SPAWN &&
+		  strcmp(last_action.cmd, "kitty") == 0);
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_ALT, XKB_KEY_Down));
+	CHECK(last_action.kind == TP_ACT_RESIZE &&
+		  last_action.dir == TP_DIR_DOWN && last_action.step == 80);
+	CHECK(tp_lua_handle_key(lua, 0, XKB_KEY_XF86AudioRaiseVolume));
+	CHECK(last_action.kind == TP_ACT_SPAWN &&
+		  strcmp(last_action.cmd, "vol-up") == 0);
+	CHECK(!tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_v));
+
+	/* Plain Lua callback invoking a dispatcher and tp.spawn. */
+	spawn_count = 0;
+	last_spawned[0] = '\0';
+	action_count = 0;
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_x));
+	CHECK(action_count == 1 && last_action.kind == TP_ACT_TAG_VIEW &&
+		  last_action.tag == 2);
+	CHECK(spawn_count == 1 && strcmp(last_spawned, "from-callback") == 0);
+
+	/* Callback runtime error and runaway loop are contained cleanly. */
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_y));
+	uint64_t t0 = now_ms();
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_z));
+	CHECK(now_ms() - t0 < 500);
+
+	/* Interpreter and bindings still work after callback aborts. */
+	action_count = 0;
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_x));
+	CHECK(action_count == 1);
+
+	/* Atomic rollback: clear_binds + error keeps previous bindings & refs. */
+	size_t before_count = tp_lua_binding_count(lua);
+	const char *bad_clear =
+		"tp.clear_binds()\n"
+		"tp.bind('Meta+q', tp.dsp.close())\n"
+		"error('abort after clear')\n";
+	CHECK(!tp_lua_exec_string(lua, bad_clear, strlen(bad_clear), "rollback",
+							  TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+							  TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+							  sizeof(err)));
+	CHECK(tp_lua_binding_count(lua) == before_count);
+	CHECK(!tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_q));
+	action_count = 0;
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_x));
+	CHECK(action_count == 1);
+
+	/* Invalid dispatcher / bind calls fail cleanly. */
+	const char *bad_binds[] = {
+		"tp.bind('BadMod+Return', tp.dsp.close())",
+		"tp.bind('Meta+Return', 123)",
+		"tp.dsp.spawn('')",
+		"tp.dsp.focus('sideways')",
+		"tp.dsp.swap('diagonal')",
+		"tp.dsp.resize('left', 0)",
+		"tp.dsp.tag('view', 10)",
+		"tp.dsp.tag('nope', 1)",
+		"tp.dsp.monitor('jump', 'next')",
+		"tp.dsp.close()()",
+	};
+	for (size_t i = 0; i < sizeof(bad_binds) / sizeof(bad_binds[0]); i++) {
+		CHECK(!tp_lua_exec_string(lua, bad_binds[i], strlen(bad_binds[i]),
+								  "bad_bind", TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+								  TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+								  sizeof(err)));
+	}
+
+	/* clear_binds + single custom binding succeeds. */
+	const char *minimal =
+		"tp.clear_binds()\n"
+		"tp.bind('Meta+q', tp.dsp.close())\n";
+	CHECK(tp_lua_exec_string(lua, minimal, strlen(minimal), "minimal",
+							 TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+							 TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+							 sizeof(err)));
+	CHECK(tp_lua_binding_count(lua) == 1);
+	CHECK(!tp_lua_has_unmodified_bindings(lua));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_q));
+	CHECK(last_action.kind == TP_ACT_CLOSE);
+
+	tp_lua_destroy(lua);
+}
+
 int main(void) {
 	tam_log_set_level(TAM_LOG_ERROR);
 	test_config_and_fallback();
 	test_sandbox_and_helpers();
 	test_watchdog();
 	test_default_path();
+	test_chord_parser();
+	test_default_bindings();
+	test_custom_bindings_and_callbacks();
 	CHECK_DONE("test_lua");
 }

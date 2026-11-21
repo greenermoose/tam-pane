@@ -1,4 +1,4 @@
-# Data structures (0.1.0)
+# Data structures (0.1.1)
 
 This file describes the structures as they are built today. Update it in
 the same commit as any change to them.
@@ -31,10 +31,12 @@ the same commit as any change to them.
   `repeat_rate`, `repeat_delay`). Populated from compiled-in defaults and
   overlaid atomically from `~/.config/tam-pane/init.lua` via `lua`.
 - **Lua runtime:** `lua` (`struct tp_lua *`, `include/tam-pane/lua.h`,
-  `src/lua.c`) owns the embedded Lua 5.5 `lua_State`, watchdog state
-  (instruction budget and monotonic deadline), and active staging pointer
-  during config load. Stored in `LUA_REGISTRYINDEX` by lightuserdata key;
-  no globals and no wlroots dependency.
+  `src/lua.c`, `src/lua_bindings.c`) owns the embedded Lua 5.5 `lua_State`,
+  watchdog state (instruction budget and monotonic deadline), staged and
+  active key-binding tables (`active_binds` / `staged_binds`, seeded from
+  Lua defaults on creation and committed atomically with settings), and the
+  compositor action callback (`tp_action_run`). Stored in `LUA_REGISTRYINDEX`
+  by lightuserdata key; no globals and no wlroots dependency.
 
 ## tp_monitor (`include/tam-pane/monitor.h`)
 

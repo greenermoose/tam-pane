@@ -1,6 +1,6 @@
 # tam-pane Lua API (`arch/lua-api.md`)
 
-**Status:** 0.1.0 shipped; 0.1.1–0.1.4 names are a draft for review before 0.1.1.
+**Status:** 0.1.0–0.1.1 shipped; 0.1.2–0.1.4 names are a draft for review.
 
 tam-pane embeds **Lua 5.5.1** statically from `third_party/lua/` with no
 dynamic symbol exports (`lua_*` symbols stay internal to `tam-pane`).
@@ -74,12 +74,64 @@ regular file opened with `O_NONBLOCK` and verified with `S_ISREG`. Returns
 `(content)` on success or `(nil, err)` on failure. Refuses FIFOs, sockets,
 and device nodes immediately without blocking.
 
-## Draft for 0.1.1–0.1.4 (for review)
+## Shipped in 0.1.1
 
-- **0.1.1 Bindings & dispatchers:** `tp.bind("Meta+Return", tp.dsp.spawn("foot"))`,
-  `tp.unbind("Meta+Return")`, `tp.dsp.*` values (`spawn`, `close`, `focus`,
-  `swap`, `move`, `resize`, `toggle_float`, `toggle_fullscreen`, `tag`,
-  `monitor`, `quit`), plus plain Lua callback functions.
+All default key bindings are loaded via Lua on startup before `init.lua`
+runs. `init.lua` may override individual bindings, remove defaults with
+`tp.unbind`, or start from scratch with `tp.clear_binds()`. Binding changes
+stage alongside `tp.config` and roll back atomically if `init.lua` fails.
+
+### `tp.bind(chord, action)`
+
+Binds a key chord string to either a `tp.dispatcher` value or a plain Lua
+callback function, replacing any existing binding for the same `(mods, key)`.
+Raises a Lua error on invalid chord syntax, unknown modifier/key, or invalid
+action type.
+
+- **Modifiers (case-insensitive):** `Meta` (`Super`, `Logo`, `Mod4`),
+  `Shift`, `Ctrl` (`Control`), `Alt` (`Mod1`). Unmodified keys (e.g.
+  `"XF86AudioRaiseVolume"`) are allowed.
+- **Keys:** Any XKB keysym name (canonicalized with `xkb_keysym_to_lower()`
+  so `"Meta+W"` and `"Meta+w"` match level-0 `w`), plus aliases `","`, `"."`,
+  `"/"`, `"-"`, `"="`, `"+"`, `"Enter"`, `"Esc"`, `"Space"`.
+- **Callbacks:** Plain Lua functions run under a tighter runtime watchdog
+  (1,000,000 instructions / 100 ms `CLOCK_MONOTONIC` deadline); errors or
+  timeouts are logged and the compositor keeps running.
+
+### `tp.unbind(chord)`
+
+Removes the binding for `chord` from the staged table. Returns `true` if one
+was removed, `false` otherwise.
+
+### `tp.clear_binds()`
+
+Removes all staged bindings (including the defaults).
+
+### `tp.dsp.*` (dispatcher values)
+
+Each constructor validates its arguments immediately and returns a
+`tp.dispatcher` userdata value. Passing a dispatcher to `tp.bind` runs the C
+action directly without entering the Lua VM on keypress. Dispatchers are also
+callable (`tp.dsp.close()()`) inside plain Lua callbacks (calling one during
+`init.lua` load raises an error).
+
+| Constructor | Arguments | Behavior |
+|---|---|---|
+| `tp.dsp.spawn(cmd)` | non-empty string (max 255 bytes) | Spawn `cmd` via `/bin/sh -c` |
+| `tp.dsp.terminal()` | none | Spawn configured `settings.terminal` |
+| `tp.dsp.close()` | none | Close focused window |
+| `tp.dsp.quit()` | none | Quit `tam-pane` |
+| `tp.dsp.focus(dir)` | `"next"` \| `"prev"` | Cycle window focus |
+| `tp.dsp.swap(dir)` | `"left"` \| `"right"` \| `"up"` \| `"down"` | Swap focused tiled window with neighbor |
+| `tp.dsp.move(dir)` | `"left"` \| `"right"` \| `"up"` \| `"down"` | Move focused tiled window in direction |
+| `tp.dsp.resize(dir[, step])` | `dir`, optional int `1..500` | Resize split or floating window (default: `resize_step`) |
+| `tp.dsp.toggle_float()` | none | Toggle floating on focused window |
+| `tp.dsp.toggle_fullscreen()` | none | Toggle fullscreen on focused window |
+| `tp.dsp.tag(op[, n])` | `"view"`, `"move"`, `"toggle_view"`, `"toggle_client"` with `n` in `1..9`; or `"back"` | Tag view / client tag operations |
+| `tp.dsp.monitor(op, dir)` | `"focus"` \| `"move"`, `"prev"` \| `"next"` | Focus or move focused window to adjacent monitor |
+
+## Draft for 0.1.2–0.1.4 (for review)
+
 - **0.1.2 Event hooks:** `tp.on("window.open", fn)` for `window.open`,
   `window.close`, `window.focus`, `tag.change`, `monitor.add`,
   `monitor.remove`.

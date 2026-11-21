@@ -1,7 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /*
- * Compiled-in key bindings. Lua configuration replaces this table in 0.1.1;
- * the actions stay as the dispatchers Lua calls.
+ * Compositor dispatcher actions and key-binding bridge.
+ *
+ * Key bindings live in Lua (src/lua_bindings.c, seeded with defaults on
+ * startup and customizable in init.lua). This module implements the C actions
+ * that tp.dsp.* dispatchers invoke.
  */
 #include "tam-pane/bindings.h"
 #include "tam-pane/client.h"
@@ -9,52 +12,10 @@
 #include "tam-pane/input.h"
 #include "tam-pane/layout/arrange.h"
 #include "tam-pane/layout/dwindle.h"
+#include "tam-pane/lua.h"
 #include "tam-pane/monitor.h"
 #include "tam-pane/server.h"
 #include "tam-pane/spawn.h"
-#include <wlr/types/wlr_keyboard.h>
-
-union tp_arg {
-	int i;
-	unsigned int u;
-};
-
-struct tp_binding {
-	uint32_t mods;
-	xkb_keysym_t sym;
-	void (*action)(struct tp_server *s, union tp_arg arg);
-	union tp_arg arg;
-};
-
-static void quit(struct tp_server *s, union tp_arg a) {
-	tp_server_quit(s);
-}
-
-static void terminal(struct tp_server *s, union tp_arg a) {
-	tp_spawn(s->settings.terminal);
-}
-
-static void close_window(struct tp_server *s, union tp_arg a) {
-	struct tp_client *c = tp_focused(s);
-	if (c)
-		tp_client_close(c);
-}
-
-static void focus_cycle(struct tp_server *s, union tp_arg a) {
-	tp_focus_cycle(s, a.i);
-}
-
-static void toggle_floating(struct tp_server *s, union tp_arg a) {
-	struct tp_client *c = tp_focused(s);
-	if (c)
-		tp_client_set_floating(c, !c->floating);
-}
-
-static void toggle_fullscreen(struct tp_server *s, union tp_arg a) {
-	struct tp_client *c = tp_focused(s);
-	if (c)
-		tp_client_set_fullscreen(c, !c->fullscreen);
-}
 
 static void view_changed(struct tp_server *s) {
 	tp_pointer_cancel_grab(s, NULL);
@@ -62,129 +23,119 @@ static void view_changed(struct tp_server *s) {
 	tp_focus_refresh(s);
 }
 
-static void swap_dir(struct tp_server *s, union tp_arg a) {
-	struct tp_client *c = tp_focused(s);
-	if (!c || !c->mon || c->floating || c->fullscreen)
+void tp_action_run(struct tp_server *s, const struct tp_action *act) {
+	if (!s || !act)
 		return;
-	if (tp_dwindle_swap_dir(tp_monitor_tree(c->mon), c, (enum tp_dir)a.i))
-		tp_arrange(c->mon);
-}
 
-static void move_dir(struct tp_server *s, union tp_arg a) {
-	struct tp_client *c = tp_focused(s);
-	if (!c || !c->mon || c->floating || c->fullscreen)
-		return;
-	if (tp_dwindle_move_dir(tp_monitor_tree(c->mon), c, (enum tp_dir)a.i,
-							s->settings.split_ratio))
-		tp_arrange(c->mon);
-}
-
-static void resize_dir(struct tp_server *s, union tp_arg a) {
-	struct tp_client *c = tp_focused(s);
-	if (!c || !c->mon || c->fullscreen)
-		return;
-	enum tp_dir dir = (enum tp_dir)a.i;
-	if (c->floating) {
-		tp_client_resize_floating(c, dir, s->settings.resize_step);
-		return;
+	switch (act->kind) {
+	case TP_ACT_SPAWN:
+		tp_spawn(act->cmd);
+		break;
+	case TP_ACT_TERMINAL:
+		tp_spawn(s->settings.terminal);
+		break;
+	case TP_ACT_CLOSE: {
+		struct tp_client *c = tp_focused(s);
+		if (c)
+			tp_client_close(c);
+		break;
 	}
-	if (tp_dwindle_resize(tp_monitor_tree(c->mon), c, dir,
-						  s->settings.resize_step))
-		tp_arrange(c->mon);
-}
-
-static void view_tag(struct tp_server *s, union tp_arg a) {
-	if (s->selmon && tp_tagview_show(&s->selmon->view, tp_tag_mask(a.u)))
-		view_changed(s);
-}
-
-static void toggle_view_tag(struct tp_server *s, union tp_arg a) {
-	if (s->selmon && tp_tagview_toggle(&s->selmon->view, tp_tag_mask(a.u)))
-		view_changed(s);
-}
-
-static void view_back(struct tp_server *s, union tp_arg a) {
-	if (s->selmon) {
-		tp_tagview_back(&s->selmon->view);
-		view_changed(s);
+	case TP_ACT_QUIT:
+		tp_server_quit(s);
+		break;
+	case TP_ACT_FOCUS:
+		tp_focus_cycle(s, act->dir);
+		break;
+	case TP_ACT_SWAP: {
+		struct tp_client *c = tp_focused(s);
+		if (!c || !c->mon || c->floating || c->fullscreen)
+			break;
+		if (tp_dwindle_swap_dir(tp_monitor_tree(c->mon), c,
+								(enum tp_dir)act->dir))
+			tp_arrange(c->mon);
+		break;
+	}
+	case TP_ACT_MOVE: {
+		struct tp_client *c = tp_focused(s);
+		if (!c || !c->mon || c->floating || c->fullscreen)
+			break;
+		if (tp_dwindle_move_dir(tp_monitor_tree(c->mon), c,
+								(enum tp_dir)act->dir, s->settings.split_ratio))
+			tp_arrange(c->mon);
+		break;
+	}
+	case TP_ACT_RESIZE: {
+		struct tp_client *c = tp_focused(s);
+		if (!c || !c->mon || c->fullscreen)
+			break;
+		enum tp_dir dir = (enum tp_dir)act->dir;
+		int32_t step = act->step > 0 ? act->step : s->settings.resize_step;
+		if (c->floating) {
+			tp_client_resize_floating(c, dir, step);
+			break;
+		}
+		if (tp_dwindle_resize(tp_monitor_tree(c->mon), c, dir, step))
+			tp_arrange(c->mon);
+		break;
+	}
+	case TP_ACT_TOGGLE_FLOAT: {
+		struct tp_client *c = tp_focused(s);
+		if (c)
+			tp_client_set_floating(c, !c->floating);
+		break;
+	}
+	case TP_ACT_TOGGLE_FULLSCREEN: {
+		struct tp_client *c = tp_focused(s);
+		if (c)
+			tp_client_set_fullscreen(c, !c->fullscreen);
+		break;
+	}
+	case TP_ACT_TAG_VIEW:
+		if (s->selmon &&
+			tp_tagview_show(&s->selmon->view, tp_tag_mask(act->tag)))
+			view_changed(s);
+		break;
+	case TP_ACT_TAG_TOGGLE_VIEW:
+		if (s->selmon &&
+			tp_tagview_toggle(&s->selmon->view, tp_tag_mask(act->tag)))
+			view_changed(s);
+		break;
+	case TP_ACT_TAG_MOVE: {
+		struct tp_client *c = tp_focused(s);
+		if (c)
+			tp_client_set_tags(c, tp_tag_mask(act->tag));
+		break;
+	}
+	case TP_ACT_TAG_TOGGLE_CLIENT: {
+		struct tp_client *c = tp_focused(s);
+		if (c)
+			tp_client_toggle_tags(c, tp_tag_mask(act->tag));
+		break;
+	}
+	case TP_ACT_TAG_BACK:
+		if (s->selmon) {
+			tp_tagview_back(&s->selmon->view);
+			view_changed(s);
+		}
+		break;
+	case TP_ACT_MONITOR_FOCUS: {
+		struct tp_monitor *m = tp_monitor_cycle(s, act->dir);
+		if (m)
+			tp_monitor_focus(s, m);
+		break;
+	}
+	case TP_ACT_MONITOR_MOVE: {
+		struct tp_client *c = tp_focused(s);
+		struct tp_monitor *m = tp_monitor_cycle(s, act->dir);
+		if (c && m)
+			tp_client_set_monitor(c, m, false);
+		break;
+	}
 	}
 }
-
-static void move_to_tag(struct tp_server *s, union tp_arg a) {
-	struct tp_client *c = tp_focused(s);
-	if (c)
-		tp_client_set_tags(c, tp_tag_mask(a.u));
-}
-
-static void toggle_client_tag(struct tp_server *s, union tp_arg a) {
-	struct tp_client *c = tp_focused(s);
-	if (c)
-		tp_client_toggle_tags(c, tp_tag_mask(a.u));
-}
-
-static void focus_monitor(struct tp_server *s, union tp_arg a) {
-	struct tp_monitor *m = tp_monitor_cycle(s, a.i);
-	if (m)
-		tp_monitor_focus(s, m);
-}
-
-static void move_to_monitor(struct tp_server *s, union tp_arg a) {
-	struct tp_client *c = tp_focused(s);
-	struct tp_monitor *m = tp_monitor_cycle(s, a.i);
-	if (c && m)
-		tp_client_set_monitor(c, m, false);
-}
-
-#define META TP_MOD_META
-#define SHIFT WLR_MODIFIER_SHIFT
-#define CTRL WLR_MODIFIER_CTRL
-#define ALT WLR_MODIFIER_ALT
-#define DIR(key, dir)                                                          \
-	{META | SHIFT, key, swap_dir, {.i = dir}},                                 \
-		{META | CTRL, key, move_dir, {.i = dir}},                              \
-		{META | ALT, key, resize_dir, {.i = dir}}
-#define TAG(key, n)                                                            \
-	{META, key, view_tag, {.u = n}},                                           \
-		{META | SHIFT, key, move_to_tag, {.u = n}},                            \
-		{META | CTRL, key, toggle_view_tag, {.u = n}}, \
-		{META | SHIFT | CTRL, key, toggle_client_tag, {.u = n}}
-
-static const struct tp_binding bindings[] = {
-	{META, XKB_KEY_Return, terminal, {0}},
-	{META, XKB_KEY_w, close_window, {0}},
-	{META | SHIFT, XKB_KEY_e, quit, {0}},
-	{META, XKB_KEY_j, focus_cycle, {.i = +1}},
-	{META, XKB_KEY_k, focus_cycle, {.i = -1}},
-	{META, XKB_KEY_v, toggle_floating, {0}},
-	{META, XKB_KEY_f, toggle_fullscreen, {0}},
-	{META, XKB_KEY_Tab, view_back, {0}},
-	{META, XKB_KEY_comma, focus_monitor, {.i = -1}},
-	{META, XKB_KEY_period, focus_monitor, {.i = +1}},
-	{META | SHIFT, XKB_KEY_comma, move_to_monitor, {.i = -1}},
-	{META | SHIFT, XKB_KEY_period, move_to_monitor, {.i = +1}},
-	DIR(XKB_KEY_Left, TP_DIR_LEFT),
-	DIR(XKB_KEY_Right, TP_DIR_RIGHT),
-	DIR(XKB_KEY_Up, TP_DIR_UP),
-	DIR(XKB_KEY_Down, TP_DIR_DOWN),
-	TAG(XKB_KEY_1, 1),
-	TAG(XKB_KEY_2, 2),
-	TAG(XKB_KEY_3, 3),
-	TAG(XKB_KEY_4, 4),
-	TAG(XKB_KEY_5, 5),
-	TAG(XKB_KEY_6, 6),
-	TAG(XKB_KEY_7, 7),
-	TAG(XKB_KEY_8, 8),
-	TAG(XKB_KEY_9, 9),
-};
 
 bool tp_bindings_handle(struct tp_server *s, uint32_t mods, xkb_keysym_t sym) {
-	/* Caps Lock and Num Lock never block a binding. */
-	mods &= ~(uint32_t)(WLR_MODIFIER_CAPS | WLR_MODIFIER_MOD2);
-	for (size_t i = 0; i < sizeof(bindings) / sizeof(bindings[0]); i++) {
-		if (bindings[i].mods == mods && bindings[i].sym == sym) {
-			bindings[i].action(s, bindings[i].arg);
-			return true;
-		}
-	}
-	return false;
+	if (!s || !s->lua)
+		return false;
+	return tp_lua_handle_key(s->lua, mods, sym);
 }

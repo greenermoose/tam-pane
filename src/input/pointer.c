@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* The cursor: motion, buttons, scrolling, and pointer focus. Keyboard
  * focus follows clicks; focus-follows-mouse becomes a Lua setting. */
-#include "tam-pane/bindings.h"
 #include "tam-pane/client.h"
 #include "tam-pane/focus.h"
 #include "tam-pane/input.h"
@@ -245,7 +244,7 @@ static void on_button(struct wl_listener *l, void *data) {
 
 		struct wlr_keyboard *kb = wlr_seat_get_keyboard(s->seat);
 		uint32_t mods = kb ? wlr_keyboard_get_modifiers(kb) : 0;
-		if ((mods & TP_MOD_META) && try_begin_grab(s, c, ev->button))
+		if ((mods & WLR_MODIFIER_LOGO) && try_begin_grab(s, c, ev->button))
 			return;
 	}
 	wlr_seat_pointer_notify_button(s->seat, ev->time_msec, ev->button,

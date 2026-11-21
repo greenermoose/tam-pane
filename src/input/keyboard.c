@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "tam-pane/bindings.h"
 #include "tam-pane/input.h"
+#include "tam-pane/lua.h"
 #include "tam-pane/server.h"
 #include <stdlib.h>
 #include <tam.h>
@@ -15,14 +16,27 @@ static void on_modifiers(struct wl_listener *l, void *data) {
 	wlr_seat_keyboard_notify_modifiers(k->server->seat, &k->wlr->modifiers);
 }
 
+static uint32_t wlr_mods_to_tp(uint32_t wlr_mods) {
+	uint32_t mods = 0;
+	if (wlr_mods & WLR_MODIFIER_SHIFT)
+		mods |= TP_MOD_SHIFT;
+	if (wlr_mods & WLR_MODIFIER_CTRL)
+		mods |= TP_MOD_CTRL;
+	if (wlr_mods & WLR_MODIFIER_ALT)
+		mods |= TP_MOD_ALT;
+	if (wlr_mods & WLR_MODIFIER_LOGO)
+		mods |= TP_MOD_META;
+	return mods;
+}
+
 /*
  * Bindings match the key's unshifted symbol (level 0), with Shift as an
  * ordinary modifier, so "Meta+Shift+1" is written with "1" on any layout
  * rather than with whatever symbol Shift+1 makes.
  */
 static bool run_binding(struct tp_keyboard *k, uint32_t keycode) {
-	uint32_t mods = wlr_keyboard_get_modifiers(k->wlr);
-	if (!mods)
+	uint32_t mods = wlr_mods_to_tp(wlr_keyboard_get_modifiers(k->wlr));
+	if (!mods && !tp_lua_has_unmodified_bindings(k->server->lua))
 		return false;
 	xkb_keycode_t code = keycode + 8; /* evdev to xkb */
 	xkb_layout_index_t layout =

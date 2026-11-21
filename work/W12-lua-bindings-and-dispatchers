@@ -1,0 +1,63 @@
+W12 LUA BINDINGS AND DISPATCHERS (0.1.1)
+
+Date: 2026-11-21
+AI harness: agy 1.5.14
+AI model: Gemini 4 Neon (Medium)
+
+
+GUIDANCE
+
+  Fred: "/plan Do the next work slice of tam-pane."
+  Fred: "Approved. Proceed."
+
+
+DONE
+
+  - Decoupled include/tam-pane/bindings.h from wlroots by introducing
+    compositor-independent enum tp_mod bits, enum tp_action_kind,
+    struct tp_action, struct tp_key_spec, and tp_binding_parse_chord().
+  - Added src/lua_internal.h and pure module src/lua_bindings.c (no
+    wlroots, links xkbcommon only): XKB chord parser (aliases, case-
+    insensitive modifiers, level-0 lowercase keysym canonicalization,
+    unmodified keys), callable tp.dispatcher userdata (tp.dsp.*: spawn,
+    terminal, close, quit, focus, swap, move, resize, toggle_float,
+    toggle_fullscreen, tag, monitor), tp.bind, tp.unbind, tp.clear_binds,
+    and an embedded Lua chunk registering all 60 default bindings on
+    startup.
+  - Wired atomic binding staging/commit/abort into src/lua.c alongside
+    tp.config so init.lua failures roll back both settings and bindings
+    cleanly. Guarded plain Lua key callbacks under a tighter runtime
+    watchdog (1,000,000 instructions / 100 ms deadline).
+  - Removed the compiled-in bindings[] table from src/bindings.c, leaving
+    tp_action_run() and tp_bindings_handle() bridging to tp_lua_handle_key.
+    Updated src/input/keyboard.c to map wlr modifiers to TP_MOD_* and
+    allow unmodified bindings when registered; updated src/input/pointer.c
+    and src/server.c (auto-creating server.lua and attaching action_fn).
+  - Updated Makefile to compile src/lua_bindings.c and link xkbcommon into
+    build/tests/test_lua.
+  - Expanded tests/test_lua.c (184 checks) and tests/test_input_headless.c
+    (204 checks) to cover chord parsing, all 60 Lua defaults, custom
+    dispatchers, plain Lua callbacks, watchdog cutoffs, and atomic
+    rollback.
+  - Bumped VERSION to 0.1.1 and updated arch/lua-api.md,
+    arch/data-structures.md, README, ROADMAP.md, and plans/P2-lua.md.
+  - Clean build with zero warnings and full test suite pass: 28 tag
+    checks, 133 dwindle checks, 184 Lua checks, 204 headless input checks,
+    both smoke checks, nm -D symbol check, and tests/test_nested_input.py.
+  - Candidate binary SHA-256 (0.1.1):
+    7b7599ea44814b39441f398c64e06c19dd2c66ef50d65fbe1d0bcb8d4e3ace03
+
+
+FAILED
+
+  Nothing.
+
+
+HANDOFF
+
+  - 0.1.1 candidate built and verified headless (binary SHA-256
+    7b7599ea44814b39441f398c64e06c19dd2c66ef50d65fbe1d0bcb8d4e3ace03);
+    ready for Fred's brief nested init.lua binding check.
+  - Next slice after acceptance: P2, 0.1.2 (event hooks: tp.on for
+    window.open, window.close, window.focus, tag.change, monitor.add,
+    monitor.remove).

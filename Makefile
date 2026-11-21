@@ -36,6 +36,8 @@ LUA_CFLAGS = -O2 -g -std=c99 -Wall -Wextra -fvisibility=hidden \
 	-DLUA_USE_POSIX -ffile-prefix-map=$(CURDIR)=. -MMD -MP
 PKG_CFLAGS := $(shell $(PKG_CONFIG) --cflags $(PKGS))
 PKG_LIBS := $(shell $(PKG_CONFIG) --libs $(PKGS))
+XKB_CFLAGS := $(shell $(PKG_CONFIG) --cflags xkbcommon)
+XKB_LIBS := $(shell $(PKG_CONFIG) --libs xkbcommon)
 LIBTAM := $(LIBTAM_PREFIX)/lib/libtam.a
 
 # Vendored Lua 5.5 core + safe standard libraries only (no io/os/package/debug).
@@ -57,7 +59,7 @@ LUA_OBJS = $(patsubst third_party/lua/%.c,build/lua/%.o,$(LUA_SRCS))
 
 # Pure logic: no wlroots, so the unit tests build without it.
 CORE_SRCS = src/tags.c src/layout/dwindle.c
-LUA_HOST_SRCS = src/lua.c src/settings.c src/spawn.c
+LUA_HOST_SRCS = src/lua.c src/lua_bindings.c src/settings.c src/spawn.c
 # The compositor proper.
 WM_SRCS = src/main.c src/server.c src/monitor.c src/layer.c \
 	src/client.c src/focus.c src/bindings.c src/layout/arrange.c \
@@ -96,9 +98,13 @@ $(WM_OBJS): build/%.o: src/%.c | $(PROTO_HEADERS)
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(PKG_CFLAGS) -c -o $@ $<
 
-$(CORE_OBJS) $(LUA_HOST_OBJS): build/%.o: src/%.c
+$(CORE_OBJS): build/%.o: src/%.c
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -c -o $@ $<
+
+$(LUA_HOST_OBJS): build/%.o: src/%.c
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(XKB_CFLAGS) -c -o $@ $<
 
 build/protocols/xdg-shell-protocol.h: $(WAYLAND_PROTOCOLS)/stable/xdg-shell/xdg-shell.xml
 	@mkdir -p $(@D)
@@ -142,7 +148,7 @@ build/protocols/fractional-scale-v1-protocol.c: $(WAYLAND_PROTOCOLS)/staging/fra
 
 build/tests/test_lua: tests/test_lua.c $(LUA_HOST_OBJS) $(LUA_OBJS) $(LIBTAM) tests/check.h
 	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) -o $@ $< $(LUA_HOST_OBJS) $(LUA_OBJS) $(LIBTAM) -lm
+	$(CC) $(CFLAGS) $(XKB_CFLAGS) -o $@ $< $(LUA_HOST_OBJS) $(LUA_OBJS) $(LIBTAM) $(XKB_LIBS) -lm
 
 build/tests/test_%: tests/test_%.c $(CORE_OBJS) tests/check.h
 	@mkdir -p $(@D)
