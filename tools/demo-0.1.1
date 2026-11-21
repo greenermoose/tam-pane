@@ -1,0 +1,26 @@
+#!/bin/sh
+# Launch tam-pane 0.1.1 nested under Hyprland with tools/demo-0.1.1.lua
+# and an initial terminal displaying the custom bindings to try.
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+startup='foot sh -c '\''
+cat << "EOF"
+=== tam-pane 0.1.1 interactive demo (tools/demo-0.1.1.lua) ===
+
+Config loaded: gap_inner = 12, gap_outer = 16, resize_step = 48
+
+Try these custom 0.1.1 bindings:
+  Meta+Return     open another terminal (default Lua binding)
+  Meta+q          close focused window (custom tp.dsp.close())
+  Meta+x          Lua callback: switch to tag 2 and open a terminal
+  Meta+1 / Tab    jump back to tag 1 / previous tag
+  Meta+t          Lua callback: toggle floating (Meta+v was unbound)
+  Meta+b          Lua callback: while true do end (watchdog cuts it off!)
+  Meta+Shift+E    quit tam-pane (Ctrl+Alt+Esc restores host shortcuts)
+
+EOF
+exec "${SHELL:-/bin/sh}"
+'\'''
+
+exec "$ROOT/tools/nested-input" -c "$ROOT/tools/demo-0.1.1.lua" -s "$startup"

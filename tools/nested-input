@@ -15,6 +15,9 @@ ROOT = Path(__file__).resolve().parent.parent
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--undo', action='store_true')
+    parser.add_argument('-c', '--config', help='Lua config file to pass to tam-pane -c')
+    parser.add_argument('-s', '--startup', default='foot',
+                        help='startup command to pass to tam-pane -s (default: foot)')
     args = parser.parse_args()
     instance = os.environ.get('HYPRLAND_INSTANCE_SIGNATURE')
     if not instance:
@@ -50,7 +53,12 @@ def main():
     if not env.get('WAYLAND_DISPLAY'):
         instances = json.loads(subprocess.check_output(['hyprctl', 'instances', '-j']))
         env['WAYLAND_DISPLAY'] = next(i['wl_socket'] for i in instances if i['instance'] == instance)
-    child = subprocess.Popen([str(binary), '-d', '-s', 'foot'], env=env)
+    cmd = [str(binary), '-d']
+    if args.config:
+        cmd += ['-c', args.config]
+    if args.startup:
+        cmd += ['-s', args.startup]
+    child = subprocess.Popen(cmd, env=env)
     def stop(signum, frame):
         raise KeyboardInterrupt
     signal.signal(signal.SIGTERM, stop)
