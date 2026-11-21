@@ -10,6 +10,7 @@ Continues: W19
 GUIDANCE
 
   Fred: "All pass. Next?" (after accepting 0.1.8)
+  Fred: "Pass. Next?" (after his tools/demo-0.1.9 check)
   Fred chose Ctrl+Alt+Shift+Backspace for the emergency quit (over an
   opt-in Ctrl+Alt+Backspace, or no quit chord).
   Fred chose to accept VT switching on automated tests now and check it
@@ -55,7 +56,10 @@ FAILED
 
 HANDOFF
 
-  - B5 is "Fix available" until Fred checks 0.1.9 with tools/demo-0.1.9.
-    The VT half stays open in P4's acceptance list.
+  - 0.1.9 accepted by Fred on 2026-11-21 after his tools/demo-0.1.9
+    check (commit 92f1b11, binary SHA-256
+    17b80f2b31ef0cb0a2eb1cfc646fa6ad7608749f7a0b987fa4c0502414c04834).
+    The quit is verified; the VT half stays open in P4's acceptance
+    list, so B5 stays "Fix available".
   - Next in R1's order: finding 13 (one attach/detach for client and
     monitor membership, which fixes 6), see WHATNOW.

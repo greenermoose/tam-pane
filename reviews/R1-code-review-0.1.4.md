@@ -128,7 +128,8 @@ schedules are not findings here.
   leaves no way out short of SysRq.
 - **Fix:** VT switching, and possibly one emergency quit, handled in C
   before Lua sees the key.
-- **Status:** became B5, fixed in 0.1.9
+- **Status:** became B5, fixed in 92f1b11 (0.1.9); the quit is verified
+  by Fred, the VT switch waits for the P4 hardware trial
 
 ### 11. A GPU reset ends the session (medium)
 
