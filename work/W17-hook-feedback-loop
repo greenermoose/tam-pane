@@ -10,6 +10,7 @@ Continues: W16
 GUIDANCE
 
   Fred: "All works. Next?" (after accepting 0.1.5)
+  Fred: "Passes. Next?" (after his tools/demo-0.1.6 check)
 
 
 DONE
@@ -45,6 +46,9 @@ FAILED
 
 HANDOFF
 
-  - B2 is "Fix available" until Fred checks 0.1.6 with tools/demo-0.1.6.
+  - 0.1.6 accepted by Fred on 2026-11-21 after his tools/demo-0.1.6
+    check (commit 0735f35, binary SHA-256
+    4f292cbbb9933cab6370cf81d2c3c74815ea6fe205de9d63320e6f5bdd898080).
+    B2 is Verified.
   - Next in R1's order: findings 3 and 7 (spawn while loading, argv
     spawn), see WHATNOW.

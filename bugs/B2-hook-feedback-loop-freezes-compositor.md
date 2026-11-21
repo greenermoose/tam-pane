@@ -1,6 +1,6 @@
 # B2: a hook that re-triggers itself freezes the compositor
 
-- **Status:** Fix available
+- **Status:** Verified
 - **Severity:** critical
 - **Affected versions:** 0.1.2 to 0.1.5
 - **Fixed in:** 0.1.6
@@ -49,5 +49,9 @@ run are queued without a new idle source and drained by a 1 ms timer, so
 epoll runs between batches. Each queued event carries its cascade depth.
 Past `TP_EVENT_CASCADE_MAX` (16) rounds it is dropped, and one warning is
 logged. Regression test: the cascade case above. `make test` passes, and
-the ASan build of the headless test is clean. `tools/demo-0.1.6` is
-Fred's nested check. Not yet checked in a build Fred runs.
+the ASan build of the headless test is clean. Fred checked 0.1.6
+nested with `tools/demo-0.1.6` on 2026-11-21 (commit 0735f35, binary
+SHA-256
+`4f292cbbb9933cab6370cf81d2c3c74815ea6fe205de9d63320e6f5bdd898080`): the tag
+ping-pong and focus spin each stopped with one warning, and input kept
+working.
