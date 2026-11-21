@@ -26,6 +26,22 @@ static void mock_spawn(const char *cmd) {
 		snprintf(spawn_log[spawn_log_count++], sizeof(spawn_log[0]), "%s", cmd);
 }
 
+static int argv_spawn_count;
+static char last_argv[512]; /* arguments joined with '|' */
+
+static void mock_spawn_argv(const char *const argv[]) {
+	argv_spawn_count++;
+	size_t pos = 0;
+	last_argv[0] = '\0';
+	for (size_t i = 0; argv[i]; i++) {
+		int n = snprintf(last_argv + pos, sizeof(last_argv) - pos, "%s%s",
+						 i ? "|" : "", argv[i]);
+		if (n < 0 || (size_t)n >= sizeof(last_argv) - pos)
+			break;
+		pos += (size_t)n;
+	}
+}
+
 static void reset_spawn_log(void) {
 	spawn_count = 0;
 	spawn_log_count = 0;
@@ -161,6 +177,7 @@ static void test_sandbox_and_helpers(void) {
 	struct tp_lua *lua = tp_lua_create();
 	CHECK(lua != NULL);
 	tp_lua_set_spawn_fn(lua, mock_spawn);
+	tp_lua_set_spawn_argv_fn(lua, mock_spawn_argv);
 
 	struct tp_settings base, out;
 	tp_settings_defaults(&base);
@@ -183,16 +200,29 @@ static void test_sandbox_and_helpers(void) {
 		"local co = coroutine.create(function() return 7 end)\n"
 		"local ok, val = coroutine.resume(co)\n"
 		"assert(ok and val == 7)\n"
-		"print('hello from lua', 5.5)\n"
-		"tp.spawn('foot -e true')\n";
-	spawn_count = 0;
-	last_spawned[0] = '\0';
+		"print('hello from lua', 5.5)\n";
 	CHECK(tp_lua_exec_string(lua, sandbox_check, strlen(sandbox_check),
 							 "sandbox", TP_LUA_CONFIG_MAX_INSTRUCTIONS,
 							 TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
 							 sizeof(err)));
-	CHECK(spawn_count == 1);
-	CHECK(strcmp(last_spawned, "foot -e true") == 0);
+
+	/* tp.spawn while the config loads would run again on every reload and
+	 * before WAYLAND_DISPLAY is set: it is an error that names the startup
+	 * hook, in both forms, and nothing is spawned. */
+	spawn_count = 0;
+	argv_spawn_count = 0;
+	const char *spawn_at_load[] = {"tp.spawn('foot -e true')",
+								   "tp.spawn{'foot', '-e', 'true'}"};
+	for (size_t i = 0; i < 2; i++) {
+		err[0] = '\0';
+		CHECK(!tp_lua_exec_string(lua, spawn_at_load[i],
+								  strlen(spawn_at_load[i]), "spawn_at_load",
+								  TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+								  TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+								  sizeof(err)));
+		CHECK(strstr(err, "tp.on('startup'") != NULL);
+	}
+	CHECK(spawn_count == 0 && argv_spawn_count == 0);
 
 	/* Precompiled binary bytecode chunk must be rejected ("t" mode). */
 	const char bytecode[] = "\x1bLua\x55\x00";
@@ -426,6 +456,7 @@ static void test_custom_bindings_and_callbacks(void) {
 	struct tp_lua *lua = tp_lua_create();
 	CHECK(lua != NULL);
 	tp_lua_set_spawn_fn(lua, mock_spawn);
+	tp_lua_set_spawn_argv_fn(lua, mock_spawn_argv);
 	tp_lua_set_action_fn(lua, mock_action, NULL);
 
 	struct tp_settings base, out;
@@ -444,7 +475,15 @@ static void test_custom_bindings_and_callbacks(void) {
 		"  tp.spawn('from-callback')\n"
 		"end)\n"
 		"tp.bind('Meta+y', function() error('callback boom') end)\n"
-		"tp.bind('Meta+z', function() while true do end end)\n";
+		"tp.bind('Meta+z', function() while true do end end)\n"
+		"tp.bind('Meta+a', function()\n"
+		"  tp.spawn{'printf', '%s\\n', \"it's; rm -rf ~ #\"}\n"
+		"  local many = {}\n"
+		"  for i = 1, 65 do many[i] = 'x' end\n"
+		"  for _, bad in ipairs({ {}, {''}, {'a', 5}, {'a\\0b'}, many }) do\n"
+		"    tp.spawn(pcall(tp.spawn, bad) and 'bad-accepted' or 'bad-rejected')\n"
+		"  end\n"
+		"end)\n";
 	CHECK(tp_lua_exec_string(lua, cfg, strlen(cfg), "custom_binds",
 							 TP_LUA_CONFIG_MAX_INSTRUCTIONS,
 							 TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
@@ -471,6 +510,17 @@ static void test_custom_bindings_and_callbacks(void) {
 	CHECK(action_count == 1 && last_action.kind == TP_ACT_TAG_VIEW &&
 		  last_action.tag == 2);
 	CHECK(spawn_count == 1 && strcmp(last_spawned, "from-callback") == 0);
+
+	/* tp.spawn{...} passes each argument to the program as is, with no
+	 * shell, and rejects malformed argument lists. */
+	reset_spawn_log();
+	argv_spawn_count = 0;
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_a));
+	CHECK(argv_spawn_count == 1);
+	CHECK(strcmp(last_argv, "printf|%s\n|it's; rm -rf ~ #") == 0);
+	CHECK(spawn_log_count == 5);
+	for (int i = 0; i < spawn_log_count; i++)
+		CHECK(strcmp(spawn_log[i], "bad-rejected") == 0);
 
 	/* Callback runtime error and runaway loop are contained cleanly. */
 	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_y));
@@ -748,6 +798,35 @@ static void test_event_hooks(void) {
 	CHECK(spawn_log_count == 1 &&
 		  strcmp(spawn_log[0], "false:false:false") == 0);
 
+	tp_lua_destroy(lua);
+}
+
+/* tp.on('startup', fn) is where autostart belongs: the hook may spawn,
+ * and it runs when the compositor delivers the one startup event. */
+static void test_startup_hook(void) {
+	struct tp_lua *lua = tp_lua_create();
+	CHECK(lua != NULL);
+	tp_lua_set_spawn_fn(lua, mock_spawn);
+	tp_lua_set_spawn_argv_fn(lua, mock_spawn_argv);
+	struct tp_settings base, out;
+	tp_settings_defaults(&base);
+	char err[256] = {0};
+	const char *cfg =
+		"tp.on('startup', function(ev)\n"
+		"  tp.spawn('started:' .. ev.event)\n"
+		"  tp.spawn{'waybar', '-c', 'bar.json'}\n"
+		"end)\n";
+	CHECK(tp_lua_exec_string(lua, cfg, strlen(cfg), "startup",
+							 TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+							 TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+							 sizeof(err)));
+	CHECK(tp_lua_has_hooks(lua, TP_EVENT_STARTUP));
+	reset_spawn_log();
+	argv_spawn_count = 0;
+	struct tp_event ev = {.kind = TP_EVENT_STARTUP};
+	CHECK(tp_lua_emit_event(lua, &ev) == 1);
+	CHECK(spawn_count == 1 && strcmp(last_spawned, "started:startup") == 0);
+	CHECK(argv_spawn_count == 1 && strcmp(last_argv, "waybar|-c|bar.json") == 0);
 	tp_lua_destroy(lua);
 }
 
@@ -1062,6 +1141,7 @@ int main(void) {
 	test_default_bindings();
 	test_custom_bindings_and_callbacks();
 	test_event_hooks();
+	test_startup_hook();
 	test_window_rules();
 	test_live_reload();
 	CHECK_DONE("test_lua");

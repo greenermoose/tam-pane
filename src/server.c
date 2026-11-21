@@ -121,6 +121,9 @@ bool tp_server_start(struct tp_server *s) {
 		return false;
 	}
 	setenv("WAYLAND_DISPLAY", s->socket, 1);
+	/* Autostart: startup hooks run once, now that spawned programs can
+	 * reach this compositor. Reloads replace hooks but never re-send it. */
+	tp_events_emit(s, &(struct tp_event){.kind = TP_EVENT_STARTUP});
 	return true;
 }
 

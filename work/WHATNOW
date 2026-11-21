@@ -3,24 +3,25 @@ WHATNOW
 What tam-pane is doing now and what comes next. Read this first; revise
 it at the end of every session (work/README-work).
 
-Updated: 2026-11-21, with W17
+Updated: 2026-11-21, with W18
 
 
 STATE
 
-  Version 0.1.6 on branch dev, accepted by Fred on 2026-11-21 after his
-  nested tools/demo-0.1.6 check on commit 0735f35. 0.1.5 was accepted
-  on 3b808fd and 0.1.4 (Phase P2) on 0a98a51.
+  Version 0.1.7 on branch dev, a candidate. 0.1.6 was accepted by Fred
+  on 2026-11-21 after his nested tools/demo-0.1.6 check on commit
+  0735f35; 0.1.5 on 3b808fd; 0.1.4 (Phase P2) on 0a98a51.
 
-  W16 reviewed the code (reviews/R1-code-review-0.1.4.md) and fixed B1,
-  the tiled drag use-after-free (verified). W17 fixed B2: a hook that
-  re-triggers itself froze the compositor. Hook-caused events now drain
-  on a timer and stop after 16 rounds. 0.1.6 binary SHA-256:
-  4f292cbbb9933cab6370cf81d2c3c74815ea6fe205de9d63320e6f5bdd898080
+  Review R1 (reviews/R1-code-review-0.1.4.md) is being worked through:
+  B1 (tiled drag use-after-free, W16) and B2 (hook feedback loop froze
+  the compositor, W17) are verified. W18 fixed B3: tp.spawn is refused
+  while the config loads, autostart goes in tp.on('startup', ...), and
+  tp.spawn{prog, arg, ...} runs a program with no shell. 0.1.7 binary
+  SHA-256:
+  7ad7e6a94943c01c222f5c4950cbfd5048d36d456008b4814279136f6e54784d
 
-  Automated checks pass: 28 tag, 143 dwindle, 408 Lua, 284 headless
-  input, 3 smoke, nm -D symbol check, tests/test_nested_input.py; the
-  headless test is clean under -fsanitize=address,undefined.
+  Automated checks pass: 28 tag, 143 dwindle, 429 Lua, 284 headless
+  input, 4 smoke, nm -D symbol check, tests/test_nested_input.py.
 
   Dependencies today: wlroots 0.20, wayland-server, xkbcommon, libtam
   (static), and Lua 5.5.1 (vendored in third_party/lua/).
@@ -32,21 +33,22 @@ NEXT
   failing-first test, a tools/demo-<version> for Fred, and the record's
   status lines updated:
 
-  1. R1 findings 3 and 7: refuse tp.spawn while the config loads; add a
-     run-once-at-startup hook; add tp.spawn{argv...} with no shell, and
-     document it for event data (arch/lua-api.md).
-  2. R1 finding 8: capped Lua allocator; truncate rule subjects to 255
-     bytes.
-  3. R1 finding 10: VT switching and an emergency quit in C, before Lua.
-  4. R1 finding 13 (fixes 6), then 12, 4 and 5.
-  5. R1 findings 9, 11 and 15 to 17: write them into the P3 and P4
+  1. R1 finding 8: a counting Lua allocator with a cap, and rule
+     subjects truncated to 255 bytes (src/lua.c, src/lua_rules.c).
+  2. R1 finding 10: VT switching and an emergency quit in C, before Lua.
+  3. R1 finding 13 (fixes 6), then 12, 4 and 5.
+  4. R1 findings 9, 11 and 15 to 17: write them into the P3 and P4
      plans as design work.
-  6. Then P3, 0.2.0 (plans/P3-daily-parity.md).
+  5. Then P3, 0.2.0 (plans/P3-daily-parity.md).
 
 
 WAITING FOR FRED
 
-  Nothing.
+  - A check of 0.1.7 with tools/demo-0.1.7 (nested). Pass: only one
+    guide terminal, even after Meta+Shift+R; the Meta+N window's evil
+    title shows as plain text; spawn-at-load is refused with the
+    startup-hook message; the launcher prints PASS after quitting. If he
+    accepts, set B3 to Verified with the build's SHA-256.
 
 
 WATCH OUT

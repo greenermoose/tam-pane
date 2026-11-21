@@ -328,8 +328,48 @@ static int l_tp_config(lua_State *L) {
 	return 0;
 }
 
+/* tp.spawn{prog, arg, ...}: no shell, so strings from events (window
+ * titles, app ids) reach the program as single arguments, never as shell
+ * syntax. The argument strings stay on the Lua stack while they are used. */
+static int spawn_argv(lua_State *L, struct tp_lua *lua) {
+	lua_Integer n = luaL_len(L, 1);
+	if (n < 1)
+		return luaL_error(L, "tp.spawn: argument list must not be empty");
+	if (n > TP_LUA_SPAWN_ARGV_MAX)
+		return luaL_error(L, "tp.spawn: more than %d arguments",
+						  TP_LUA_SPAWN_ARGV_MAX);
+	luaL_checkstack(L, (int)n, "tp.spawn");
+	const char *argv[TP_LUA_SPAWN_ARGV_MAX + 1];
+	for (lua_Integer i = 1; i <= n; i++) {
+		if (lua_geti(L, 1, i) != LUA_TSTRING)
+			return luaL_error(L, "tp.spawn: argument %d must be a string",
+							  (int)i);
+		size_t len = 0;
+		const char *arg = lua_tolstring(L, -1, &len);
+		if (strlen(arg) != len)
+			return luaL_error(L, "tp.spawn: argument %d contains a NUL byte",
+							  (int)i);
+		if (i == 1 && len == 0)
+			return luaL_error(L, "tp.spawn: program name must not be empty");
+		argv[i - 1] = arg;
+	}
+	argv[n] = NULL;
+	if (lua && lua->spawn_argv_fn)
+		lua->spawn_argv_fn(argv);
+	return 0;
+}
+
 static int l_tp_spawn(lua_State *L) {
 	struct tp_lua *lua = tp_lua_from_state(L);
+	/* A spawn while loading would run again on every reload, before the
+	 * compositor's own WAYLAND_DISPLAY exists, and even when the rest of
+	 * the config then fails. */
+	if (lua && lua->staging)
+		return luaL_error(
+			L, "tp.spawn cannot run while the config loads; put autostart "
+			   "in tp.on('startup', function() tp.spawn(...) end)");
+	if (lua_type(L, 1) == LUA_TTABLE)
+		return spawn_argv(L, lua);
 	size_t len = 0;
 	const char *cmd = luaL_checklstring(L, 1, &len);
 	if (len == 0)
@@ -397,6 +437,7 @@ struct tp_lua *tp_lua_create(void) {
 		return NULL;
 	}
 	lua->spawn_fn = tp_spawn;
+	lua->spawn_argv_fn = tp_spawn_argv;
 
 	lua_State *L = lua->L;
 	lua_pushlightuserdata(L, &tp_lua_registry_key);
@@ -445,6 +486,12 @@ void tp_lua_destroy(struct tp_lua *lua) {
 void tp_lua_set_spawn_fn(struct tp_lua *lua, void (*fn)(const char *cmd)) {
 	if (lua)
 		lua->spawn_fn = fn;
+}
+
+void tp_lua_set_spawn_argv_fn(struct tp_lua *lua,
+							  void (*fn)(const char *const argv[])) {
+	if (lua)
+		lua->spawn_argv_fn = fn;
 }
 
 bool tp_lua_default_config_path(char *out, size_t out_size) {
@@ -615,6 +662,7 @@ bool tp_lua_reload_file(struct tp_lua **lua_slot, const char *path,
 
 	if (*lua_slot) {
 		next->spawn_fn = (*lua_slot)->spawn_fn;
+		next->spawn_argv_fn = (*lua_slot)->spawn_argv_fn;
 		next->action_fn = (*lua_slot)->action_fn;
 		next->action_userdata = (*lua_slot)->action_userdata;
 	}

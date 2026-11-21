@@ -1,0 +1,83 @@
+#!/bin/sh
+# Launch tam-pane 0.1.7 nested under Hyprland to show autostart in a
+# startup hook (once per session) and tp.spawn{...} passing hostile
+# window titles safely (R1 findings 3 and 7).
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+want=$(tr -d '[:space:]' < "$ROOT/VERSION")
+have=$("$ROOT/build/tam-pane" -v 2>/dev/null | awk '{print $2}') || true
+if [ "$have" != "$want" ]; then
+	echo "build/tam-pane is '${have:-missing}', VERSION is $want: run make first" >&2
+	exit 1
+fi
+
+TMPDIR_DEMO=$(mktemp -d "${TMPDIR:-/tmp}/tam-pane-demo-0.1.7.XXXXXX")
+trap 'rm -rf "$TMPDIR_DEMO"' EXIT INT TERM
+
+CFG="$TMPDIR_DEMO/init.lua"
+GOOD="$TMPDIR_DEMO/good.lua"
+BIN="$TMPDIR_DEMO/bin"
+GUIDE="$TMPDIR_DEMO/guide"
+LOG="$TMPDIR_DEMO/titles"
+MARK="$TMPDIR_DEMO/title-ran-a-command"
+mkdir -p "$BIN"
+{
+	printf 'local GUIDE = "%s"\nlocal LOG = "%s"\n' "$GUIDE" "$LOG"
+	cat "$ROOT/tools/demo-0.1.7.lua"
+} >"$GOOD"
+cp "$GOOD" "$CFG"
+
+# A window whose title would create $MARK if it ever reached a shell.
+cat >"$BIN/pane-evil-title" <<EOF
+#!/bin/sh
+exec foot --title="evil'; touch $MARK; echo '" sh -c 'echo "My title tries to run a command. Close me with Meta+W."; sleep 600'
+EOF
+cat >"$BIN/spawn-at-load" <<EOF
+#!/bin/sh
+{ cat "$GOOD"; printf 'tp.config{ gaps = 40 }\ntp.spawn("foot")\n'; } >"$CFG"
+echo "Added a top-level tp.spawn (and gaps = 40). Now press Meta+Shift+R."
+EOF
+cat >"$BIN/restore" <<EOF
+#!/bin/sh
+cp "$GOOD" "$CFG"
+echo "Restored the demo config. Press Meta+Shift+R."
+EOF
+chmod +x "$BIN/pane-evil-title" "$BIN/spawn-at-load" "$BIN/restore"
+export PATH="$BIN:$PATH"
+
+cat >"$GUIDE" <<'EOF'
+=== tam-pane 0.1.7 demo: autostart and safe spawn ===
+
+ 1. This terminal was opened by the config's startup hook (the host
+    terminal says "[demo] startup hook ran").
+ 2. Press Meta+Shift+R. The host terminal says "reloaded config", and
+    no second copy of this terminal appears: autostart ran once.
+ 3. Press Meta+N. A window opens whose title tries to run a command:
+      evil'; touch .../title-ran-a-command; echo '
+    The window.open hook passes that title to notify-send and to a log
+    with tp.spawn{...}. The notification shows the title as plain text.
+    Close it with Meta+W.
+ 4. Type: spawn-at-load   then press Meta+Shift+R. The host terminal
+    shows "reload failed ... tp.spawn cannot run while the config
+    loads; put autostart in tp.on('startup', ...)". The gaps stay 8,
+    and no extra terminal opens.
+ 5. Type: restore   then press Meta+Shift+R (reloads cleanly).
+ 6. Meta+Shift+E quits. The launcher then prints the titles the hook
+    logged and whether any title ran a command.
+
+Pass: one guide terminal only, the evil title shows as text, step 4
+is refused with that message, and the launcher's verdict is PASS.
+
+EOF
+
+"$ROOT/tools/nested-input" -c "$CFG" -s '' || true
+
+echo
+echo "Titles the window.open hook logged:"
+sed 's/^/  /' "$LOG" 2>/dev/null || echo "  (none)"
+if [ -e "$MARK" ]; then
+	echo "FAIL: a window title ran a command ($MARK exists)"
+	exit 1
+fi
+echo "PASS: no window title ran a command"

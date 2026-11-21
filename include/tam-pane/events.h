@@ -20,6 +20,7 @@ enum tp_event_kind {
 	TP_EVENT_TAG_CHANGE,
 	TP_EVENT_MONITOR_ADD,
 	TP_EVENT_MONITOR_REMOVE,
+	TP_EVENT_STARTUP, /* once, after the Wayland socket is up */
 	TP_EVENT_COUNT,
 };
 

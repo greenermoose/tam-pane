@@ -27,6 +27,7 @@ enum {
 	TP_LUA_CALLBACK_MAX_INSTRUCTIONS = 1000000,
 	TP_LUA_READ_FILE_DEFAULT_CAP = 65536,
 	TP_LUA_READ_FILE_MAX_CAP = 1048576,
+	TP_LUA_SPAWN_ARGV_MAX = 64,
 };
 
 typedef void (*tp_lua_action_fn)(const struct tp_action *act, void *userdata);
@@ -56,7 +57,7 @@ bool tp_lua_load_file(struct tp_lua *lua, const char *path,
 /*
  * Load path into a brand-new sandboxed Lua state starting from fresh defaults
  * (settings, default bindings, empty hooks and rules). On success, transfers
- * the existing spawn_fn and action_fn onto the new state, destroys *lua_slot,
+ * the existing spawn handlers and action_fn onto the new state, destroys *lua_slot,
  * installs the new state, writes *out, and returns true. On failure, destroys
  * only the candidate state, leaves *lua_slot and *out untouched, writes a
  * diagnostic into err_buf (if non-NULL), and returns false.
@@ -80,6 +81,10 @@ bool tp_lua_exec_string(struct tp_lua *lua, const char *code, size_t code_len,
 
 /* Override the spawn handler used by tp.spawn (default: tp_spawn). */
 void tp_lua_set_spawn_fn(struct tp_lua *lua, void (*fn)(const char *cmd));
+
+/* Override the handler used by tp.spawn{...} (default: tp_spawn_argv). */
+void tp_lua_set_spawn_argv_fn(struct tp_lua *lua,
+							  void (*fn)(const char *const argv[]));
 
 /* Attach the compositor action handler used by tp.dsp.* dispatchers. */
 void tp_lua_set_action_fn(struct tp_lua *lua, tp_lua_action_fn fn,

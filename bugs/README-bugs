@@ -92,3 +92,6 @@ IN THIS REPOSITORY
     B2-hook-feedback-loop-freezes-compositor.md
                                       a hook that re-triggers itself
                                       freezes the compositor
+    B3-spawn-at-load-and-shell-only-spawn.md
+                                      tp.spawn runs at config load, and
+                                      only through a shell

@@ -1,6 +1,6 @@
 # tam-pane Lua API (`arch/lua-api.md`)
 
-**Status:** 0.1.0–0.1.4 shipped and accepted (Phase P2 complete).
+**Status:** 0.1.0–0.1.4 shipped and accepted (Phase P2 complete); 0.1.5–0.1.6 review fixes accepted; 0.1.7 (safe spawn, `startup` hook) is a candidate.
 
 tam-pane embeds **Lua 5.5.1** statically from `third_party/lua/` with no
 dynamic symbol exports (`lua_*` symbols stay internal to `tam-pane`).
@@ -18,6 +18,12 @@ dynamic symbol exports (`lua_*` symbols stay internal to `tam-pane`).
   (10,000,000 for config load) and a `CLOCK_MONOTONIC` wall-clock deadline
   (1,500 ms for config load). Runaway loops abort with a Lua error and the
   compositor keeps running.
+- **Not a security boundary.** The sandbox keeps a broken config from
+  hanging or crashing the compositor. It does not make the config safe
+  to run if you did not write it: `tp.spawn` starts any program, and
+  `tp.read_file` reads any file you can read. Treat strings from events
+  as untrusted input. Pass them to `tp.spawn{...}`, never into a
+  `tp.spawn(cmd)` string.
 
 ## Configuration file
 
@@ -62,10 +68,47 @@ or out-of-range values raise a Lua error.
 | `repeat_rate` | integer | `1..200` keys per second | `25` |
 | `repeat_delay` | integer | `1..5000` milliseconds | `600` |
 
-### `tp.spawn(cmd)`
+### `tp.spawn(cmd)` and `tp.spawn{prog, arg, ...}`
 
-Launches `cmd` via `/bin/sh -c` using double-fork (`tp_spawn`). Never
-blocks the compositor event loop.
+Both forms start a detached program with a double fork, so they never
+block the compositor event loop.
+
+- `tp.spawn(cmd)` runs the string `cmd` with `/bin/sh -c` (`tp_spawn`).
+  Use it for literal commands that you write yourself.
+- `tp.spawn{prog, arg, ...}` (0.1.7) runs `prog`, found on `PATH`, with
+  exactly these arguments and no shell (`tp_spawn_argv`). Use it whenever
+  an argument comes from an event or a window. Window titles and app ids
+  are set by clients, so a title like `'; rm -rf ~ #` stays one harmless
+  argument:
+
+  ```lua
+  tp.on("window.open", function(ev)
+  	tp.spawn{"notify-send", "Opened", ev.title}   -- safe
+  	-- tp.spawn("notify-send Opened " .. ev.title) -- shell injection
+  end)
+  ```
+
+  The list must hold 1 to 64 strings (`TP_LUA_SPAWN_ARGV_MAX`). None may
+  contain a NUL byte, and the program name must not be empty. If the
+  program cannot be started, tam-pane's log shows
+  `tam-pane: cannot run <prog>: <reason>`.
+
+**Not while the config loads (0.1.7).** `tp.spawn` called while
+`init.lua` loads raises an error. Such a spawn would run again on every
+reload, before tam-pane's own `WAYLAND_DISPLAY` exists (nested, the
+program would open on the host), and even if the rest of the config then
+fails. Put autostart in a `startup` hook instead:
+
+```lua
+tp.on("startup", function()
+	tp.spawn{"waybar"}
+	tp.spawn("quickshell -c ~/.config/quickshell")
+end)
+```
+
+`startup` fires once, after the Wayland socket is up. A reload replaces
+the hooks but does not fire `startup` again, so autostart runs exactly
+once per session.
 
 ### `tp.read_file(path[, max_bytes])`
 
@@ -172,6 +215,7 @@ outside config load.
 | `"tag.change"` | `event`, `monitor`, `tags` (new bitmask), `prev_tags` (previous bitmask), `tag` (lowest active `1..9`) |
 | `"monitor.add"` | `event`, `name`, `x`, `y`, `w`, `h`, `scale` |
 | `"monitor.remove"` | `event`, `name`, `x`, `y`, `w`, `h`, `scale` |
+| `"startup"` (0.1.7) | `event`; fires once per session, after the Wayland socket is up (never on reload) |
 
 ### `tp.off(id)`
 

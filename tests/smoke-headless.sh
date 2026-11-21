@@ -114,4 +114,44 @@ else
 	report bad "sighup reload check failed (exit status: $status)"
 fi
 
+# 4. Startup hook: runs once, after tam-pane's own WAYLAND_DISPLAY is set,
+#    and not again on reload. tp.spawn{...} runs sh directly, no shell
+#    command string.
+name=startup-once
+dir=$(mktemp -d "${TMPDIR:-/tmp}/tam-pane-smoke.XXXXXX") || exit 1
+chmod 700 "$dir"
+cfg="$dir/init.lua"
+started="$dir/started"
+cat >"$cfg" <<EOF
+tp.on('startup', function()
+	tp.spawn{'sh', '-c', 'echo "\$WAYLAND_DISPLAY" >> "\$1"', 'sh', '$started'}
+end)
+EOF
+env -u WAYLAND_DISPLAY -u DISPLAY XDG_RUNTIME_DIR="$dir" \
+	XDG_CONFIG_HOME="$dir/config" \
+	WLR_BACKENDS=headless WLR_RENDERER=pixman WLR_HEADLESS_OUTPUTS=1 \
+	"$bin" -c "$cfg" >"$dir/log" 2>&1 &
+pid=$!
+wait_for 40 has_socket
+wait_for 40 test -s "$started"
+kill -HUP "$pid" 2>/dev/null
+wait_for 40 grep -q 'reloaded config:' "$dir/log"
+sleep 0.3
+kill -TERM "$pid" 2>/dev/null
+wait "$pid"
+status=$?
+lines=$(cat "$started" 2>/dev/null)
+log=$(cat "$dir/log")
+rm -rf "$dir"
+case $lines in
+wayland-*) once=yes ;;
+*) once=no ;;
+esac
+if [ "$once" = yes ] && [ "$(printf '%s\n' "$lines" | wc -l)" -eq 1 ] &&
+	[ "$status" -eq 0 ]; then
+	report ok
+else
+	report bad "startup hook output '$lines' (want one wayland-N line), exit status: $status"
+fi
+
 exit "$fail"

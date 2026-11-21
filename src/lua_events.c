@@ -18,6 +18,7 @@ static const char *const event_names[TP_EVENT_COUNT] = {
 	[TP_EVENT_TAG_CHANGE] = "tag.change",
 	[TP_EVENT_MONITOR_ADD] = "monitor.add",
 	[TP_EVENT_MONITOR_REMOVE] = "monitor.remove",
+	[TP_EVENT_STARTUP] = "startup",
 };
 
 const char *tp_event_kind_name(enum tp_event_kind kind) {
@@ -183,6 +184,7 @@ static void push_event_table(lua_State *L, const struct tp_event *ev) {
 		lua_pushnumber(L, (lua_Number)ev->monitor.scale);
 		lua_setfield(L, -2, "scale");
 		break;
+	case TP_EVENT_STARTUP:
 	case TP_EVENT_COUNT:
 		break;
 	}

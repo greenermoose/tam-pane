@@ -1,0 +1,62 @@
+W18 AUTOSTART HOOK AND SHELL-FREE SPAWN (0.1.7)
+
+Date: 2026-11-21
+AI harness: Claude Code 2.1.330
+AI model: claude-opus-5-5
+Commits: the 0.1.7 commit that adds this record
+Continues: W17
+
+
+GUIDANCE
+
+  Fred: "Passes. Next?" (after accepting 0.1.6)
+
+
+DONE
+
+  - Accepted 0.1.6 in 808e8aa (B2 Verified).
+  - Fixed R1 findings 3 and 7 as B3
+    (bugs/B3-spawn-at-load-and-shell-only-spawn.md):
+      - tp.spawn while the config loads is an error that names
+        tp.on('startup', ...);
+      - new "startup" event (TP_EVENT_STARTUP), emitted once by
+        tp_server_start after WAYLAND_DISPLAY is set, never on reload;
+      - tp.spawn{prog, arg, ...} runs the program with execvp and no
+        shell (tp_spawn_argv in src/spawn.c; 1 to 64 string arguments,
+        no NUL bytes, non-empty program name);
+      - a failed exec now logs "tam-pane: cannot run <prog>: <reason>"
+        from the child.
+  - Design choices: refusing a load-time spawn (rather than skipping it
+    silently) makes a misplaced autostart line show up at once. Fred's
+    own config has no tp.spawn, so nothing of his breaks. tp.dsp.spawn
+    stays a shell string, because bindings hold literal commands.
+  - arch/lua-api.md: both spawn forms, the startup hook, the event
+    table, and a "Not a security boundary" note in the safety model.
+  - Tests: test_lua (refused at load in both forms, hostile argv passed
+    through unchanged, five malformed lists rejected, startup hook) and
+    a startup-once smoke check (the hook ran once, saw tam-pane's
+    WAYLAND_DISPLAY, did not rerun after SIGHUP). The smoke check failed
+    against 0.1.6 ("unknown event 'startup'").
+  - Added tools/demo-0.1.7 and tools/demo-0.1.7.lua: the startup hook
+    opens the guide terminal; Meta+N opens a window with a hostile title
+    that hooks pass to notify-send; spawn-at-load and restore exercise
+    the load-time error. After quitting, the launcher prints PASS or
+    FAIL depending on whether a title ran a command. The generated
+    config was run headless with D-Bus disabled.
+  - make test: 28 tag, 143 dwindle, 429 Lua, 284 headless input checks,
+    4 smoke checks, nm -D check; tests/test_nested_input.py passes;
+    test_lua is clean under ASan and LeakSanitizer.
+  - VERSION 0.1.7. Candidate binary SHA-256:
+    7ad7e6a94943c01c222f5c4950cbfd5048d36d456008b4814279136f6e54784d
+
+
+FAILED
+
+  Nothing.
+
+
+HANDOFF
+
+  - B3 is "Fix available" until Fred checks 0.1.7 with tools/demo-0.1.7.
+  - Next in R1's order: finding 8 (capped Lua allocator, truncated rule
+    subjects), see WHATNOW.

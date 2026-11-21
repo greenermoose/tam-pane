@@ -76,6 +76,7 @@ struct tp_lua {
 
 	struct tp_settings *staging;
 	void (*spawn_fn)(const char *cmd);
+	void (*spawn_argv_fn)(const char *const argv[]);
 
 	tp_lua_action_fn action_fn;
 	void *action_userdata;
