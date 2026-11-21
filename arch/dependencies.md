@@ -63,8 +63,14 @@ and libgbm stay.
   (0.2.5), behind a build option.
 - **meson and ninja.**
 
+## Vendored in tree (no external dependency)
+
+- **Lua 5.5.1** (`third_party/lua/`, added in 0.1.0): compiled as a static
+  object set with `-fvisibility=hidden` and `-DLUA_USE_POSIX` (no
+  `-rdynamic`, no `lua_*` symbols exported to avoid clashing with
+  `libinput`'s `liblua 5.4`). Unsafe libraries (`io`, `os`, `package`,
+  `debug`) are not compiled or linked.
+
 ## Coming in later phases
 
-- **Lua 5.5** (P2, 0.1.0): C sources in `third_party/lua/`, built by our
-  Makefile. They are not an external dependency.
 - **xcb** (P3, 0.2.5): temporary, for XWayland only.

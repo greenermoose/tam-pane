@@ -17,6 +17,7 @@ run() {
 	dir=$(mktemp -d "${TMPDIR:-/tmp}/tam-pane-smoke.XXXXXX") || exit 1
 	chmod 700 "$dir"
 	env -u WAYLAND_DISPLAY -u DISPLAY XDG_RUNTIME_DIR="$dir" \
+		XDG_CONFIG_HOME="$dir/config" \
 		WLR_BACKENDS=headless WLR_RENDERER=pixman WLR_HEADLESS_OUTPUTS=1 \
 		"$bin" "$@" >"$dir/log" 2>&1 &
 	pid=$!

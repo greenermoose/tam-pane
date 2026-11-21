@@ -77,6 +77,32 @@ updated with `tools/pull-references` (see `ideas/sources`):
 - **How:** Copied unchanged.
 - **Why:** Panels, bars and launchers need it (used from 0.0.5).
 
+### Lua 5.5.1 interpreter
+
+- **tam-pane files:** `third_party/lua/*.[ch]`
+- **Source:** Lua 5.5.1 release tarball
+  (`https://www.lua.org/ftp/lua-5.5.1.tar.gz`), SHA-256
+  `1c4b4068d67061f2a2231ad2b5422e77acea1487ea9890f6320af614f4373dce`,
+  MIT License (notice kept in `third_party/lua/lua.h`).
+- **How:** Copied unchanged from `lua-5.5.1/src/` excluding the standalone
+  CLI entry points (`lua.c`, `luac.c`, `onelua.c`). Built statically with
+  `-fvisibility=hidden` and `-DLUA_USE_POSIX` (without `-DLUA_USE_DLOPEN`
+  or `-rdynamic`), compiling only the core VM and safe standard libraries
+  (omitting `linit.c`, `liolib.c`, `loslib.c`, `loadlib.c`, `ldblib.c`).
+- **Why:** In-process Lua 5.5 scripting for configuration, bindings,
+  hooks, rules, and layouts with no external library dependency and no
+  symbol clash with `libinput`'s `liblua 5.4`.
+
+### Lua watchdog pattern
+
+- **tam-pane file:** `src/lua.c` (`watchdog_hook`, `guarded_pcall`)
+- **Source:** Hyprland `src/config/lua/LuaCaller.cpp` (`guardedPCall`,
+  `watchdogHook`), commit `f3e0768`, BSD-3-Clause.
+- **How:** Rewritten in C11 for `struct tp_lua` with no globals, saving
+  and restoring hook state across nested calls, and enforcing both an
+  instruction budget and a `CLOCK_MONOTONIC` wall-clock deadline.
+- **Why:** Prevents runaway Lua loops from stalling the compositor.
+
 ## Compared with, not taken
 
 - The overall shape of `src/server.c`, `src/monitor.c`, `src/client.c` and

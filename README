@@ -24,9 +24,10 @@ WHAT IT DOES
   viewing. One window can appear in several views, and one view can show
   several tags at once.
 
-  Lua scripting built in, like Hyprland. Configuration, key bindings, event
-  hooks, window rules and layouts will be written in Lua, with the Lua 5.5
-  interpreter compiled into tam-pane itself (from 0.1.0).
+  Lua scripting built in, like Hyprland. Configuration is loaded from
+  ~/.config/tam-pane/init.lua using the Lua 5.5 interpreter compiled
+  statically into tam-pane (0.1.0); key bindings, event hooks, window
+  rules and custom layouts follow in 0.1.1+.
 
 
 HOW IT IS BUILT
@@ -89,6 +90,7 @@ KEYS (COMPILED IN UNTIL LUA CONFIGURATION ARRIVES)
 WHERE THINGS ARE
 
   src/, include/   the compositor (one module per file)
+  third_party/lua/ vendored Lua 5.5.1 C sources (static object set)
   tests/           unit tests and headless checks
   protocols/       Wayland protocol files we carry
   ideas/           ideas we collect from other window managers

@@ -5,8 +5,9 @@ of versions. Versions follow semantic versioning: during 0.x, the minor
 number marks a phase's big step and the patch number marks each
 milestone inside it.
 
-**Current version:** 0.0.5 (panels and monitors accepted by Fred on
-2026-11-21; Phase P1 complete; development continues on branch `dev`).
+**Current version:** 0.1.0 (Lua 5.5 interpreter and `init.lua` implemented on
+branch `dev`, awaiting Fred's nested check; Phase P1 0.0.5 accepted
+2026-11-21).
 
 ## Tamlinux timing
 

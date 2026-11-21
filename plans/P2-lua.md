@@ -1,6 +1,6 @@
 # P2: Lua scripting (0.1.x)
 
-**Status:** not started.
+**Status:** in progress (0.1.0 implemented, awaiting Fred's nested check).
 
 ## Goal
 

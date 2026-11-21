@@ -267,8 +267,8 @@ static void on_frame(struct wl_listener *l, void *data) {
 
 bool tp_pointer_init(struct tp_server *s) {
 	s->cursor = wlr_cursor_create();
-	s->cursor_mgr = wlr_xcursor_manager_create(s->settings.cursor_theme,
-											   s->settings.cursor_size);
+	s->cursor_mgr = wlr_xcursor_manager_create(
+		tp_settings_cursor_theme(&s->settings), s->settings.cursor_size);
 	if (!s->cursor || !s->cursor_mgr) {
 		tam_log_error("cannot create the cursor");
 		return false;

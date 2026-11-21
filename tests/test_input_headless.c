@@ -6,6 +6,8 @@
 #include "tam-pane/input.h"
 #include "tam-pane/focus.h"
 #include "tam-pane/layer.h"
+#include "tam-pane/layout/arrange.h"
+#include "tam-pane/lua.h"
 #include "tam-pane/monitor.h"
 #include <wlr/backend/headless.h>
 #include <wlr/types/wlr_scene.h>
@@ -933,6 +935,45 @@ int main(void) {
 	CHECK(c1->mon == o3->data);
 	CHECK(c1->home_output == NULL);
 	CHECK(c1->tags == saved_tags);
+
+	/*
+	 * Lua 0.1.0 integration: load a real init.lua setting custom gaps,
+	 * re-arrange, and verify tiled geometry updates; then verify a runaway
+	 * init.lua is cut off and keeps the previous settings.
+	 */
+	server.lua = tp_lua_create();
+	CHECK(server.lua != NULL);
+	char lua_dir[] = "/tmp/tam-pane-headless-lua.XXXXXX";
+	CHECK(mkdtemp(lua_dir) != NULL);
+	char lua_cfg[256];
+	snprintf(lua_cfg, sizeof(lua_cfg), "%s/init.lua", lua_dir);
+	FILE *lf = fopen(lua_cfg, "wb");
+	CHECK(lf != NULL);
+	if (lf) {
+		fputs("tp.config{ gap_inner = 20, gap_outer = 30 }\n", lf);
+		fclose(lf);
+	}
+	CHECK(tp_lua_load_file(server.lua, lua_cfg, true, &server.settings,
+						   &server.settings));
+	CHECK(server.settings.gap_inner == 20);
+	CHECK(server.settings.gap_outer == 30);
+	tp_arrange(c1->mon);
+	CHECK(c1->geom.x == c1->mon->usable.x + 30);
+	CHECK(c1->geom.y == c1->mon->usable.y + 30);
+	CHECK(c1->geom.w == c1->mon->usable.w - 60);
+	CHECK(c1->geom.h == c1->mon->usable.h - 60);
+
+	lf = fopen(lua_cfg, "wb");
+	CHECK(lf != NULL);
+	if (lf) {
+		fputs("tp.config{ gap_outer = 99 }\nwhile true do end\n", lf);
+		fclose(lf);
+	}
+	CHECK(!tp_lua_load_file(server.lua, lua_cfg, true, &server.settings,
+							&server.settings));
+	CHECK(server.settings.gap_outer == 30);
+	unlink(lua_cfg);
+	rmdir(lua_dir);
 
 	wl_display_disconnect(client.display);
 	if (client.shm_data && client.shm_data != MAP_FAILED)

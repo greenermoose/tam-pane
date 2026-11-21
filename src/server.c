@@ -3,6 +3,7 @@
 #include "tam-pane/client.h"
 #include "tam-pane/input.h"
 #include "tam-pane/layer.h"
+#include "tam-pane/lua.h"
 #include "tam-pane/monitor.h"
 #include <signal.h>
 #include <stdlib.h>
@@ -109,8 +110,11 @@ void tp_server_quit(struct tp_server *s) {
  * order of creation.
  */
 void tp_server_finish(struct tp_server *s) {
-	if (!s->display)
+	if (!s->display) {
+		tp_lua_destroy(s->lua);
+		s->lua = NULL;
 		return;
+	}
 	s->stopping = true;
 	wl_display_destroy_clients(s->display);
 
@@ -138,4 +142,6 @@ void tp_server_finish(struct tp_server *s) {
 		wlr_allocator_destroy(s->allocator);
 	if (s->renderer)
 		wlr_renderer_destroy(s->renderer);
+	tp_lua_destroy(s->lua);
+	s->lua = NULL;
 }

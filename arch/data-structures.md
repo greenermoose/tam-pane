@@ -1,4 +1,4 @@
-# Data structures (0.0.5)
+# Data structures (0.1.0)
 
 This file describes the structures as they are built today. Update it in
 the same commit as any change to them.
@@ -25,10 +25,16 @@ the same commit as any change to them.
 - **Listener ownership:** each module removes its own listeners in its
   `*_finish` function, before `tp_server_finish` destroys anything.
 - **Settings:** `settings` (`struct tp_settings`) holds every user setting
-  in one small struct (`gap_inner`, `gap_outer`, `split_ratio`,
+  in one small value struct (`gap_inner`, `gap_outer`, `split_ratio`,
   `width_bias`, `preserve_split`, `smart_split`, `proportional_split`,
-  `resize_step`, terminal, cursor, keyboard repeat). Compiled-in defaults
-  now; Lua in P2.
+  `resize_step`, fixed-buffer `terminal` and `cursor_theme`, `cursor_size`,
+  `repeat_rate`, `repeat_delay`). Populated from compiled-in defaults and
+  overlaid atomically from `~/.config/tam-pane/init.lua` via `lua`.
+- **Lua runtime:** `lua` (`struct tp_lua *`, `include/tam-pane/lua.h`,
+  `src/lua.c`) owns the embedded Lua 5.5 `lua_State`, watchdog state
+  (instruction budget and monotonic deadline), and active staging pointer
+  during config load. Stored in `LUA_REGISTRYINDEX` by lightuserdata key;
+  no globals and no wlroots dependency.
 
 ## tp_monitor (`include/tam-pane/monitor.h`)
 

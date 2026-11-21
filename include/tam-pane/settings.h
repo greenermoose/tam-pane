@@ -1,14 +1,20 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /*
- * Settings: compiled-in defaults until Lua configuration arrives in 0.1.0
+ * Settings: compiled-in defaults overlaid by ~/.config/tam-pane/init.lua
  * (plans/P2-lua.md). Everything a user may change lives here, in one
- * small struct, rather than in a table of thousands of options.
+ * small value struct, rather than in a table of thousands of options.
  */
 #ifndef TAM_PANE_SETTINGS_H
 #define TAM_PANE_SETTINGS_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
+
+enum {
+	TP_SETTINGS_TERMINAL_MAX = 256,
+	TP_SETTINGS_CURSOR_THEME_MAX = 128,
+};
 
 struct tp_settings {
 	int32_t gap_inner;	 /* pixels between tiled windows */
@@ -19,13 +25,17 @@ struct tp_settings {
 	bool smart_split;		 /* dwindle: pointer direction picks the edge */
 	bool proportional_split; /* dwindle: keep same-direction runs proportional */
 	int32_t resize_step;	 /* pixels per keyboard resize step */
-	const char *terminal;
-	const char *cursor_theme; /* NULL: the XCURSOR_THEME default */
+	char terminal[TP_SETTINGS_TERMINAL_MAX];
+	char cursor_theme[TP_SETTINGS_CURSOR_THEME_MAX]; /* empty: XCURSOR_THEME */
 	uint32_t cursor_size;
 	int32_t repeat_rate;  /* keys per second */
 	int32_t repeat_delay; /* milliseconds */
 };
 
 void tp_settings_defaults(struct tp_settings *s);
+
+static inline const char *tp_settings_cursor_theme(const struct tp_settings *s) {
+	return s->cursor_theme[0] ? s->cursor_theme : NULL;
+}
 
 #endif

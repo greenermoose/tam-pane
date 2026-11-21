@@ -1,0 +1,69 @@
+W11 LUA 5.5 INTERPRETER AND INIT.LUA (0.1.0)
+
+Date: 2026-11-21
+AI harness: agy 1.5.14
+AI model: Gemini 4 Neon (Medium)
+Commits: the 0.1.0 implementation commit
+
+
+GUIDANCE
+
+  Fred: "/plan Do the next work slice for tam-pane."
+  Fred: "Approved. Proceed."
+  Fred: "How long do those tests take? How can they be sped up?"
+
+
+DONE
+
+  - Vendored Lua 5.5.1 from https://www.lua.org/ftp/lua-5.5.1.tar.gz
+    into third_party/lua/ (verified SHA-256
+    1c4b4068d67061f2a2231ad2b5422e77acea1487ea9890f6320af614f4373dce),
+    excluding lua.c, luac.c, and onelua.c. Recorded in UPSTREAM.md,
+    COPYRIGHT, and arch/dependencies.md.
+  - Updated Makefile to compile core Lua + safe stdlibs (omitting
+    linit.c, liolib.c, loslib.c, loadlib.c, ldblib.c) as a static object
+    set with -fvisibility=hidden and -DLUA_USE_POSIX (no -rdynamic, no
+    -DLUA_USE_DLOPEN). Added an nm -D check in make test ensuring zero
+    dynamic lua_* / luaL_* symbols are exported.
+  - Converted tp_settings.terminal and cursor_theme to owned fixed-size
+    buffers (include/tam-pane/settings.h, src/settings.c,
+    src/input/pointer.c) so settings stay a plain value type with atomic
+    rollback on config error.
+  - Implemented sandboxed Lua runtime (include/tam-pane/lua.h, src/lua.c):
+    safe stdlibs only (base minus dofile/loadfile, coroutine, math,
+    string, table, utf8), print routed to tam_log_info, text-only chunk
+    loading ("t"), tp.version, tp.config{ ... } (gaps shorthand plus all
+    13 settings with strict type/range checks and atomic staging),
+    tp.spawn, bounded non-blocking regular-file tp.read_file, and a
+    LUA_MASKCOUNT watchdog enforcing both instruction budget and
+    CLOCK_MONOTONIC deadline.
+  - Wired tp_lua into tp_server (include/tam-pane/server.h, src/server.c)
+    and src/main.c (loading -c <path>, $XDG_CONFIG_HOME/tam-pane/init.lua,
+    or ~/.config/tam-pane/init.lua before tp_server_init, with fallback
+    to defaults). Isolated XDG_CONFIG_HOME in tests/smoke-headless.sh.
+  - Added 72 pure unit checks in tests/test_lua.c and 13 headless Lua
+    integration checks in tests/test_input_headless.c.
+  - Drafted arch/lua-api.md; bumped VERSION to 0.1.0; updated README,
+    ROADMAP.md, plans/P2-lua.md, and arch/data-structures.md.
+  - Clean build with zero warnings and full test suite pass: 28 tag
+    checks, 133 dwindle checks, 72 Lua checks, 199 headless input checks,
+    both smoke checks, nm -D symbol check, and tests/test_nested_input.py.
+  - Candidate binary SHA-256 (0.1.0):
+    5d0e15497d3cd9a17618af1dcfbc09d7d2292a970e63055b8c16fa950eb685e7
+
+
+FAILED
+
+  - First run of test_lua hung on the nested-pcall watchdog escape test
+    ("while true do pcall(function() while true do end end) end"): the
+    10,000-instruction hook always fired inside the inner loop where
+    pcall caught it. Fixed by setting an aborted flag and switching the
+    hook interval to 1 instruction on first trip so nested pcall/xpcall
+    frames unwind immediately.
+
+
+HANDOFF
+
+  - 0.1.0 candidate ready for Fred's brief nested check (SHA-256
+    5d0e15497d3cd9a17618af1dcfbc09d7d2292a970e63055b8c16fa950eb685e7)
+    and review of arch/lua-api.md before 0.1.1 (bindings & dispatchers).

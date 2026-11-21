@@ -29,6 +29,7 @@ struct wlr_xdg_shell;
 struct wlr_layer_shell_v1;
 struct tp_client;
 struct tp_layer_surface;
+struct tp_lua;
 struct tp_monitor;
 
 /* Interactive pointer drag state (explicit in tp_server, no globals). */
@@ -63,6 +64,7 @@ enum tp_layer {
 
 struct tp_server {
 	struct tp_settings settings;
+	struct tp_lua *lua;
 
 	struct wl_display *display;
 	struct wl_event_loop *loop;

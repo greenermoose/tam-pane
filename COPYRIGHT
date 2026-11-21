@@ -66,4 +66,15 @@ Hyprland (https://github.com/hyprwm/Hyprland)
 
   Taken from Hyprland: the dwindle split rules (split along the longer
   side with a width bias; the "smart split" pointer-direction rule), as
-  reimplemented in src/layout/dwindle.c.
+  reimplemented in src/layout/dwindle.c, and the guarded Lua pcall
+  watchdog pattern as reimplemented in src/lua.c.
+
+
+Lua 5.5.1 (https://www.lua.org)
+
+  Copyright (C) 1994-2026 Lua.org, PUC-Rio.
+  Licensed under the MIT License; see third_party/lua/lua.h for the full
+  license notice.
+
+  Vendored in third_party/lua/ (core VM and standard library C sources,
+  excluding the standalone lua and luac CLI programs).
