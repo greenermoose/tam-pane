@@ -8,19 +8,20 @@ Updated: 2026-11-21, with W9
 
 STATE
 
-  Version 0.0.4 on branch dev (candidate ready for Fred's brief nested
-  check; 0.0.3 was the last accepted milestone).
+  Version 0.0.4 on branch dev (tiling complete, accepted by Fred on
+  2026-11-21 on commit 9745163; binary SHA-256:
+  1593e83af26158b6897c47979ce7da34d71a4c249d4685fe8e7f2e287269f9b9).
 
   W9 completed 0.0.4, tiling complete (plans/P1-foundation.md): keyboard
   split resizing (Meta+Alt+Arrow), directional swap (Meta+Shift+Arrow),
   directional move (Meta+Ctrl+Arrow), pointer move/resize of floating
-  windows and tiled splits (Meta+Left/Right-drag), and optional
-  proportional resizing on insert/remove (proportional_split).
+  windows and tiled splits (Meta+Left/Right-drag), optional proportional
+  resizing on insert/remove (proportional_split), and native host
+  fractional-scale rendering for nested Wayland outputs.
 
   Automated checks pass with zero warnings: 28 tag checks, 133 dwindle
   checks, 142 headless input checks, both smoke checks, and
-  tests/test_nested_input.py. Candidate build/tam-pane SHA-256:
-  1593e83af26158b6897c47979ce7da34d71a4c249d4685fe8e7f2e287269f9b9.
+  tests/test_nested_input.py.
 
   Dynamic tiling (dwindle), resizing, directional swap/move, floating
   move/resize, fullscreen, and interactive tags work; Lua, panels,
@@ -34,28 +35,20 @@ STATE
 
 NEXT
 
-  1. Accept 0.0.4 once Fred completes his brief nested try of resizing,
-     swapping, moving, and floating drags, then update ROADMAP.md and
-     plans/P1-foundation.md with the accepted build hash.
-
-  2. 0.0.5, panels and monitors: layer-shell and several monitors, so a
+  1. 0.0.5, panels and monitors: layer-shell and several monitors, so a
      Quickshell bar runs and windows move between monitors.
 
-  3. P2, 0.1.0 (Lua 5.5): link without -rdynamic, so tam-pane does not
+  2. P2, 0.1.0 (Lua 5.5): link without -rdynamic, so tam-pane does not
      export its lua_* symbols; check with nm -D build/tam-pane that none
      appear (plans/P2-lua.md).
 
-  4. Later: Tamlinux's desktop tests move from headless Sway to
+  3. Later: Tamlinux's desktop tests move from headless Sway to
      tam-pane's headless mode once it can serve them (ROADMAP.md).
 
 
 WAITING FOR FRED
 
-  - 0.0.4 brief nested try via tools/nested-input on build/tam-pane
-    (SHA-256 1593e83af26158b6897c47979ce7da34d71a4c249d4685fe8e7f2e287269f9b9):
-    open 3 terminals, try Meta+Alt+Arrow and Meta+Right-drag resize,
-    Meta+Shift+Arrow swap, Meta+Ctrl+Arrow move, and Meta+v with
-    Meta+Left/Right-drag on a floating window.
+  - Review and approval of the 0.0.5 (panels and monitors) plan.
 
 
 WATCH OUT

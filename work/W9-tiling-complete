@@ -60,6 +60,7 @@ FAILED
 
 HANDOFF
 
-  - 0.0.4 code and automated tests are complete on dev; waiting for
-    Fred's brief nested check of resize, swap, move, and floating drags.
+  - 0.0.4 accepted by Fred on 2026-11-21 after nested check passed on
+    commit 9745163 (binary SHA-256
+    1593e83af26158b6897c47979ce7da34d71a4c249d4685fe8e7f2e287269f9b9).
   - Next milestone: 0.0.5, panels (layer-shell) and multiple monitors.

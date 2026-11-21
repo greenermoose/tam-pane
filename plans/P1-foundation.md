@@ -1,7 +1,7 @@
 # P1: Foundation (0.0.x)
 
-**Status:** in progress. 0.0.3 interactive tags accepted by Fred on
-2026-11-17. Next: 0.0.4, tiling complete.
+**Status:** in progress. 0.0.4 tiling complete accepted by Fred on
+2026-11-21. Next: 0.0.5, panels and monitors.
 
 ## Goal
 
@@ -45,6 +45,9 @@ was `9d8797596fef75c5ed7147ffbe2425f6251cbdf0589422cd0340c838527e0e51`
 
 ### 0.0.4: tiling complete
 
+- Accepted on 2026-11-21 after Fred's nested check passed on commit
+  `9745163` (binary SHA-256
+  `1593e83af26158b6897c47979ce7da34d71a4c249d4685fe8e7f2e287269f9b9`).
 - Resize splits from the keyboard (grow and shrink along a direction).
 - Move and resize floating windows with Meta plus a mouse button.
 - Swap and move tiled windows by direction.
