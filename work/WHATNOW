@@ -8,8 +8,9 @@ Updated: 2026-11-21, with W16
 
 STATE
 
-  Version 0.1.5 on branch dev, a candidate. 0.1.4 (Phase P2) was
-  accepted by Fred on 2026-11-21 on commit 0a98a51.
+  Version 0.1.5 on branch dev, accepted by Fred on 2026-11-21 after his
+  nested tools/demo-0.1.5 check on commit 3b808fd. 0.1.4 (Phase P2) was
+  accepted on commit 0a98a51.
 
   W16 reviewed the code (reviews/R1-code-review-0.1.4.md) and fixed its
   first finding, B1: a tiled resize drag used freed memory when another
@@ -47,11 +48,7 @@ NEXT
 
 WAITING FOR FRED
 
-  - A check of 0.1.5 with tools/demo-0.1.5 (nested): drags held while
-    short-lived "blip" windows open and close (Meta+O, Meta+I, or
-    pane-blip N in a terminal). Pass: tam-pane never vanishes and drags
-    keep resizing. If he accepts, set B1 to Verified with the build's
-    SHA-256.
+  Nothing.
 
 
 WATCH OUT

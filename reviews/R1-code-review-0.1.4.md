@@ -34,7 +34,7 @@ schedules are not findings here.
 - **Fix:** the tree's generation counter changes whenever it frees a node,
   and the drag records the tree and generation it began on; on a
   mismatch the drag begins again from the pointer.
-- **Status:** became B1, fixed in 0.1.5
+- **Status:** became B1, fixed in 3b808fd (0.1.5), verified by Fred
 
 ### 2. A Lua hook feedback loop hangs the compositor (critical)
 

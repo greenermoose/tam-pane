@@ -13,6 +13,9 @@ GUIDANCE
   Fred approved the review plan, which ends with a fix list in order.
   Fred: "Create a demo in the tools folder for 0.1.5 so I can put it
   through its paces."
+  Fred: "I can't hold Meta + Right Mouse Button and press 0 at the same
+  time."
+  Fred: "All works. Next?"
 
 
 DONE
@@ -60,5 +63,7 @@ FAILED
 
 HANDOFF
 
-  - B1 is "Fix available" until Fred checks 0.1.5 (see WHATNOW).
+  - 0.1.5 accepted by Fred on 2026-11-21 after his tools/demo-0.1.5
+    check (commit 3b808fd, binary SHA-256
+    c22466f328a30ba9bcbd62dd4f373c77cbb334550c5b71f63187852ae08e7b99). B1 is Verified.
   - The rest of R1's fix order is in WHATNOW NEXT.

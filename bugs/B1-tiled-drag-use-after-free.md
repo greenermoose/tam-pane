@@ -1,6 +1,6 @@
 # B1: tiled resize drag uses freed memory when another window leaves
 
-- **Status:** Fix available
+- **Status:** Verified
 - **Severity:** critical
 - **Affected versions:** 0.0.4 to 0.1.4
 - **Fixed in:** 0.1.5
@@ -45,5 +45,7 @@ node. A drag records the tree and generation it began on.
 write a stale drag, and `update_grab` begins the drag again from the
 pointer, or cancels it when no split is left. Regression tests: the
 headless case above and a unit case in `tests/test_dwindle.c`. `make
-test` passes, and the ASan build of both tests is clean. Not yet checked
-in a build Fred runs.
+test` passes, and the ASan build of both tests is clean. Fred checked
+0.1.5 nested with tools/demo-0.1.5 on 2026-11-21 (commit 3b808fd, binary
+SHA-256 c22466f328a30ba9bcbd62dd4f373c77cbb334550c5b71f63187852ae08e7b99): drags held while windows opened and closed kept resizing,
+and tam-pane did not crash.
