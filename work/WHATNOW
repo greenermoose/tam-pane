@@ -9,11 +9,10 @@ Updated: 2026-11-21, with W12
 STATE
 
   Version 0.1.1 on branch dev (Phase P2: Lua key bindings and dispatchers
-  implemented in W12, awaiting Fred's nested check; candidate binary
-  SHA-256:
+  accepted by Fred on 2026-11-21 on commit 5eb12fb; binary SHA-256:
   7b7599ea44814b39441f398c64e06c19dd2c66ef50d65fbe1d0bcb8d4e3ace03).
-  0.1.0 was accepted by Fred on 2026-11-21; Phase P1 (0.0.1-0.0.5) was
-  accepted on 2026-11-21.
+  0.1.0 was accepted on 2026-11-21; Phase P1 (0.0.1-0.0.5) was accepted
+  on 2026-11-21.
 
   W12 completed 0.1.1 (plans/P2-lua.md): removed the compiled-in binding
   table in src/bindings.c and moved all 60 default bindings into an
@@ -22,7 +21,9 @@ STATE
   dispatcher values (spawn, terminal, close, quit, focus, swap, move,
   resize, toggle_float, toggle_fullscreen, tag, monitor) plus plain Lua
   callback bindings guarded by a 100 ms / 1,000,000-instruction runtime
-  watchdog. Bindings stage and roll back atomically with tp.config.
+  watchdog. Bindings stage and roll back atomically with tp.config. Added
+  -c/-s flags to tools/nested-input and tools/demo-0.1.1 for quick nested
+  checks.
 
   Automated checks pass with zero warnings: 28 tag checks, 133 dwindle
   checks, 184 Lua checks, 204 headless input checks, both smoke checks,
@@ -34,10 +35,11 @@ STATE
 
 NEXT
 
-  1. After Fred's nested check accepts 0.1.1: P2, 0.1.2 (event hooks:
-     tp.on("window.open", fn) etc. for window.open, window.close,
-     window.focus, tag.change, monitor.add, monitor.remove;
-     plans/P2-lua.md, arch/lua-api.md).
+  1. P2, 0.1.2 (event hooks): implement tp.on("window.open", fn) etc. for
+     window.open, window.close, window.focus, tag.change, monitor.add,
+     and monitor.remove, running hooks after the compositor finishes its
+     own state change and under the runtime watchdog (plans/P2-lua.md,
+     arch/lua-api.md).
 
   2. Later: Tamlinux's desktop tests move from headless Sway to
      tam-pane's headless mode once it can serve them (ROADMAP.md).
@@ -45,9 +47,7 @@ NEXT
 
 WAITING FOR FRED
 
-  - Brief nested check of 0.1.1 (build/tam-pane, SHA-256
-    7b7599ea44814b39441f398c64e06c19dd2c66ef50d65fbe1d0bcb8d4e3ace03)
-    with custom bindings in init.lua.
+  Nothing.
 
 
 WATCH OUT

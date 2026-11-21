@@ -3,12 +3,17 @@ W12 LUA BINDINGS AND DISPATCHERS (0.1.1)
 Date: 2026-11-21
 AI harness: agy 1.5.14
 AI model: Gemini 4 Neon (Medium)
+Commits: 11c9976, 5eb12fb, plus the 0.1.1 acceptance commit
 
 
 GUIDANCE
 
   Fred: "/plan Do the next work slice of tam-pane."
   Fred: "Approved. Proceed."
+  Fred: "Package up some tests for me to make it easier for me to see
+    tam-pane in action"
+  Fred: "Everything worked. I'm not sure what Meta + B does, but I showed
+    you a screenshot. Note the acceptance."
 
 
 DONE
@@ -44,6 +49,8 @@ DONE
   - Clean build with zero warnings and full test suite pass: 28 tag
     checks, 133 dwindle checks, 184 Lua checks, 204 headless input checks,
     both smoke checks, nm -D symbol check, and tests/test_nested_input.py.
+  - Added -c/-s flags to tools/nested-input and packaged tools/demo-0.1.1
+    plus tools/demo-0.1.1.lua for Fred's interactive nested check.
   - Candidate binary SHA-256 (0.1.1):
     7b7599ea44814b39441f398c64e06c19dd2c66ef50d65fbe1d0bcb8d4e3ace03
 
@@ -55,9 +62,9 @@ FAILED
 
 HANDOFF
 
-  - 0.1.1 candidate built and verified headless (binary SHA-256
-    7b7599ea44814b39441f398c64e06c19dd2c66ef50d65fbe1d0bcb8d4e3ace03);
-    ready for Fred's brief nested init.lua binding check.
-  - Next slice after acceptance: P2, 0.1.2 (event hooks: tp.on for
-    window.open, window.close, window.focus, tag.change, monitor.add,
-    monitor.remove).
+  - 0.1.1 accepted by Fred on 2026-11-21 after nested demo-0.1.1 check
+    passed on commit 5eb12fb (binary SHA-256
+    7b7599ea44814b39441f398c64e06c19dd2c66ef50d65fbe1d0bcb8d4e3ace03),
+    including live watchdog cutoff on Meta+b.
+  - Next slice: P2, 0.1.2 (event hooks: tp.on for window.open,
+    window.close, window.focus, tag.change, monitor.add, monitor.remove).
