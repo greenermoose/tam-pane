@@ -3,13 +3,14 @@ W13 LUA EVENT HOOKS (0.1.2)
 Date: 2026-11-21
 AI harness: agy 1.5.14
 AI model: Gemini 4 Neon (Medium)
-Commits: (this commit)
+Commits: 1d69c7c, plus the 0.1.2 acceptance commit
 
 
 GUIDANCE
 
   Fred: "/plan Do the next work slice of tam-pane."
   Fred: "Approved. Proceed."
+  Fred: "Nested check works. Note acceptance. May I close this session now?"
 
 
 DONE
@@ -57,9 +58,8 @@ FAILED
 
 HANDOFF
 
-  - 0.1.2 implemented and verified headless; ready for Fred's brief nested
-    check with tools/demo-0.1.2 (binary SHA-256
+  - 0.1.2 accepted by Fred on 2026-11-21 after nested demo-0.1.2 check
+    passed on commit 1d69c7c (binary SHA-256
     54eaf9a00086574cd21a4c935d80c5767a418c88272325d4627f47fbb62f70b0).
-  - Next slice after 0.1.2 acceptance: P2, 0.1.3 (window rules: match on
-    app_id and title with Lua patterns, setting tags, floating, size,
-    position, and monitor).
+  - Next slice: P2, 0.1.3 (window rules: match on app_id and title with
+    Lua patterns, setting tags, floating, size, position, and monitor).
