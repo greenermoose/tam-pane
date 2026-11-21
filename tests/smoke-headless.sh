@@ -10,9 +10,31 @@ set -u
 bin=${1:-build/tam-pane}
 fail=0
 
-# run NAME WAIT_SECONDS [tam-pane args...]: start, wait, SIGTERM, collect.
+# wait_for MAX_TICKS CONDITION_CMD: poll every 50ms until condition succeeds.
+wait_for() {
+	ticks=$1
+	shift
+	while [ "$ticks" -gt 0 ]; do
+		if "$@" >/dev/null 2>&1; then
+			return 0
+		fi
+		sleep 0.05
+		ticks=$((ticks - 1))
+	done
+	return 1
+}
+
+has_socket() {
+	ls "$dir"/wayland-* >/dev/null 2>&1
+}
+
+two_mapped() {
+	[ "$(grep -c 'window mapped: foot' "$dir/log" 2>/dev/null || echo 0)" -ge 2 ]
+}
+
+# run NAME MODE [tam-pane args...]: start, poll until ready, SIGTERM, collect.
 run() {
-	name=$1 wait=$2
+	name=$1 mode=$2
 	shift 2
 	dir=$(mktemp -d "${TMPDIR:-/tmp}/tam-pane-smoke.XXXXXX") || exit 1
 	chmod 700 "$dir"
@@ -21,9 +43,15 @@ run() {
 		WLR_BACKENDS=headless WLR_RENDERER=pixman WLR_HEADLESS_OUTPUTS=1 \
 		"$bin" "$@" >"$dir/log" 2>&1 &
 	pid=$!
-	sleep "$wait"
+	wait_for 40 has_socket
+	if [ "$mode" = windows ]; then
+		if wait_for 60 two_mapped; then
+			# Let the short-lived foot exit while the second stays connected.
+			sleep 0.2
+		fi
+	fi
 	socket=no
-	ls "$dir"/wayland-* >/dev/null 2>&1 && socket=yes
+	has_socket && socket=yes
 	kill -TERM "$pid" 2>/dev/null
 	wait "$pid"
 	status=$?
@@ -42,12 +70,12 @@ report() {
 	fi
 }
 
-run start-stop 1
+run start-stop socket
 if [ "$socket" = yes ] && [ "$status" -eq 0 ]; then report ok
 else report bad "socket: $socket, exit status: $status"; fi
 
 if command -v foot >/dev/null 2>&1; then
-	run windows 2 -d -s "foot sh -c 'sleep 0.5' & foot sh -c 'sleep 5'"
+	run windows windows -d -s "foot sh -c 'sleep 0.15' & foot sh -c 'sleep 5'"
 	mapped=$(printf '%s\n' "$log" | grep -c 'window mapped: foot')
 	if [ "$mapped" -eq 2 ] && [ "$status" -eq 0 ]; then report ok
 	else report bad "windows mapped: $mapped of 2, exit status: $status"; fi

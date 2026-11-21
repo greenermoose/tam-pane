@@ -3,7 +3,7 @@ W11 LUA 5.5 INTERPRETER AND INIT.LUA (0.1.0)
 Date: 2026-11-21
 AI harness: agy 1.5.14
 AI model: Gemini 4 Neon (Medium)
-Commits: the 0.1.0 implementation commit
+Commits: ce27ba0, plus the smoke-headless.sh polling commit
 
 
 GUIDANCE
@@ -11,6 +11,7 @@ GUIDANCE
   Fred: "/plan Do the next work slice for tam-pane."
   Fred: "Approved. Proceed."
   Fred: "How long do those tests take? How can they be sped up?"
+  Fred: "Yes, replace the sleep with short polling loops."
 
 
 DONE
@@ -48,6 +49,8 @@ DONE
   - Clean build with zero warnings and full test suite pass: 28 tag
     checks, 133 dwindle checks, 72 Lua checks, 199 headless input checks,
     both smoke checks, nm -D symbol check, and tests/test_nested_input.py.
+  - Replaced fixed sleeps in tests/smoke-headless.sh with 50ms polling
+    loops for the Wayland socket and mapped foot windows.
   - Candidate binary SHA-256 (0.1.0):
     5d0e15497d3cd9a17618af1dcfbc09d7d2292a970e63055b8c16fa950eb685e7
 
