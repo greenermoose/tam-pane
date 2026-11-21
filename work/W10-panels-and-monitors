@@ -53,7 +53,8 @@ DONE
 
 HANDOFF
 
-  - 0.0.5 code and automated tests are complete on dev; waiting for
-    Fred's brief nested check of a layer-shell bar (e.g., Quickshell)
-    and multi-monitor focus/move.
+  - 0.0.5 accepted by Fred on 2026-11-21 after nested Quickshell bar
+    check passed on commit a412e0b (binary SHA-256
+    5c2a1b2befab973d9212d3c82ff64a8149e74a365bf4264f193d8c5da1401295).
+    Phase P1 (foundation) is complete.
   - Next phase: P2, 0.1.0 (Lua 5.5 interpreter and init.lua).

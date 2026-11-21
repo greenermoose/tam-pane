@@ -8,8 +8,10 @@ Updated: 2026-11-21, with W10
 
 STATE
 
-  Version 0.0.5 on branch dev (candidate ready for Fred's brief nested
-  check; 0.0.4 was the last accepted milestone, on 2026-11-21).
+  Version 0.0.5 on branch dev (panels and monitors, accepted by Fred on
+  2026-11-21 on commit a412e0b; binary SHA-256:
+  5c2a1b2befab973d9212d3c82ff64a8149e74a365bf4264f193d8c5da1401295).
+  Phase P1 (foundation, 0.0.1-0.0.5) is complete.
 
   W10 completed 0.0.5, panels and monitors (plans/P1-foundation.md):
   wlr-layer-shell-unstable-v1 v4 (exclusive zones shrinking
@@ -20,8 +22,7 @@ STATE
 
   Automated checks pass with zero warnings: 28 tag checks, 133 dwindle
   checks, 186 headless input checks, both smoke checks, and
-  tests/test_nested_input.py. Candidate build/tam-pane SHA-256:
-  5c2a1b2befab973d9212d3c82ff64a8149e74a365bf4264f193d8c5da1401295.
+  tests/test_nested_input.py.
 
   Dynamic tiling (dwindle), resizing, directional swap/move, floating
   move/resize, fullscreen, interactive tags, layer-shell panels/popups,
@@ -36,26 +37,19 @@ STATE
 
 NEXT
 
-  1. Accept 0.0.5 once Fred completes his brief nested try of a
-     layer-shell bar (Quickshell) and multi-monitor focus/move, then
-     update ROADMAP.md and plans/P1-foundation.md with the accepted
-     build hash.
+  1. P2, 0.1.0 (Lua 5.5): vendor Lua 5.5 C sources into third_party/lua/,
+     build as a static object set, load ~/.config/tam-pane/init.lua for
+     settings with an instruction budget and wall-clock deadline, and
+     link without -rdynamic so tam-pane does not export its lua_* symbols
+     (verify with nm -D build/tam-pane; plans/P2-lua.md).
 
-  2. P2, 0.1.0 (Lua 5.5): link without -rdynamic, so tam-pane does not
-     export its lua_* symbols; check with nm -D build/tam-pane that none
-     appear (plans/P2-lua.md).
-
-  3. Later: Tamlinux's desktop tests move from headless Sway to
+  2. Later: Tamlinux's desktop tests move from headless Sway to
      tam-pane's headless mode once it can serve them (ROADMAP.md).
 
 
 WAITING FOR FRED
 
-  - 0.0.5 brief nested try on build/tam-pane (SHA-256
-    5c2a1b2befab973d9212d3c82ff64a8149e74a365bf4264f193d8c5da1401295):
-    run a layer-shell bar (e.g., Quickshell) against the nested
-    WAYLAND_DISPLAY to confirm exclusive space and tiled placement, and
-    with WLR_WL_OUTPUTS=2 try Meta+,/. and Meta+Shift+,/. across outputs.
+  - Direction on starting Phase P2 (0.1.0, Lua 5.5).
 
 
 WATCH OUT

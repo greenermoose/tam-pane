@@ -5,8 +5,8 @@ of versions. Versions follow semantic versioning: during 0.x, the minor
 number marks a phase's big step and the patch number marks each
 milestone inside it.
 
-**Current version:** 0.0.4 (tiling complete accepted by Fred on
-2026-11-21; development continues on branch `dev`).
+**Current version:** 0.0.5 (panels and monitors accepted by Fred on
+2026-11-21; Phase P1 complete; development continues on branch `dev`).
 
 ## Tamlinux timing
 

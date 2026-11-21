@@ -1,7 +1,7 @@
 # P1: Foundation (0.0.x)
 
-**Status:** in progress. 0.0.4 tiling complete accepted by Fred on
-2026-11-21. Next: 0.0.5, panels and monitors.
+**Status:** complete. 0.0.5 panels and monitors accepted by Fred on
+2026-11-21. Next phase: P2 (`plans/P2-lua.md`, 0.1.0).
 
 ## Goal
 
@@ -57,6 +57,9 @@ was `9d8797596fef75c5ed7147ffbe2425f6251cbdf0589422cd0340c838527e0e51`
 
 ### 0.0.5: panels and monitors
 
+- Accepted on 2026-11-21 after Fred's nested Quickshell bar check passed
+  on commit `a412e0b` (binary SHA-256
+  `5c2a1b2befab973d9212d3c82ff64a8149e74a365bf4264f193d8c5da1401295`).
 - layer-shell: panels, bars, launchers and notifications, with exclusive
   zones shrinking `tp_monitor.usable`. Layer popups.
 - Several monitors: focus and move windows between them, and handle
