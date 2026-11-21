@@ -21,10 +21,13 @@ GUIDE="$TMPDIR_DEMO/guide"
 mkdir -p "$BIN"
 cp "$ROOT/tools/demo-0.1.5.lua" "$CFG"
 
-# pane-blip N: a window that closes itself after N seconds (default 5).
+# pane-blip N [D]: after D seconds (default 0), open a window that closes
+# itself N seconds later (default 5). The delay leaves both hands free to
+# start a drag before the window appears.
 cat >"$BIN/pane-blip" <<'EOF'
 #!/bin/sh
 n=${1:-5}
+sleep "${2:-0}"
 exec foot --title="blip ${n}s" sh -c "echo 'This window closes in $n seconds.'; sleep $n"
 EOF
 # pane-burst: three windows that close at 2, 4 and 6 seconds.
@@ -47,9 +50,9 @@ the one a blip opens next to.
  2. Type: pane-blip 5   A window opens beside one terminal. Drag that
     terminal and keep dragging past the moment the blip closes. The
     drag carries on resizing. (In 0.1.4 this wrote freed memory.)
- 3. Start a drag on any tiled window and, still holding Meta and the
-    button, press O. A blip opens mid-drag and closes 3 s later. Keep
-    dragging through both.
+ 3. Press Meta+O and let go, then start a drag on any tiled window
+    within 2 seconds. A blip opens mid-drag and closes 4 s later. Keep
+    dragging through both. (In a terminal: pane-blip 4 2.)
  4. Press Meta+I (three blips closing at 2, 4 and 6 s). Drag the window
     they split and keep dragging for about 7 seconds.
  5. Drag a blip itself until it closes: the drag simply stops.
