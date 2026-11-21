@@ -1,0 +1,55 @@
+W16 CODE REVIEW AND TILED DRAG FIX (0.1.5)
+
+Date: 2026-11-21
+AI harness: Claude Code 2.1.330
+AI model: claude-opus-5-5
+Commits: the 0.1.5 commit that adds this record
+
+
+GUIDANCE
+
+  Fred: "Do a code review of tam-pane. Look for any architectural flaws,
+  security issues, bugs, poorly factored code, etc."
+  Fred approved the review plan, which ends with a fix list in order.
+
+
+DONE
+
+  - Reviewed all first-party code at b244e85 and recorded it as
+    reviews/R1-code-review-0.1.4.md (17 findings, each with a status).
+  - Fixed R1 finding 1 as B1 (bugs/B1-tiled-drag-use-after-free.md): a
+    tiled Meta+Right-drag kept raw split-node pointers that another
+    window leaving the tree could free. struct tp_dwindle now has a
+    generation counter, gen, bumped whenever it frees a node; drags
+    record tree and gen; tp_dwindle_drag_valid() checks them;
+    tp_dwindle_drag_update() refuses a stale drag; update_grab() in
+    src/input/pointer.c begins the drag again from the pointer, or
+    cancels it when no split is left.
+  - Tests: a headless case (open a window, drag the window it split,
+    close the new one mid-drag, keep dragging) and a dwindle unit case.
+    Without the fix, the headless case under -fsanitize=address
+    reports heap-use-after-free in tp_dwindle_drag_update; with it, the
+    ASan build is clean.
+  - make test: 28 tag, 143 dwindle, 408 Lua, 275 headless input checks,
+    3 smoke checks, nm -D check; tests/test_nested_input.py passes.
+  - VERSION 0.1.5. Candidate binary SHA-256:
+    c22466f328a30ba9bcbd62dd4f373c77cbb334550c5b71f63187852ae08e7b99
+
+
+FAILED
+
+  - The first B1 test dragged the focused window and passed under ASan:
+    the new window had split the last leaf, not the focused one. That
+    is a separate bug, now R1 finding 12. The test now drags whichever
+    window the new one actually split.
+  - The first 0.1.5 build still printed 0.1.4: the Makefile does not
+    rebuild main.o and lua.o when VERSION changes (R1 finding 17).
+    Rebuilt them with make -B.
+  - The ASan run first failed because the scratch path made the Wayland
+    socket path longer than 108 bytes; ran it with the default TMPDIR.
+
+
+HANDOFF
+
+  - B1 is "Fix available" until Fred checks 0.1.5 (see WHATNOW).
+  - The rest of R1's fix order is in WHATNOW NEXT.

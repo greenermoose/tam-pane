@@ -3,32 +3,22 @@ WHATNOW
 What tam-pane is doing now and what comes next. Read this first; revise
 it at the end of every session (work/README-work).
 
-Updated: 2026-11-21, with W15
+Updated: 2026-11-21, with W16
 
 
 STATE
 
-  Version 0.1.4 on branch dev (Phase P2 complete: Lua live configuration
-  reload accepted by Fred on 2026-11-21 on commit 0a98a51; binary
-  SHA-256:
-  b3fceeaccb513ca7a45fd70557e927c90f36a93b53d8c48dfbf6288ee3f38ff4).
-  0.1.3, 0.1.2, 0.1.1, 0.1.0, and Phase P1 (0.0.1-0.0.5) were accepted by
-  Fred on 2026-11-21.
+  Version 0.1.5 on branch dev, a candidate. 0.1.4 (Phase P2) was
+  accepted by Fred on 2026-11-21 on commit 0a98a51.
 
-  W15 implemented 0.1.4 (plans/P2-lua.md, arch/lua-api.md): added
-  tp_lua_reload_file() (fresh sandboxed Lua VM swap from compiled-in
-  defaults with atomic rollback on error), tp.dsp.reload() with default
-  binding Meta+Shift+R, SIGHUP reload, coalesced Wayland idle deferral
-  (tp_server_request_reload) for re-entrancy safety, and synchronous
-  tp_server_reload(s, err_buf, cap) ready for 0.2.3 IPC. Live reloads
-  update monitor dwindle trees, keyboard repeat info, cursor theme/size,
-  and re-arrange all monitors. Added tools/demo-0.1.4 and
-  tools/demo-0.1.4.lua for Fred's nested check.
+  W16 reviewed the code (reviews/R1-code-review-0.1.4.md) and fixed its
+  first finding, B1: a tiled resize drag used freed memory when another
+  window left the tree. 0.1.5 binary SHA-256:
+  c22466f328a30ba9bcbd62dd4f373c77cbb334550c5b71f63187852ae08e7b99
 
-  Automated checks pass with zero warnings: 28 tag checks, 133 dwindle
-  checks, 408 Lua checks, 265 headless input checks, all 3 smoke checks
-  (including sighup-reload), nm -D symbol check, and
-  tests/test_nested_input.py.
+  Automated checks pass: 28 tag, 143 dwindle, 408 Lua, 275 headless
+  input, 3 smoke, nm -D symbol check, tests/test_nested_input.py; the
+  B1 tests are clean under -fsanitize=address,undefined.
 
   Dependencies today: wlroots 0.20, wayland-server, xkbcommon, libtam
   (static), and Lua 5.5.1 (vendored in third_party/lua/).
@@ -36,17 +26,32 @@ STATE
 
 NEXT
 
-  1. P3, 0.2.0 (desktop shell protocols): foreign-toplevel,
-     ext-workspace (for tags), session-lock, idle notify and inhibit,
-     and output power (plans/P3-daily-parity.md).
+  Finish R1's fix order before P3, one bumped version each, with a
+  failing-first test and the record's status lines updated:
 
-  2. Later: Tamlinux's desktop tests move from headless Sway to
-     tam-pane's headless mode once it can serve them (ROADMAP.md).
+  1. R1 finding 2: hook feedback loops hang the compositor. Drain
+     events from a zero-delay timer or eventfd instead of re-adding an
+     idle source (src/events.c), and cap cascades. Test: a window.focus
+     hook that refocuses must not stop the event loop.
+  2. R1 findings 3 and 7: refuse tp.spawn while the config loads; add a
+     run-once-at-startup hook; add tp.spawn{argv...} with no shell, and
+     document it for event data (arch/lua-api.md).
+  3. R1 finding 8: capped Lua allocator; truncate rule subjects to 255
+     bytes.
+  4. R1 finding 10: VT switching and an emergency quit in C, before Lua.
+  5. R1 finding 13 (fixes 6), then 12, 4 and 5.
+  6. R1 findings 9, 11 and 15 to 17: write them into the P3 and P4
+     plans as design work.
+  7. Then P3, 0.2.0 (plans/P3-daily-parity.md).
 
 
 WAITING FOR FRED
 
-  Nothing.
+  - A brief check of 0.1.5, nested: tile two windows, open
+    "foot -e sleep 5" so it splits one, Meta+Right-drag the window it
+    split, and keep dragging after the foot window closes. The drag
+    should carry on and tam-pane should not crash. If he accepts, set B1
+    to Verified with the build's SHA-256.
 
 
 WATCH OUT
@@ -60,3 +65,5 @@ WATCH OUT
     liblua 5.4 at runtime); make test enforces nm -D build/tam-pane.
   - Never toggle anything on Fred's active monitor; the nested window is
     where he tests.
+  - Bumping VERSION does not rebuild main.o or lua.o; run
+    make -B build/main.o build/lua.o and check tam-pane -v.

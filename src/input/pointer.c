@@ -94,7 +94,25 @@ static void update_grab(struct tp_server *s) {
 	}
 
 	if (g->tiled) {
-		if (c->mon && tp_dwindle_drag_update(&g->drag, dx, dy))
+		if (!c->mon) {
+			tp_pointer_cancel_grab(s, NULL);
+			return;
+		}
+		struct tp_dwindle *tree = tp_monitor_tree(c->mon);
+		if (!tp_dwindle_drag_valid(&g->drag, tree)) {
+			/* The tree freed a node since the drag began (another window
+			 * left it), so the splits the drag held may be gone. Carry on
+			 * from here against the tree as it is now. */
+			if (!tp_dwindle_drag_begin(tree, c, s->cursor->x, s->cursor->y,
+									   &g->drag)) {
+				tp_pointer_cancel_grab(s, NULL);
+				return;
+			}
+			g->start_x = s->cursor->x;
+			g->start_y = s->cursor->y;
+			return;
+		}
+		if (tp_dwindle_drag_update(&g->drag, dx, dy))
 			tp_arrange(c->mon);
 		return;
 	}

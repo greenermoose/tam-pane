@@ -84,5 +84,8 @@ IN THIS REPOSITORY
   Core features: tiling, tags, input and Lua. A critical bug also
   includes crashing the session or losing work.
 
-  Index: no bugs recorded yet. Add one line per bug: its file name and
-  title. Read the record for its status; the index does not repeat it.
+  Index: one line per bug: its file name and title. Read the record for
+  its status; the index does not repeat it.
+
+    B1-tiled-drag-use-after-free.md   tiled resize drag uses freed
+                                      memory when another window leaves

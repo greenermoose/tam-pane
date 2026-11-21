@@ -54,11 +54,13 @@ void tp_dwindle_init(struct tp_dwindle *t) {
 	t->width_bias = 1.0f;
 	t->preserve_split = false;
 	t->proportional_split = false;
+	t->gen = 0;
 }
 
 void tp_dwindle_clear(struct tp_dwindle *t) {
 	free_subtree(t->root);
 	t->root = NULL;
+	t->gen++;
 }
 
 struct tp_dwindle_split tp_dwindle_auto_split(const struct tp_dwindle *t,
@@ -261,6 +263,7 @@ bool tp_dwindle_remove(struct tp_dwindle *t, void *item) {
 		free(parent);
 	}
 	free(leaf);
+	t->gen++;
 	return true;
 }
 
@@ -321,7 +324,7 @@ bool tp_dwindle_drag_begin(const struct tp_dwindle *t, const void *item,
 						   double px, double py, struct tp_dwindle_drag *drag) {
 	(void)px;
 	(void)py;
-	*drag = (struct tp_dwindle_drag){0};
+	*drag = (struct tp_dwindle_drag){.tree = t, .gen = t->gen};
 	struct tp_dwindle_node *leaf = find(t->root, item);
 	if (!leaf)
 		return false;
@@ -340,9 +343,16 @@ bool tp_dwindle_drag_begin(const struct tp_dwindle *t, const void *item,
 	return drag->h_node != NULL || drag->v_node != NULL;
 }
 
+bool tp_dwindle_drag_valid(const struct tp_dwindle_drag *drag,
+						   const struct tp_dwindle *t) {
+	return drag->tree && drag->tree == t && t->gen == drag->gen;
+}
+
 bool tp_dwindle_drag_update(struct tp_dwindle_drag *drag, double dx,
 							double dy) {
 	bool changed = false;
+	if (!drag->tree || drag->tree->gen != drag->gen)
+		return false; /* nodes may have been freed: never touch them */
 	if (drag->h_node && drag->h_node->box.w > 0) {
 		float next = clamp_ratio(drag->h_ratio +
 								 (float)(dx / (double)drag->h_node->box.w));

@@ -203,6 +203,21 @@ int main(void) {
 	CHECK(rect_eq(placed[2], 600, 0, 400, 240));
 	CHECK(rect_eq(placed[3], 600, 240, 400, 360));
 
+	/* Removing a window frees the split a drag holds: the drag goes stale,
+	 * refuses to write, and a fresh begin works against the new tree. */
+	CHECK(tp_dwindle_drag_valid(&drag, &t));
+	CHECK(tp_dwindle_remove(&t, ITEM(3)));
+	CHECK(!tp_dwindle_drag_valid(&drag, &t));
+	CHECK(!tp_dwindle_drag_update(&drag, 50.0, 50.0));
+	CHECK(tp_dwindle_drag_begin(&t, ITEM(2), 700, 150, &drag));
+	CHECK(tp_dwindle_drag_valid(&drag, &t));
+	CHECK(drag.h_node == t.root && drag.v_node == NULL);
+	struct tp_dwindle other;
+	tp_dwindle_init(&other);
+	CHECK(!tp_dwindle_drag_valid(&drag, &other));
+	CHECK(tp_dwindle_insert(&t, ITEM(3), ITEM(2), after(0.5f)));
+	CHECK(tp_dwindle_drag_valid(&drag, &t)); /* inserting frees nothing */
+
 	/* 3-window horizontal row [1 | [2 | 3]]: 2 resizes inner on RIGHT and
 	 * outer on LEFT. */
 	tp_dwindle_clear(&t);

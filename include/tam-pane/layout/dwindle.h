@@ -36,10 +36,16 @@ struct tp_dwindle {
 	float width_bias;		 /* side by side when w > h * width_bias */
 	bool preserve_split;	 /* keep each split's first orientation */
 	bool proportional_split; /* keep same-direction runs proportional */
+	/* Changes whenever a node is freed, so anything holding node pointers
+	 * (a pointer drag) can tell they may be stale. */
+	unsigned long gen;
 };
 
-/* State captured at the start of a pointer resize drag on a tiled window. */
+/* State captured at the start of a pointer resize drag on a tiled window.
+ * The node pointers are valid only while tp_dwindle_drag_valid() holds. */
 struct tp_dwindle_drag {
+	const struct tp_dwindle *tree;
+	unsigned long gen;
 	struct tp_dwindle_node *h_node;
 	struct tp_dwindle_node *v_node;
 	float h_ratio;
@@ -99,6 +105,11 @@ bool tp_dwindle_resize(struct tp_dwindle *t, const void *item, enum tp_dir dir,
 bool tp_dwindle_drag_begin(const struct tp_dwindle *t, const void *item,
 						   double px, double py, struct tp_dwindle_drag *drag);
 bool tp_dwindle_drag_update(struct tp_dwindle_drag *drag, double dx, double dy);
+
+/* True while `drag` was begun on `t` and `t` has freed no node since, so its
+ * node pointers are still safe. Otherwise begin the drag again. */
+bool tp_dwindle_drag_valid(const struct tp_dwindle_drag *drag,
+						   const struct tp_dwindle *t);
 
 /* Find the closest laid-out leaf in `dir` from `item`, or NULL. */
 void *tp_dwindle_neighbor(const struct tp_dwindle *t, const void *item,

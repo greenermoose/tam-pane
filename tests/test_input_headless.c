@@ -792,6 +792,47 @@ int main(void) {
 	CHECK(server.grab.mode == TP_GRAB_NONE);
 	send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_RELEASED, 124);
 
+	/* A tiled drag survives another window leaving the tree. Open a window,
+	 * Meta+Right-drag the window it split, then close the new window
+	 * mid-drag: the split the drag was holding is freed, so the next motion
+	 * must not touch it, and the drag carries on against the tree that is
+	 * left. */
+	configure_window(&client, &client.windows[2], "tile-extra");
+	for (unsigned int i = 0; i < 1000 && wl_list_length(&server.clients) < 3; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(wl_list_length(&server.clients) == 3);
+	struct tp_client *cx = tp_focused(&server);
+	CHECK(cx && cx != c0 && cx != c1 && !cx->floating && cx->mon);
+	if (!cx || !cx->mon) goto fail;
+	struct tp_dwindle_node *xn = tp_dwindle_find(tp_monitor_tree(cx->mon), cx);
+	CHECK(xn && xn->parent);
+	if (!xn || !xn->parent) goto fail;
+	struct tp_dwindle_node *sib = xn->parent->child[xn->parent->child[0] == xn];
+	CHECK(sib->item == c0 || sib->item == c1);
+	struct tp_client *cs = sib->item;
+	tp_focus(&server, cs);
+	wlr_cursor_warp(server.cursor, &pointer.base,
+		cs->geom.x + 1.0, cs->geom.y + 1.0);
+	emit_motion(&server, &pointer, 0, 0, 140);
+	send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_PRESSED, 141);
+	emit_button(&server, &pointer, BTN_RIGHT, WL_POINTER_BUTTON_STATE_PRESSED, 142);
+	CHECK(server.grab.mode == TP_GRAB_RESIZE && server.grab.tiled &&
+		server.grab.client == cs);
+	CHECK(server.grab.drag.h_node == xn->parent ||
+		server.grab.drag.v_node == xn->parent);
+	destroy_window(&client.windows[2]);
+	for (unsigned int i = 0; i < 100 && wl_list_length(&server.clients) == 3; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(wl_list_length(&server.clients) == 2);
+	w0_before = c0->geom.w;
+	emit_motion(&server, &pointer, 60.0, 0.0, 143);
+	emit_motion(&server, &pointer, 60.0, 0.0, 144);
+	CHECK(server.grab.mode == TP_GRAB_RESIZE && server.grab.tiled);
+	CHECK(c0->geom.w != w0_before);
+	emit_button(&server, &pointer, BTN_RIGHT, WL_POINTER_BUTTON_STATE_RELEASED, 145);
+	send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_RELEASED, 146);
+	CHECK(server.grab.mode == TP_GRAB_NONE);
+
 	/* ---- 0.0.5: layer-shell exclusive zone, popups, keyboard focus ---- */
 	struct tp_monitor *m1 = server.selmon;
 	CHECK(m1 != NULL);

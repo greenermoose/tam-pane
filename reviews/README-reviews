@@ -60,5 +60,7 @@ RECORD TEMPLATE
 
 IN THIS REPOSITORY
 
-  Index: no reviews recorded yet. Add one line per review: its file name
-  and what it reviewed.
+  Index: one line per review: its file name and what it reviewed.
+
+    R1-code-review-0.1.4.md   code review of all first-party code at
+                              0.1.4 (b244e85)
