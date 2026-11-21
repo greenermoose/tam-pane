@@ -11,6 +11,10 @@ struct tp_server;
 struct tp_client;
 struct wlr_output;
 struct wlr_scene_output;
+struct wp_viewporter;
+struct wp_viewport;
+struct wp_fractional_scale_manager_v1;
+struct wp_fractional_scale_v1;
 
 struct tp_monitor {
 	struct wl_list link; /* tp_server.monitors */
@@ -25,6 +29,13 @@ struct tp_monitor {
 	struct wl_listener frame;
 	struct wl_listener request_state;
 	struct wl_listener destroy;
+	/* Nested Wayland output: native fractional scale on the host surface. */
+	struct wp_viewporter *host_viewporter;
+	struct wp_viewport *host_viewport;
+	struct wp_fractional_scale_manager_v1 *host_fsm;
+	struct wp_fractional_scale_v1 *host_fscale;
+	float host_scale;
+	int32_t host_w, host_h;
 };
 
 void tp_monitors_init(struct tp_server *s);

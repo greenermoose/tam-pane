@@ -15,7 +15,7 @@ BINDIR ?= $(PREFIX)/bin
 LIBTAM_PREFIX ?= $(HOME)/.local
 
 PKG_CONFIG ?= pkg-config
-PKGS = wlroots-0.20 wayland-server xkbcommon
+PKGS = wlroots-0.20 wayland-server wayland-client xkbcommon
 # Used only by the test client, never linked into the compositor.
 CLIENT_PKGS = wayland-client
 
@@ -45,14 +45,22 @@ WM_OBJS = $(patsubst src/%.c,build/%.o,$(WM_SRCS))
 TESTS = build/tests/test_tags build/tests/test_dwindle
 
 PROTO_HEADERS = build/protocols/xdg-shell-protocol.h \
-	build/protocols/wlr-layer-shell-unstable-v1-protocol.h
+	build/protocols/wlr-layer-shell-unstable-v1-protocol.h \
+	build/protocols/viewporter-client-protocol.h \
+	build/protocols/fractional-scale-v1-client-protocol.h
+PROTO_SRCS = build/protocols/viewporter-protocol.c \
+	build/protocols/fractional-scale-v1-protocol.c
+PROTO_OBJS = $(PROTO_SRCS:.c=.o)
 CLIENT_PROTO_HEADER = build/protocols/xdg-shell-client-protocol.h
 CLIENT_PROTO_CODE = build/protocols/xdg-shell-protocol.c
 
 all: build/tam-pane
 
-build/tam-pane: $(CORE_OBJS) $(WM_OBJS) $(LIBTAM)
-	$(CC) $(LDFLAGS) -o $@ $(CORE_OBJS) $(WM_OBJS) $(LIBTAM) $(PKG_LIBS) -lm
+build/tam-pane: $(CORE_OBJS) $(WM_OBJS) $(PROTO_OBJS) $(LIBTAM)
+	$(CC) $(LDFLAGS) -o $@ $(CORE_OBJS) $(WM_OBJS) $(PROTO_OBJS) $(LIBTAM) $(PKG_LIBS) -lm
+
+$(PROTO_OBJS): %.o: %.c | $(PROTO_HEADERS)
+	$(CC) $(CFLAGS) $(PKG_CFLAGS) -c -o $@ $<
 
 $(WM_OBJS): build/%.o: src/%.c | $(PROTO_HEADERS)
 	@mkdir -p $(@D)
@@ -78,17 +86,33 @@ build/protocols/xdg-shell-protocol.c: $(WAYLAND_PROTOCOLS)/stable/xdg-shell/xdg-
 	@mkdir -p $(@D)
 	$(WAYLAND_SCANNER) private-code $< $@
 
+build/protocols/viewporter-client-protocol.h: $(WAYLAND_PROTOCOLS)/stable/viewporter/viewporter.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) client-header $< $@
+
+build/protocols/viewporter-protocol.c: $(WAYLAND_PROTOCOLS)/stable/viewporter/viewporter.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) private-code $< $@
+
+build/protocols/fractional-scale-v1-client-protocol.h: $(WAYLAND_PROTOCOLS)/staging/fractional-scale/fractional-scale-v1.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) client-header $< $@
+
+build/protocols/fractional-scale-v1-protocol.c: $(WAYLAND_PROTOCOLS)/staging/fractional-scale/fractional-scale-v1.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) private-code $< $@
+
 build/tests/test_%: tests/test_%.c $(CORE_OBJS) tests/check.h
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -o $@ $< $(CORE_OBJS)
 
 build/tests/test_input_headless: tests/test_input_headless.c $(CORE_OBJS) \
-	$(filter-out build/main.o,$(WM_OBJS)) $(LIBTAM) \
+	$(filter-out build/main.o,$(WM_OBJS)) $(PROTO_OBJS) $(LIBTAM) \
 	$(CLIENT_PROTO_HEADER) $(CLIENT_PROTO_CODE)
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(PKG_CFLAGS) -Ibuild/protocols -o $@ $< \
 		$(CLIENT_PROTO_CODE) $(CORE_OBJS) \
-		$(filter-out build/main.o,$(WM_OBJS)) $(LIBTAM) $(PKG_LIBS) \
+		$(filter-out build/main.o,$(WM_OBJS)) $(PROTO_OBJS) $(LIBTAM) $(PKG_LIBS) \
 		$(shell $(PKG_CONFIG) --libs $(CLIENT_PKGS)) -lm
 
 test: $(TESTS) build/tam-pane build/tests/test_input_headless

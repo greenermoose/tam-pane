@@ -1,13 +1,19 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "tam-pane/monitor.h"
+#include "fractional-scale-v1-client-protocol.h"
 #include "tam-pane/client.h"
 #include "tam-pane/focus.h"
 #include "tam-pane/layout/arrange.h"
 #include "tam-pane/server.h"
+#include "viewporter-client-protocol.h"
+#include <math.h>
 #include <stdlib.h>
+#include <string.h>
 #include <tam.h>
 #include <time.h>
+#include <wayland-client-core.h>
 #include <wlr/backend.h>
+#include <wlr/backend/wayland.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_scene.h>
@@ -28,9 +34,140 @@ static void on_frame(struct wl_listener *l, void *data) {
 	wlr_scene_output_send_frame_done(m->scene_output, &now);
 }
 
+static void apply_nested_scale(struct tp_monitor *m, int32_t logical_w,
+							   int32_t logical_h, int32_t refresh) {
+	if (!m->host_viewport || m->host_scale <= 0.0f || logical_w <= 0 ||
+		logical_h <= 0)
+		return;
+	m->host_w = logical_w;
+	m->host_h = logical_h;
+	int32_t pw = (int32_t)lroundf((float)logical_w * m->host_scale);
+	int32_t ph = (int32_t)lroundf((float)logical_h * m->host_scale);
+	if (pw < 1)
+		pw = 1;
+	if (ph < 1)
+		ph = 1;
+
+	wp_viewport_set_destination(m->host_viewport, logical_w, logical_h);
+	struct wlr_output_state state;
+	wlr_output_state_init(&state);
+	wlr_output_state_set_custom_mode(&state, pw, ph, refresh);
+	wlr_output_state_set_scale(&state, m->host_scale);
+	wlr_output_commit_state(m->output, &state);
+	wlr_output_state_finish(&state);
+}
+
+static void on_preferred_scale(void *data,
+							   struct wp_fractional_scale_v1 *fscale,
+							   uint32_t scale120) {
+	struct tp_monitor *m = data;
+	float scale = (float)scale120 / 120.0f;
+	if (!(scale >= 0.5f && scale <= 8.0f))
+		return;
+	m->host_scale = scale;
+	int32_t lw = m->host_w > 0 ? m->host_w
+							   : (int32_t)lroundf((float)m->output->width /
+												  m->output->scale);
+	int32_t lh = m->host_h > 0 ? m->host_h
+							   : (int32_t)lroundf((float)m->output->height /
+												  m->output->scale);
+	tam_log_info("output %s: host fractional scale %.3f (%dx%d logical)",
+				 m->output->name, scale, lw, lh);
+	apply_nested_scale(m, lw, lh, 0);
+}
+
+static const struct wp_fractional_scale_v1_listener host_fscale_listener = {
+	.preferred_scale = on_preferred_scale,
+};
+
+static void on_host_global(void *data, struct wl_registry *reg, uint32_t name,
+						   const char *iface, uint32_t version) {
+	struct tp_monitor *m = data;
+	if (!strcmp(iface, wp_viewporter_interface.name) && !m->host_viewporter) {
+		m->host_viewporter =
+			wl_registry_bind(reg, name, &wp_viewporter_interface, 1);
+	} else if (!strcmp(iface, wp_fractional_scale_manager_v1_interface.name) &&
+			   !m->host_fsm) {
+		m->host_fsm = wl_registry_bind(
+			reg, name, &wp_fractional_scale_manager_v1_interface, 1);
+	}
+}
+
+static void on_host_global_remove(void *data, struct wl_registry *reg,
+								  uint32_t name) {}
+
+static const struct wl_registry_listener host_registry_listener = {
+	.global = on_host_global,
+	.global_remove = on_host_global_remove,
+};
+
+static void setup_nested_scale(struct tp_monitor *m) {
+	if (!wlr_output_is_wl(m->output) || !wlr_backend_is_wl(m->output->backend))
+		return;
+	struct wl_display *remote =
+		wlr_wl_backend_get_remote_display(m->output->backend);
+	struct wl_surface *surface = wlr_wl_output_get_surface(m->output);
+	if (!remote || !surface)
+		return;
+
+	struct wl_event_queue *q = wl_display_create_queue(remote);
+	struct wl_display *wrapped = q ? wl_proxy_create_wrapper(remote) : NULL;
+	if (!wrapped) {
+		if (q)
+			wl_event_queue_destroy(q);
+		return;
+	}
+	wl_proxy_set_queue((struct wl_proxy *)wrapped, q);
+	struct wl_registry *reg = wl_display_get_registry(wrapped);
+	wl_registry_add_listener(reg, &host_registry_listener, m);
+	wl_display_roundtrip_queue(remote, q);
+	wl_registry_destroy(reg);
+	if (m->host_viewporter)
+		wl_proxy_set_queue((struct wl_proxy *)m->host_viewporter, NULL);
+	if (m->host_fsm)
+		wl_proxy_set_queue((struct wl_proxy *)m->host_fsm, NULL);
+	wl_proxy_wrapper_destroy(wrapped);
+	wl_event_queue_destroy(q);
+
+	if (m->host_viewporter && m->host_fsm) {
+		m->host_viewport =
+			wp_viewporter_get_viewport(m->host_viewporter, surface);
+		m->host_fscale = wp_fractional_scale_manager_v1_get_fractional_scale(
+			m->host_fsm, surface);
+		if (m->host_fscale)
+			wp_fractional_scale_v1_add_listener(m->host_fscale,
+												&host_fscale_listener, m);
+	}
+}
+
+static void finish_nested_scale(struct tp_monitor *m) {
+	if (m->host_fscale)
+		wp_fractional_scale_v1_destroy(m->host_fscale);
+	if (m->host_viewport)
+		wp_viewport_destroy(m->host_viewport);
+	if (m->host_fsm)
+		wp_fractional_scale_manager_v1_destroy(m->host_fsm);
+	if (m->host_viewporter)
+		wp_viewporter_destroy(m->host_viewporter);
+	m->host_fscale = NULL;
+	m->host_viewport = NULL;
+	m->host_fsm = NULL;
+	m->host_viewporter = NULL;
+}
+
 static void on_request_state(struct wl_listener *l, void *data) {
 	struct tp_monitor *m = wl_container_of(l, m, request_state);
 	const struct wlr_output_event_request_state *ev = data;
+	if (m->host_viewport && (ev->state->committed & WLR_OUTPUT_STATE_MODE) &&
+		ev->state->mode_type == WLR_OUTPUT_STATE_MODE_CUSTOM) {
+		m->host_w = ev->state->custom_mode.width;
+		m->host_h = ev->state->custom_mode.height;
+		if (m->host_scale > 0.0f) {
+			apply_nested_scale(m, m->host_w, m->host_h,
+							   ev->state->custom_mode.refresh);
+			return;
+		}
+	}
 	wlr_output_commit_state(m->output, ev->state);
 }
 
@@ -38,6 +175,7 @@ static void on_destroy(struct wl_listener *l, void *data) {
 	struct tp_monitor *m = wl_container_of(l, m, destroy);
 	struct tp_server *s = m->server;
 
+	finish_nested_scale(m);
 	wl_list_remove(&m->frame.link);
 	wl_list_remove(&m->request_state.link);
 	wl_list_remove(&m->destroy.link);
@@ -127,6 +265,7 @@ static void on_new_output(struct wl_listener *l, void *data) {
 	m->scene_output = wlr_scene_output_create(s->scene, output);
 	wlr_scene_output_layout_add_output(s->scene_layout, lo, m->scene_output);
 	update_area(m);
+	setup_nested_scale(m);
 	if (!s->selmon)
 		s->selmon = m;
 	tam_log_info("output %s: %dx%d at %d,%d scale %.2f", output->name,

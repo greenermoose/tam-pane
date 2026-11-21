@@ -3,7 +3,8 @@ W9 TILING COMPLETE (0.0.4)
 Date: 2026-11-21
 AI harness: agy 1.5.14
 AI model: Gemini 4 Neon (Medium)
-Commits: 22bd484, 01039d4, 5a8c4a3, plus the commit that updates this record
+Commits: 22bd484, 01039d4, 5a8c4a3, 967147f, plus the commit that updates
+  this record
 
 
 GUIDANCE
@@ -34,13 +35,16 @@ DONE
   - Bumped VERSION to 0.0.4; updated README, arch/data-structures.md,
     and UPSTREAM.md.
   - Enabled wp_viewporter and wp_fractional_scale_manager_v1 in
-    src/server.c (driven automatically by wlr_scene) and honored
-    TAM_PANE_SCALE in src/monitor.c for fractional HiDPI outputs.
+    src/server.c (driven automatically by wlr_scene) and added parent
+    wp_viewport + wp_fractional_scale_v1 support for nested Wayland
+    outputs in src/monitor.c, so nested tam-pane renders native
+    physical pixels at the host monitor's fractional scale (1.25x on
+    DP-1) with 1:1 scanout.
   - Zero-warning build and full test suite pass: 28 tag checks, 133
-    dwindle checks, 142 headless input checks, both smoke checks (and
-    TAM_PANE_SCALE=1.25 smoke), and test_nested_input.py.
+    dwindle checks, 142 headless input checks, both smoke checks, and
+    test_nested_input.py.
   - Candidate binary SHA-256 (0.0.4):
-    8e55f7745aa9f67d14797ddb210c74aa362a413c2d0899247a7eaba1a8842277
+    1593e83af26158b6897c47979ce7da34d71a4c249d4685fe8e7f2e287269f9b9
 
 
 FAILED
