@@ -3,7 +3,7 @@ W9 TILING COMPLETE (0.0.4)
 Date: 2026-11-21
 AI harness: agy 1.5.14
 AI model: Gemini 4 Neon (Medium)
-Commits: 22bd484, 01039d4, plus the commit that updates this record
+Commits: 22bd484, 01039d4, 5a8c4a3, plus the commit that updates this record
 
 
 GUIDANCE
@@ -34,10 +34,8 @@ DONE
   - Bumped VERSION to 0.0.4; updated README, arch/data-structures.md,
     and UPSTREAM.md.
   - Enabled wp_viewporter and wp_fractional_scale_manager_v1 in
-    src/server.c (driven automatically by wlr_scene), honored
-    TAM_PANE_SCALE in src/monitor.c, and passed the focused Hyprland
-    monitor's scale from tools/nested-input so clients like foot render
-    natively at fractional HiDPI scales (1.25x) instead of 1x.
+    src/server.c (driven automatically by wlr_scene) and honored
+    TAM_PANE_SCALE in src/monitor.c for fractional HiDPI outputs.
   - Zero-warning build and full test suite pass: 28 tag checks, 133
     dwindle checks, 142 headless input checks, both smoke checks (and
     TAM_PANE_SCALE=1.25 smoke), and test_nested_input.py.
@@ -47,7 +45,13 @@ DONE
 
 FAILED
 
-  - Nothing.
+  - Passing host scale via TAM_PANE_SCALE from tools/nested-input
+    caused 1.25x * 1.25x = 1.56x double-scaling because wlroots 0.20's
+    Wayland backend submits its nested window to Hyprland at buffer
+    scale 1.0. Reverted the nested-input auto-pass; fractional scale
+    works natively on real DRM/KMS outputs, while nested-input on a
+    1.25x Hyprland monitor stays upscaled by the host unless moved to
+    a 1.0x monitor (HDMI-A-1).
 
 
 HANDOFF

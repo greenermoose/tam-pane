@@ -50,14 +50,6 @@ def main():
     if not env.get('WAYLAND_DISPLAY'):
         instances = json.loads(subprocess.check_output(['hyprctl', 'instances', '-j']))
         env['WAYLAND_DISPLAY'] = next(i['wl_socket'] for i in instances if i['instance'] == instance)
-    if not env.get('TAM_PANE_SCALE'):
-        try:
-            monitors = json.loads(subprocess.check_output(ctl + ['monitors', '-j']))
-            focused = next((m for m in monitors if m.get('focused')), None)
-            if focused and isinstance(focused.get('scale'), (int, float)) and focused['scale'] > 0:
-                env['TAM_PANE_SCALE'] = str(focused['scale'])
-        except Exception:
-            pass
     child = subprocess.Popen([str(binary), '-d', '-s', 'foot'], env=env)
     def stop(signum, frame):
         raise KeyboardInterrupt
