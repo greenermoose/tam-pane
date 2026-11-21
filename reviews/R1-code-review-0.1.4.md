@@ -128,7 +128,7 @@ schedules are not findings here.
   leaves no way out short of SysRq.
 - **Fix:** VT switching, and possibly one emergency quit, handled in C
   before Lua sees the key.
-- **Status:** open
+- **Status:** became B5, fixed in 0.1.9
 
 ### 11. A GPU reset ends the session (medium)
 

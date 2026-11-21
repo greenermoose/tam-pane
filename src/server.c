@@ -12,6 +12,7 @@
 #include <string.h>
 #include <tam.h>
 #include <wlr/backend.h>
+#include <wlr/backend/session.h>
 #include <wlr/render/allocator.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_compositor.h>
@@ -42,6 +43,10 @@ static void on_reload_idle(void *data) {
 	if (s->stopping)
 		return;
 	tp_server_reload(s, NULL, 0);
+}
+
+static bool session_change_vt(struct tp_server *s, unsigned int vt) {
+	return wlr_session_change_vt(s->session, vt);
 }
 
 static void server_run_action(const struct tp_action *act, void *userdata) {
@@ -75,6 +80,8 @@ bool tp_server_init(struct tp_server *s) {
 		tam_log_error("cannot create a backend");
 		return false;
 	}
+	if (s->session)
+		s->change_vt = session_change_vt;
 	s->renderer = wlr_renderer_autocreate(s->backend);
 	if (!s->renderer) {
 		tam_log_error("cannot create a renderer");
@@ -132,6 +139,7 @@ void tp_server_run(struct tp_server *s) {
 }
 
 void tp_server_quit(struct tp_server *s) {
+	s->quit_requested = true;
 	wl_display_terminate(s->display);
 }
 

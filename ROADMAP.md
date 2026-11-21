@@ -5,9 +5,9 @@ of versions. Versions follow semantic versioning: during 0.x, the minor
 number marks a phase's big step and the patch number marks each
 milestone inside it.
 
-**Current version:** 0.1.8 (Phase P2 complete at 0.1.4, then hardened
-in 0.1.5–0.1.8 to fix review R1's findings, all accepted by Fred on
-2026-11-21; development continues on branch `dev`).
+**Current version:** 0.1.9, a candidate (Phase P2 complete at 0.1.4,
+then hardened from 0.1.5 to fix review R1's findings; 0.1.5–0.1.8
+accepted by Fred on 2026-11-21; development continues on branch `dev`).
 
 ## Tamlinux timing
 
@@ -65,8 +65,11 @@ are fixed before P3, one version each:
   program with no shell (B3).
 - **0.1.8** Lua memory is capped at 64 MiB, and pattern matching obeys
   the watchdog deadline (B4).
-- Next: VT switching and an emergency quit in C, then R1's remaining
-  fixes (`work/WHATNOW`).
+- **0.1.9** Keys no config can remove, handled in C before Lua:
+  Ctrl+Alt+F1–F12 switch VT when tam-pane owns a session, and
+  Ctrl+Alt+Shift+Backspace quits (B5). The VT switch is checked on real
+  hardware at the first DRM trial (P4).
+- Next: R1's remaining fixes (`work/WHATNOW`).
 
 ### Phase P3: daily-driver parity (0.2.x), `plans/P3-daily-parity.md`
 

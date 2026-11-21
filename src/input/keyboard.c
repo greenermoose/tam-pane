@@ -34,16 +34,56 @@ static uint32_t wlr_mods_to_tp(uint32_t wlr_mods) {
  * ordinary modifier, so "Meta+Shift+1" is written with "1" on any layout
  * rather than with whatever symbol Shift+1 makes.
  */
+static int level0_syms(struct tp_keyboard *k, uint32_t keycode,
+					   const xkb_keysym_t **syms) {
+	xkb_keycode_t code = keycode + 8; /* evdev to xkb */
+	xkb_layout_index_t layout =
+		xkb_state_key_get_layout(k->wlr->xkb_state, code);
+	return xkb_keymap_key_get_syms_by_level(k->wlr->keymap, code, layout, 0,
+											syms);
+}
+
+/*
+ * Chords handled here, before Lua bindings and clients, so that no config
+ * can remove them (0.1.9):
+ *   Ctrl+Alt+F1..F12          switch VT, only when tam-pane owns a session
+ *                             (the keymap turns these into XF86Switch_VT_n);
+ *   Ctrl+Alt+Shift+Backspace  emergency quit.
+ */
+static bool run_compositor_key(struct tp_keyboard *k, uint32_t keycode) {
+	struct tp_server *s = k->server;
+	const xkb_keysym_t *syms;
+	int n = xkb_state_key_get_syms(k->wlr->xkb_state, keycode + 8, &syms);
+	for (int i = 0; i < n; i++) {
+		if (syms[i] >= XKB_KEY_XF86Switch_VT_1 &&
+			syms[i] <= XKB_KEY_XF86Switch_VT_12) {
+			if (!s->change_vt)
+				return false; /* nested or headless: an ordinary key */
+			s->change_vt(s, syms[i] - XKB_KEY_XF86Switch_VT_1 + 1);
+			return true;
+		}
+	}
+
+	uint32_t mods = wlr_mods_to_tp(wlr_keyboard_get_modifiers(k->wlr));
+	if (mods != (TP_MOD_CTRL | TP_MOD_ALT | TP_MOD_SHIFT))
+		return false;
+	n = level0_syms(k, keycode, &syms);
+	for (int i = 0; i < n; i++) {
+		if (syms[i] == XKB_KEY_BackSpace) {
+			tam_log_warn("emergency quit (Ctrl+Alt+Shift+Backspace)");
+			tp_server_quit(s);
+			return true;
+		}
+	}
+	return false;
+}
+
 static bool run_binding(struct tp_keyboard *k, uint32_t keycode) {
 	uint32_t mods = wlr_mods_to_tp(wlr_keyboard_get_modifiers(k->wlr));
 	if (!mods && !tp_lua_has_unmodified_bindings(k->server->lua))
 		return false;
-	xkb_keycode_t code = keycode + 8; /* evdev to xkb */
-	xkb_layout_index_t layout =
-		xkb_state_key_get_layout(k->wlr->xkb_state, code);
 	const xkb_keysym_t *syms;
-	int n = xkb_keymap_key_get_syms_by_level(k->wlr->keymap, code, layout, 0,
-											 &syms);
+	int n = level0_syms(k, keycode, &syms);
 	for (int i = 0; i < n; i++)
 		if (tp_bindings_handle(k->server, mods, syms[i]))
 			return true;
@@ -57,7 +97,7 @@ static void on_key(struct wl_listener *l, void *data) {
 	uint64_t mask = UINT64_C(1) << (ev->keycode % 64);
 
 	if (ev->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
-		if (run_binding(k, ev->keycode)) {
+		if (run_compositor_key(k, ev->keycode) || run_binding(k, ev->keycode)) {
 			if (word < sizeof(k->consumed_keys) / sizeof(k->consumed_keys[0]))
 				k->consumed_keys[word] |= mask;
 			return;

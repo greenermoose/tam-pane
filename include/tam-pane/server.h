@@ -115,6 +115,11 @@ struct tp_server {
 
 	struct wl_event_source *sigterm, *sigint, *sighup;
 	struct wl_event_source *reload_idle;
+	/* Switch to VT n (1..12) for Ctrl+Alt+F-keys. Set only when tam-pane
+	 * owns a session (DRM); NULL nested or headless. Tests may set their
+	 * own. */
+	bool (*change_vt)(struct tp_server *s, unsigned int vt);
+	bool quit_requested; /* set by tp_server_quit */
 	bool stopping; /* set while tearing down: no more layout or focus */
 	const char *socket;
 };

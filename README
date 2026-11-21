@@ -90,10 +90,21 @@ DEFAULT KEYS (CUSTOMIZABLE IN INIT.LUA)
   Meta is the key with the logo on it.
 
 
+KEYS NO CONFIG CAN REMOVE
+
+  Handled in C before Lua and before any window sees them (0.1.9):
+
+  Ctrl+Alt+F1 .. F12        switch to that virtual terminal (only when
+                            tam-pane runs on the hardware, not nested)
+  Ctrl+Alt+Shift+Backspace  emergency quit, even if init.lua removed
+                            every binding
+
+
 WHERE THINGS ARE
 
   src/, include/   the compositor (one module per file)
-  third_party/lua/ vendored Lua 5.5.1 C sources (static object set)
+  third_party/lua/ vendored Lua 5.5.1 C sources, one marked patch
+                   (UPSTREAM.md)
   tests/           unit tests and headless checks
   protocols/       Wayland protocol files we carry
   ideas/           ideas we collect from other window managers

@@ -26,6 +26,10 @@ the same commit as any change to them.
   - `layer_shell` (`struct wlr_layer_shell_v1`) and `focused_layer`
     (`struct tp_layer_surface *`) for exclusive or on-demand layer keyboard
     focus.
+- **Compositor keys:** `change_vt` switches VT for Ctrl+Alt+F-keys. It is
+  set only when `session` exists (DRM), and tests may substitute their
+  own. `quit_requested` is set by `tp_server_quit`, which the emergency
+  quit (Ctrl+Alt+Shift+Backspace) also calls (0.1.9).
 - **Listener ownership:** each module removes its own listeners in its
   `*_finish` function, before `tp_server_finish` destroys anything.
 - **Settings:** `settings` (`struct tp_settings`) holds every user setting

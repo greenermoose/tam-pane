@@ -1,0 +1,51 @@
+#!/bin/sh
+# Launch tam-pane 0.1.9 nested under Hyprland with a config that removed
+# every key binding, to show the emergency quit still works (R1 finding
+# 10). VT switching needs real hardware and is checked in P4.
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+want=$(tr -d '[:space:]' < "$ROOT/VERSION")
+have=$("$ROOT/build/tam-pane" -v 2>/dev/null | awk '{print $2}') || true
+if [ "$have" != "$want" ]; then
+	echo "build/tam-pane is '${have:-missing}', VERSION is $want: run make first" >&2
+	exit 1
+fi
+
+TMPDIR_DEMO=$(mktemp -d "${TMPDIR:-/tmp}/tam-pane-demo-0.1.9.XXXXXX")
+trap 'rm -rf "$TMPDIR_DEMO"' EXIT INT TERM
+
+CFG="$TMPDIR_DEMO/init.lua"
+GUIDE="$TMPDIR_DEMO/guide"
+LOG="$TMPDIR_DEMO/log"
+{
+	printf 'local GUIDE = "%s"\n' "$GUIDE"
+	cat "$ROOT/tools/demo-0.1.9.lua"
+} >"$CFG"
+
+cat >"$GUIDE" <<'GUIDE'
+=== tam-pane 0.1.9 demo: a quit no config can remove ===
+
+This session's config removed every key binding.
+
+ 1. Press Meta+Return and Meta+Shift+E: nothing happens. Typing here
+    still works.
+ 2. Press Ctrl+Alt+Backspace (without Shift): nothing happens either.
+ 3. Press Ctrl+Alt+Shift+Backspace: tam-pane quits at once. The launcher
+    then prints PASS or FAIL.
+
+Do not press Ctrl+Alt+F-keys here: nested, tam-pane passes them on, and
+Hyprland may switch your real virtual terminal. VT switching is checked
+on real hardware at the first DRM trial (P4).
+
+GUIDE
+
+"$ROOT/tools/nested-input" -c "$CFG" -s '' 2>&1 | tee "$LOG" || true
+
+echo
+if grep -q 'emergency quit (Ctrl+Alt+Shift+Backspace)' "$LOG"; then
+	echo "PASS: tam-pane quit through the emergency chord"
+else
+	echo "FAIL: tam-pane did not log the emergency quit"
+	exit 1
+fi

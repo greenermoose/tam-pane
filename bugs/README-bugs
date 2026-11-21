@@ -98,3 +98,6 @@ IN THIS REPOSITORY
     B4-lua-c-calls-escape-the-watchdog.md
                                       Lua work inside C library calls
                                       escapes the watchdog
+    B5-no-vt-switch-or-lua-independent-quit.md
+                                      no VT switching, and no quit that
+                                      a config cannot remove

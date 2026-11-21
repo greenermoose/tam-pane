@@ -1,0 +1,61 @@
+W20 VT SWITCHING AND AN EMERGENCY QUIT IN C (0.1.9)
+
+Date: 2026-11-21
+AI harness: Claude Code 2.1.330
+AI model: claude-opus-5-5
+Commits: the 0.1.9 commit that adds this record
+Continues: W19
+
+
+GUIDANCE
+
+  Fred: "All pass. Next?" (after accepting 0.1.8)
+  Fred chose Ctrl+Alt+Shift+Backspace for the emergency quit (over an
+  opt-in Ctrl+Alt+Backspace, or no quit chord).
+  Fred chose to accept VT switching on automated tests now and check it
+  on real hardware at the first DRM trial (P4), rather than run tam-pane
+  on DRM from a text VT now.
+
+
+DONE
+
+  - Accepted 0.1.8 in 2fb5d15 (B4 Verified).
+  - Fixed R1 finding 10 as B5
+    (bugs/B5-no-vt-switch-or-lua-independent-quit.md).
+    run_compositor_key in src/input/keyboard.c runs before the Lua
+    bindings:
+      - XF86Switch_VT_1..12 call server.change_vt, which tp_server_init
+        sets only when a session exists, so nested or headless these are
+        ordinary keys;
+      - Ctrl+Alt+Shift+Backspace logs "emergency quit" and calls
+        tp_server_quit, which now sets server.quit_requested.
+    The level-0 keysym lookup is shared with run_binding (level0_syms).
+  - Tests: the compositor-keys case at the end of
+    tests/test_input_headless.c uses a stand-in change_vt.
+  - Docs: README (new "KEYS NO CONFIG CAN REMOVE" section; the
+    third_party/lua line now mentions the 0.1.8 patch, which W19's audit
+    missed), ROADMAP.md (0.1.9), arch/lua-api.md (reserved chords),
+    arch/data-structures.md (change_vt, quit_requested),
+    plans/P4-dogfood-tamlinux-0.7.md (the real-hardware VT check is now
+    an acceptance item).
+  - Added tools/demo-0.1.9 and tools/demo-0.1.9.lua: the config clears
+    every binding; Ctrl+Alt+Shift+Backspace must quit; the launcher
+    prints PASS or FAIL from tam-pane's log. The guide warns not to
+    press Ctrl+Alt+F-keys nested. Config checked by loading it headless.
+  - make test: 28 tag, 143 dwindle, 444 Lua, 297 headless input checks,
+    4 smoke checks, nm -D check; tests/test_nested_input.py passes.
+  - VERSION 0.1.9. Candidate binary SHA-256:
+    17b80f2b31ef0cb0a2eb1cfc646fa6ad7608749f7a0b987fa4c0502414c04834
+
+
+FAILED
+
+  Nothing.
+
+
+HANDOFF
+
+  - B5 is "Fix available" until Fred checks 0.1.9 with tools/demo-0.1.9.
+    The VT half stays open in P4's acceptance list.
+  - Next in R1's order: finding 13 (one attach/detach for client and
+    monitor membership, which fixes 6), see WHATNOW.

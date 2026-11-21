@@ -20,6 +20,10 @@ Hyprland still installed as the fallback session.
 
 ## Acceptance
 
+- At the first run on real hardware from a text VT: Ctrl+Alt+F-keys
+  switch away and back, and Ctrl+Alt+Shift+Backspace quits. 0.1.9
+  accepted these on automated tests and a nested check only, because
+  nested runs have no session (B5). Fred chose this on 2026-11-21.
 - A full working day on tam-pane without falling back to Hyprland.
 - Every `bugs/` record found in this phase is Verified or Deferred, with a
   reason.

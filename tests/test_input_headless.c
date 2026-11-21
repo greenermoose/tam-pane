@@ -478,6 +478,19 @@ static int find_hook_event(const char *prefix) {
 	return -1;
 }
 
+static unsigned int last_vt;
+
+static bool mock_change_vt(struct tp_server *s, unsigned int vt) {
+	(void)s;
+	last_vt = vt;
+	return true;
+}
+
+static bool key_consumed(struct tp_server *s, uint32_t code) {
+	struct tp_keyboard *k = wl_container_of(s->keyboards.next, k, link);
+	return (k->consumed_keys[code / 64] & (UINT64_C(1) << (code % 64))) != 0;
+}
+
 /* A hook feedback loop used to keep the event loop spinning forever; turn
  * that hang into a test failure. */
 static void on_hang_alarm(int sig) {
@@ -1480,6 +1493,61 @@ int main(void) {
 	wlr_output_destroy(o5);
 	for (unsigned int i = 0; i < 10; i++)
 		if (!pump(&client, &server)) goto fail;
+
+	/* Compositor keys (0.1.9), handled in C before Lua and clients. With no
+	 * session (nested, headless) Ctrl+Alt+F-keys pass through; with one,
+	 * they switch VT and are consumed. */
+	server.change_vt = NULL;
+	send_key(&keyboard, KEY_LEFTCTRL, WL_KEYBOARD_KEY_STATE_PRESSED, 300);
+	send_key(&keyboard, KEY_LEFTALT, WL_KEYBOARD_KEY_STATE_PRESSED, 301);
+	send_key(&keyboard, KEY_F3, WL_KEYBOARD_KEY_STATE_PRESSED, 302);
+	CHECK(!key_consumed(&server, KEY_F3));
+	send_key(&keyboard, KEY_F3, WL_KEYBOARD_KEY_STATE_RELEASED, 303);
+	server.change_vt = mock_change_vt;
+	last_vt = 0;
+	send_key(&keyboard, KEY_F2, WL_KEYBOARD_KEY_STATE_PRESSED, 304);
+	CHECK(last_vt == 2);
+	CHECK(key_consumed(&server, KEY_F2));
+	send_key(&keyboard, KEY_F2, WL_KEYBOARD_KEY_STATE_RELEASED, 305);
+	CHECK(!key_consumed(&server, KEY_F2));
+	send_key(&keyboard, KEY_F12, WL_KEYBOARD_KEY_STATE_PRESSED, 306);
+	CHECK(last_vt == 12);
+	send_key(&keyboard, KEY_F12, WL_KEYBOARD_KEY_STATE_RELEASED, 307);
+	send_key(&keyboard, KEY_LEFTALT, WL_KEYBOARD_KEY_STATE_RELEASED, 308);
+	send_key(&keyboard, KEY_LEFTCTRL, WL_KEYBOARD_KEY_STATE_RELEASED, 309);
+	/* Plain F2 is an ordinary key. */
+	last_vt = 0;
+	send_key(&keyboard, KEY_F2, WL_KEYBOARD_KEY_STATE_PRESSED, 310);
+	CHECK(last_vt == 0 && !key_consumed(&server, KEY_F2));
+	send_key(&keyboard, KEY_F2, WL_KEYBOARD_KEY_STATE_RELEASED, 311);
+
+	/* The emergency quit works even when the config removed every
+	 * binding. */
+	lf = fopen(lua_cfg, "wb");
+	CHECK(lf != NULL);
+	if (lf) {
+		fputs("tp.clear_binds()\n", lf);
+		fclose(lf);
+	}
+	CHECK(tp_lua_load_file(server.lua, lua_cfg, true, &server.settings,
+						   &server.settings));
+	CHECK(tp_lua_binding_count(server.lua) == 0);
+	server.quit_requested = false;
+	chord_mod(&keyboard, KEY_E, true, false, false); /* Meta+Shift+E: unbound */
+	CHECK(!server.quit_requested);
+	send_key(&keyboard, KEY_LEFTCTRL, WL_KEYBOARD_KEY_STATE_PRESSED, 320);
+	send_key(&keyboard, KEY_LEFTALT, WL_KEYBOARD_KEY_STATE_PRESSED, 321);
+	send_key(&keyboard, KEY_BACKSPACE, WL_KEYBOARD_KEY_STATE_PRESSED, 322);
+	CHECK(!server.quit_requested); /* Ctrl+Alt+Backspace alone is not it */
+	send_key(&keyboard, KEY_BACKSPACE, WL_KEYBOARD_KEY_STATE_RELEASED, 323);
+	send_key(&keyboard, KEY_LEFTSHIFT, WL_KEYBOARD_KEY_STATE_PRESSED, 324);
+	send_key(&keyboard, KEY_BACKSPACE, WL_KEYBOARD_KEY_STATE_PRESSED, 325);
+	CHECK(server.quit_requested);
+	CHECK(key_consumed(&server, KEY_BACKSPACE));
+	send_key(&keyboard, KEY_BACKSPACE, WL_KEYBOARD_KEY_STATE_RELEASED, 326);
+	send_key(&keyboard, KEY_LEFTSHIFT, WL_KEYBOARD_KEY_STATE_RELEASED, 327);
+	send_key(&keyboard, KEY_LEFTALT, WL_KEYBOARD_KEY_STATE_RELEASED, 328);
+	send_key(&keyboard, KEY_LEFTCTRL, WL_KEYBOARD_KEY_STATE_RELEASED, 329);
 
 	unlink(lua_cfg);
 	rmdir(lua_dir);

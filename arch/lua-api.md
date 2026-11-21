@@ -1,6 +1,6 @@
 # tam-pane Lua API (`arch/lua-api.md`)
 
-**Status:** 0.1.0–0.1.4 shipped and accepted (Phase P2 complete); 0.1.5–0.1.8 review fixes accepted.
+**Status:** 0.1.0–0.1.4 shipped and accepted (Phase P2 complete); 0.1.5–0.1.8 review fixes accepted; 0.1.9 (reserved chords) is a candidate.
 
 tam-pane embeds **Lua 5.5.1** statically from `third_party/lua/` with no
 dynamic symbol exports (`lua_*` symbols stay internal to `tam-pane`).
@@ -150,6 +150,14 @@ action type.
 - **Callbacks:** Plain Lua functions run under a tighter runtime watchdog
   (1,000,000 instructions / 100 ms `CLOCK_MONOTONIC` deadline); errors or
   timeouts are logged and the compositor keeps running.
+
+**Reserved chords (0.1.9).** Two chords are handled in C before any
+binding is looked up, so `tp.bind` cannot take them and `tp.clear_binds()`
+cannot remove them:
+
+- `Ctrl+Alt+F1`..`F12` switch VT when tam-pane owns a session (it runs
+  on the hardware). Nested or headless, they are ordinary keys.
+- `Ctrl+Alt+Shift+Backspace` is the emergency quit.
 
 ### `tp.unbind(chord)`
 
