@@ -21,12 +21,12 @@ cat >"$BIN/broken" <<EOF
 printf 'tp.config{ gaps = 4 }\nerror("intentional syntax/runtime failure")\n' >"$CFG"
 echo "Wrote broken config to $CFG — now press Meta+Shift+R"
 EOF
-cat >"$BIN/reset" <<EOF
+cat >"$BIN/small" <<EOF
 #!/bin/sh
 cp "$ROOT/tools/demo-0.1.4.lua" "$CFG"
 echo "Reset $CFG to gaps=8 — now press Meta+Shift+R"
 EOF
-chmod +x "$BIN/big" "$BIN/broken" "$BIN/reset"
+chmod +x "$BIN/big" "$BIN/broken" "$BIN/small"
 export PATH="$BIN:$PATH"
 
 startup="foot sh -c '
@@ -37,7 +37,7 @@ Watch the host terminal for reload logs. Try in order:
   1. Press Meta+Return to open a second window so gaps are visible.
   2. Type: big      then press Meta+Shift+R -> gaps jump to 40 live.
   3. Type: broken   then press Meta+Shift+R -> error logged, gaps stay 40.
-  4. Type: reset    then press Meta+Shift+R -> gaps return to 8.
+  4. Type: small    then press Meta+Shift+R -> gaps return to 8.
   5. Press Meta+Shift+E to quit (Ctrl+Alt+Esc restores host shortcuts).
 
 EOF
