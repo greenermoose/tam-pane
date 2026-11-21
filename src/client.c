@@ -87,16 +87,17 @@ static void on_map(struct wl_listener *l, void *data) {
 	}
 
 	c->mapped = true;
-	c->mon = s->selmon;
+	struct tp_monitor *mon = s->selmon;
 	if (rule.has_monitor) {
 		struct tp_monitor *target = tp_monitor_by_name(s, rule.monitor);
 		if (target)
-			c->mon = target;
+			mon = target;
 		else
 			tam_log_warn(
 				"window rule: monitor '%s' not found, using active monitor",
 				rule.monitor);
 	}
+	tp_client_attach(c, mon, 0);
 
 	if (rule.has_tags)
 		c->tags = rule.tags;
@@ -167,16 +168,11 @@ static void on_unmap(struct wl_listener *l, void *data) {
 
 	c->mapped = false;
 	tp_pointer_cancel_grab(s, c);
-	if (c->mon)
-		for (unsigned int i = 0; i < TP_TAG_SLOTS; i++)
-			if (c->mon->focus[i] == c)
-				c->mon->focus[i] = NULL;
+	tp_client_detach(c);
 	wl_list_remove(&c->link);
 	wl_list_remove(&c->flink);
-	if (c->mon) {
-		tp_monitor_forget(c->mon, c);
+	if (c->mon)
 		tp_arrange(c->mon);
-	}
 	tp_events_emit_window(s, TP_EVENT_WINDOW_CLOSE, c, false);
 	if (had_focus)
 		tp_focus_refresh(s);
@@ -372,35 +368,10 @@ void tp_client_set_monitor(struct tp_client *c, struct tp_monitor *m,
 	struct tp_monitor *old = c->mon;
 	tp_pointer_cancel_grab(s, c);
 
-	if (old) {
-		for (unsigned int i = 0; i < TP_TAG_SLOTS; i++)
-			if (old->focus[i] == c)
-				old->focus[i] = NULL;
-		tp_monitor_forget(old, c);
-	}
-	if (c->floating && old && m->usable.w > 0 && m->usable.h > 0) {
-		struct tp_rect r = c->float_geom;
-		r.x = m->usable.x + (r.x - old->usable.x);
-		r.y = m->usable.y + (r.y - old->usable.y);
-		if (r.w > m->usable.w)
-			r.w = m->usable.w < TP_FLOAT_MIN_W ? TP_FLOAT_MIN_W : m->usable.w;
-		if (r.h > m->usable.h)
-			r.h = m->usable.h < TP_FLOAT_MIN_H ? TP_FLOAT_MIN_H : m->usable.h;
-		if (r.x < m->usable.x)
-			r.x = m->usable.x;
-		if (r.y < m->usable.y)
-			r.y = m->usable.y;
-		if (r.x + r.w > m->usable.x + m->usable.w)
-			r.x = m->usable.x + m->usable.w - r.w;
-		if (r.y + r.h > m->usable.y + m->usable.h)
-			r.y = m->usable.y + m->usable.h - r.h;
-		c->float_geom = r;
-	}
-
-	c->mon = m;
-	c->tags = tp_tagview_current(&m->view);
-	free(c->home_output);
-	c->home_output = NULL;
+	if (old)
+		tp_client_carry_float(c, old->usable, m->usable);
+	tp_client_attach(c, m, tp_tagview_current(&m->view));
+	tp_client_clear_home(c);
 
 	if (old)
 		tp_arrange(old);
@@ -411,6 +382,51 @@ void tp_client_set_monitor(struct tp_client *c, struct tp_monitor *m,
 	} else {
 		tp_focus_refresh(s);
 	}
+}
+
+void tp_client_detach(struct tp_client *c) {
+	struct tp_monitor *m = c->mon;
+	if (!m)
+		return;
+	for (unsigned int i = 0; i < TP_TAG_SLOTS; i++)
+		if (m->focus[i] == c)
+			m->focus[i] = NULL;
+	tp_monitor_forget(m, c);
+}
+
+void tp_client_attach(struct tp_client *c, struct tp_monitor *m,
+					  tp_tags_t tags) {
+	tp_client_detach(c);
+	c->mon = m;
+	if (tags & TP_TAG_ALL)
+		c->tags = tags & TP_TAG_ALL;
+}
+
+void tp_client_carry_float(struct tp_client *c, struct tp_rect from,
+						   struct tp_rect to) {
+	if (!c->floating || to.w <= 0 || to.h <= 0)
+		return;
+	struct tp_rect r = c->float_geom;
+	if (r.w > to.w)
+		r.w = to.w < TP_FLOAT_MIN_W ? TP_FLOAT_MIN_W : to.w;
+	if (r.h > to.h)
+		r.h = to.h < TP_FLOAT_MIN_H ? TP_FLOAT_MIN_H : to.h;
+	r.x = to.x + (r.x - from.x);
+	r.y = to.y + (r.y - from.y);
+	if (r.x < to.x)
+		r.x = to.x;
+	if (r.y < to.y)
+		r.y = to.y;
+	if (r.x + r.w > to.x + to.w)
+		r.x = to.x + to.w - r.w;
+	if (r.y + r.h > to.y + to.h)
+		r.y = to.y + to.h - r.h;
+	c->float_geom = r;
+}
+
+void tp_client_clear_home(struct tp_client *c) {
+	free(c->home_output);
+	c->home_output = NULL;
 }
 
 struct tp_client *tp_client_at(struct tp_server *s, double x, double y,

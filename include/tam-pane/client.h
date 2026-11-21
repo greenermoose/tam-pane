@@ -64,6 +64,28 @@ void tp_client_resize_floating(struct tp_client *c, enum tp_dir dir,
 void tp_client_set_monitor(struct tp_client *c, struct tp_monitor *m,
 						   bool follow);
 
+/*
+ * Monitor membership. Every change of c->mon goes through
+ * tp_client_attach, so a monitor's focus slots and layout trees never keep
+ * a window that left (0.1.10). Callers then arrange and refocus as needed.
+ */
+
+/* Drop c from its monitor's focus slots and layout trees; c->mon stays. */
+void tp_client_detach(struct tp_client *c);
+
+/* Detach c, then put it on m (NULL: no monitor). tags == 0 keeps c->tags.
+ * The floating place is left alone; see tp_client_carry_float. */
+void tp_client_attach(struct tp_client *c, struct tp_monitor *m,
+					  tp_tags_t tags);
+
+/* Shift a floating window's remembered place from usable area `from` to
+ * `to`, keeping its offset and clamping it inside. */
+void tp_client_carry_float(struct tp_client *c, struct tp_rect from,
+						   struct tp_rect to);
+
+/* Forget the output a hot-plug displaced the window from. */
+void tp_client_clear_home(struct tp_client *c);
+
 /* The window and surface under a layout point, with surface-local
  * coordinates. Any output pointer may be NULL. */
 struct tp_client *tp_client_at(struct tp_server *s, double x, double y,

@@ -5,9 +5,10 @@ of versions. Versions follow semantic versioning: during 0.x, the minor
 number marks a phase's big step and the patch number marks each
 milestone inside it.
 
-**Current version:** 0.1.9 (Phase P2 complete at 0.1.4, then hardened
-from 0.1.5 to fix review R1's findings; 0.1.5–0.1.9 accepted by Fred on
-2026-11-21; development continues on branch `dev`).
+**Current version:** 0.1.10, a candidate (Phase P2 complete at 0.1.4,
+then hardened from 0.1.5 to fix review R1's findings; 0.1.5–0.1.9
+accepted by Fred on 2026-11-21, and his check of 0.1.10 deferred to P4;
+development continues on branch `dev`).
 
 ## Tamlinux timing
 
@@ -69,6 +70,11 @@ are fixed before P3, one version each:
   Ctrl+Alt+F1–F12 switch VT when tam-pane owns a session, and
   Ctrl+Alt+Shift+Backspace quits (B5). The VT switch is checked on real
   hardware at the first DRM trial (P4).
+- **0.1.10** One `tp_client_attach` / `tp_client_detach` for every
+  change of a window's monitor, replacing five hand-written copies
+  (R1 finding 13). A floating drag onto another monitor now re-lays out
+  both monitors (finding 6). Checked by the headless tests; Fred deferred
+  his own check to the first run on real hardware (P4).
 - Next: R1's remaining fixes (`work/WHATNOW`).
 
 ### Phase P3: daily-driver parity (0.2.x), `plans/P3-daily-parity.md`

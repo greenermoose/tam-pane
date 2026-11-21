@@ -84,7 +84,10 @@ schedules are not findings here.
 - **What:** It rewrites `c->mon` and `c->tags` without arranging either
   monitor, emitting `tag.change` or refreshing focus. This is a symptom
   of 13.
-- **Status:** open
+- **Status:** fixed in 0.1.10 (part of 13): the drag now re-lays out
+  both monitors. On a second look the gap had no visible effect, so it
+  has no bug record. The "emitting `tag.change`" above was wrong:
+  `tag.change` reports a monitor's view, not a window's tags.
 
 ### 7. Window titles can reach the shell through `tp.spawn` (high)
 
@@ -161,7 +164,9 @@ schedules are not findings here.
   differently.
 - **Fix:** one `tp_client_detach` / `tp_client_attach` pair that owns the
   invariant and emits the events.
-- **Status:** open
+- **Status:** fixed in 0.1.10: `tp_client_attach` / `tp_client_detach`.
+  `tp_client_set_tags` keeps its own slot clearing, because it changes
+  tags, not monitors.
 
 ### 14. Duplicated logic (low)
 

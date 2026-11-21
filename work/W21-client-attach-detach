@@ -1,0 +1,66 @@
+W21 ONE ATTACH/DETACH FOR A WINDOW'S MONITOR (0.1.10)
+
+Date: 2026-11-21
+AI harness: Claude Code 2.1.330
+AI model: claude-opus-5-5
+Commits: the 0.1.10 commit that adds this record
+Continues: W20
+
+
+GUIDANCE
+
+  Fred: "Pass. Next?" (after his tools/demo-0.1.9 check)
+  Asked how to check 0.1.10, whose changed paths all need two monitors
+  while tools/nested-input deliberately supports one nested window, Fred
+  answered: "Defer this check to a future phase."
+
+
+DONE
+
+  - Accepted 0.1.9 in 5e0536d. The quit is verified; the VT switch waits
+    for P4.
+  - Fixed R1 finding 13 (and 6). New in include/tam-pane/client.h and
+    src/client.c:
+      - tp_client_detach (drop from the focus slots and layout trees);
+      - tp_client_attach (detach, then set mon and optionally tags);
+      - tp_client_carry_float (was clamp_float_to in src/monitor.c, and
+        a second copy in tp_client_set_monitor);
+      - tp_client_clear_home.
+    Rewritten on top of them: on_map, on_unmap, tp_client_set_monitor,
+    update_grab's floating move (which now also re-lays out both
+    monitors, finding 6), and monitor hot-plug (on_destroy,
+    on_new_output). tp_client_set_tags keeps its own slot clearing,
+    because it changes tags, not monitors.
+  - R1 finding 6 corrected in its status line. The gap had no visible
+    effect, so it has no bug record, and its claim about tag.change was
+    wrong.
+  - Test: a characterization case in tests/test_input_headless.c drags a
+    floating window from one headless monitor to another, checks
+    monitor, tags, focus slots and trees, moves it back with
+    Meta+Shift+Comma and tiles it again. Being a refactor test, it
+    passed before and after the change.
+  - Docs: arch/data-structures.md (monitor membership), ROADMAP.md
+    (0.1.10), plans/P4-dogfood-tamlinux-0.7.md (the multi-monitor check
+    Fred deferred), reviews/R1 (findings 6 and 13).
+  - No tools/demo-0.1.10: Fred deferred the check.
+  - make test: 28 tag, 143 dwindle, 444 Lua, 340 headless input checks,
+    4 smoke checks, nm -D check; tests/test_nested_input.py passes; the
+    headless test is clean under ASan.
+  - VERSION 0.1.10. Candidate binary SHA-256:
+    d9b60204780efc9d8f2d09e76eaba6dc668d625de92ca1541eaf29fa6e1bcdbc
+
+
+FAILED
+
+  - The first run of the new test failed six checks because it pointed
+    at +2,+2 inside a window whose test buffer is only 2x2 pixels, so no
+    drag started. Pointing at +1,+1, as the older floating test does,
+    fixed it. The code was not at fault.
+
+
+HANDOFF
+
+  - 0.1.10 stays a candidate. Fred's check is the multi-monitor item in
+    P4's acceptance list.
+  - Next in R1's order: finding 12 (new windows split the last leaf),
+    see WHATNOW.

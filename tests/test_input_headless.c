@@ -996,6 +996,46 @@ int main(void) {
 	chord(&keyboard, KEY_DOT, false, false);
 	CHECK(server.selmon == m2 && tp_focused(&server) == c1);
 
+	/* Dragging a floating window onto another monitor moves it there in
+	 * full: monitor, tags, focus slots and layout trees (R1 findings 6 and
+	 * 13). Then Meta+Shift+Comma brings it back and it tiles again. */
+	tp_focus(&server, c0);
+	chord(&keyboard, KEY_V, false, false);
+	CHECK(c0->floating && c0->mon == m1);
+	/* The test clients draw a 2x2 buffer: point inside it. */
+	wlr_cursor_warp(server.cursor, &pointer.base, c0->float_geom.x + 1.0,
+		c0->float_geom.y + 1.0);
+	emit_motion(&server, &pointer, 0, 0, 160);
+	send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_PRESSED, 161);
+	emit_button(&server, &pointer, BTN_LEFT, WL_POINTER_BUTTON_STATE_PRESSED, 162);
+	CHECK(server.grab.mode == TP_GRAB_MOVE && server.grab.client == c0);
+	emit_motion(&server, &pointer, m2->area.x + 40.0 - server.cursor->x, 0, 163);
+	CHECK(c0->mon == m2);
+	CHECK(c0->tags == tp_tagview_current(&m2->view));
+	CHECK(c0->home_output == NULL);
+	for (unsigned int i = 0; i < TP_TAG_SLOTS; i++) {
+		CHECK(m1->focus[i] != c0);
+		CHECK(!tp_dwindle_find(&m1->trees[i], c0));
+	}
+	CHECK(m2->focus[tp_tags_slot(tp_tagview_current(&m2->view))] == c0);
+	emit_button(&server, &pointer, BTN_LEFT, WL_POINTER_BUTTON_STATE_RELEASED, 164);
+	send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_RELEASED, 165);
+	CHECK(server.grab.mode == TP_GRAB_NONE && c0->mon == m2);
+	CHECK(tp_focused(&server) == c0);
+	chord(&keyboard, KEY_COMMA, true, false);
+	CHECK(c0->mon == m1 && c0->floating);
+	CHECK(c0->float_geom.x >= m1->usable.x &&
+		c0->float_geom.x + c0->float_geom.w <= m1->usable.x + m1->usable.w);
+	for (unsigned int i = 0; i < TP_TAG_SLOTS; i++)
+		CHECK(m2->focus[i] != c0);
+	tp_focus(&server, c0);
+	chord(&keyboard, KEY_V, false, false);
+	CHECK(!c0->floating && c0->mon == m1);
+	CHECK(tp_dwindle_find(tp_monitor_tree(m1), c0) != NULL);
+	tp_monitor_focus(&server, m2);
+	tp_focus(&server, c1);
+	CHECK(server.selmon == m2 && tp_focused(&server) == c1);
+
 	/* Layer surface on m2 is cleanly closed when m2 is unplugged; c1 moves
 	 * to m1 keeping its tags and remembering m2's output name. */
 	struct test_layer bar2;

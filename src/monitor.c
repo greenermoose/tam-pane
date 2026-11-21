@@ -31,28 +31,6 @@ static void update_area(struct tp_monitor *m) {
 	tp_layers_arrange(m);
 }
 
-static void clamp_float_to(struct tp_client *c, struct tp_rect from,
-						   struct tp_rect to) {
-	if (!c->floating || to.w <= 0 || to.h <= 0)
-		return;
-	struct tp_rect r = c->float_geom;
-	if (r.w > to.w)
-		r.w = to.w < TP_FLOAT_MIN_W ? TP_FLOAT_MIN_W : to.w;
-	if (r.h > to.h)
-		r.h = to.h < TP_FLOAT_MIN_H ? TP_FLOAT_MIN_H : to.h;
-	r.x = to.x + (r.x - from.x);
-	r.y = to.y + (r.y - from.y);
-	if (r.x < to.x)
-		r.x = to.x;
-	if (r.y < to.y)
-		r.y = to.y;
-	if (r.x + r.w > to.x + to.w)
-		r.x = to.x + to.w - r.w;
-	if (r.y + r.h > to.y + to.h)
-		r.y = to.y + to.h - r.h;
-	c->float_geom = r;
-}
-
 static void on_frame(struct wl_listener *l, void *data) {
 	struct tp_monitor *m = wl_container_of(l, m, frame);
 	struct timespec now;
@@ -231,10 +209,10 @@ static void on_destroy(struct wl_listener *l, void *data) {
 			continue;
 		if (!c->home_output && name && *name)
 			c->home_output = strdup(name);
-		c->mon = heir;
 		if (heir)
-			clamp_float_to(c, m->usable, heir->usable);
-		else
+			tp_client_carry_float(c, m->usable, heir->usable);
+		tp_client_attach(c, heir, 0);
+		if (!heir)
 			wlr_scene_node_set_enabled(&c->tree->node, false);
 	}
 	if (s->selmon == m)
@@ -329,18 +307,11 @@ static void on_new_output(struct wl_listener *l, void *data) {
 		if (!match && c->mon != NULL)
 			continue;
 		struct tp_monitor *old = c->mon;
-		if (old && old != m) {
-			for (unsigned int i = 0; i < TP_TAG_SLOTS; i++)
-				if (old->focus[i] == c)
-					old->focus[i] = NULL;
-			tp_monitor_forget(old, c);
-			clamp_float_to(c, old->usable, m->usable);
-		}
-		c->mon = m;
-		if (match) {
-			free(c->home_output);
-			c->home_output = NULL;
-		}
+		if (old && old != m)
+			tp_client_carry_float(c, old->usable, m->usable);
+		tp_client_attach(c, m, 0);
+		if (match)
+			tp_client_clear_home(c);
 		moved = true;
 	}
 	if (moved) {

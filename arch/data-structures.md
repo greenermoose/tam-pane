@@ -105,6 +105,14 @@ the same commit as any change to them.
   - `link`, in `tp_server.clients`, newest first. Layout order uses this
     list.
   - `flink`, in `tp_server.focus_stack`, most recently focused first.
+- **Monitor membership (0.1.10):** every change of `mon` goes through
+  `tp_client_attach` (`src/client.c`). It first calls `tp_client_detach`,
+  which drops the window from its monitor's `focus` slots and layout
+  trees, so a monitor never keeps a window that left. The callers are
+  `on_map`, `tp_client_set_monitor`, a floating drag in `update_grab`,
+  and hot-plug in `src/monitor.c`. `tp_client_carry_float` moves the
+  floating place between usable areas, and `tp_client_clear_home`
+  forgets `home_output`. `on_unmap` detaches without changing `mon`.
 
 ## Tags (`include/tam-pane/tags.h`)
 

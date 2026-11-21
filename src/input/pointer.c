@@ -77,17 +77,17 @@ static void update_grab(struct tp_server *s) {
 		c->float_geom.y = g->start_geom.y + (int32_t)dy;
 		struct tp_monitor *m = tp_monitor_at(s, s->cursor->x, s->cursor->y);
 		if (m && m != c->mon) {
-			if (c->mon) {
-				for (unsigned int i = 0; i < TP_TAG_SLOTS; i++)
-					if (c->mon->focus[i] == c)
-						c->mon->focus[i] = NULL;
-				tp_monitor_forget(c->mon, c);
-			}
-			c->mon = m;
-			c->tags = tp_tagview_current(&m->view);
-			free(c->home_output);
-			c->home_output = NULL;
+			/* The window follows the pointer, so its place is not carried
+			 * over; it takes the new monitor's view and focus slot. */
+			struct tp_monitor *old = c->mon;
+			tp_client_attach(c, m, tp_tagview_current(&m->view));
+			tp_client_clear_home(c);
 			m->focus[tp_tags_slot(tp_tagview_current(&m->view))] = c;
+			tp_client_place(c, c->float_geom);
+			if (old)
+				tp_arrange(old);
+			tp_arrange(m);
+			return;
 		}
 		tp_client_place(c, c->float_geom);
 		return;
