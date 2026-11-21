@@ -27,9 +27,9 @@ cp "$ROOT/tools/demo-0.1.4.lua" "$CFG"
 echo "Reset $CFG to gaps=8 — now press Meta+Shift+R"
 EOF
 chmod +x "$BIN/big" "$BIN/broken" "$BIN/reset"
+export PATH="$BIN:$PATH"
 
 startup="foot sh -c '
-export PATH=\"$BIN:\$PATH\"
 cat << \"EOF\"
 === tam-pane 0.1.4 interactive demo (live reload) ===
 
