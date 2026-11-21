@@ -35,10 +35,12 @@ static void popup_destroy(struct wl_listener *l, void *data) {
 
 static void on_new_popup(struct wl_listener *l, void *data) {
 	struct wlr_xdg_popup *popup = data;
+	if (!popup->parent)
+		return; /* layer-shell attaches its own popups in src/layer.c */
 	struct wlr_xdg_surface *parent =
 		wlr_xdg_surface_try_from_wlr_surface(popup->parent);
 	if (!parent || !parent->data)
-		return; /* layer-shell popups arrive with layer-shell in 0.0.5 */
+		return;
 
 	struct tp_popup *p = calloc(1, sizeof(*p));
 	if (!p)
@@ -133,6 +135,7 @@ static void on_destroy(struct wl_listener *l, void *data) {
 	wl_list_remove(&c->destroy.link);
 	wl_list_remove(&c->request_fullscreen.link);
 	wl_list_remove(&c->request_maximize.link);
+	free(c->home_output);
 	free(c);
 }
 
@@ -304,6 +307,55 @@ void tp_client_resize_floating(struct tp_client *c, enum tp_dir dir,
 		r.h = TP_FLOAT_MIN_H;
 	c->float_geom = r;
 	tp_client_place(c, c->float_geom);
+}
+
+void tp_client_set_monitor(struct tp_client *c, struct tp_monitor *m,
+						   bool follow) {
+	if (!c || !m || c->mon == m)
+		return;
+	struct tp_server *s = c->server;
+	struct tp_monitor *old = c->mon;
+	tp_pointer_cancel_grab(s, c);
+
+	if (old) {
+		for (unsigned int i = 0; i < TP_TAG_SLOTS; i++)
+			if (old->focus[i] == c)
+				old->focus[i] = NULL;
+		tp_monitor_forget(old, c);
+	}
+	if (c->floating && old && m->usable.w > 0 && m->usable.h > 0) {
+		struct tp_rect r = c->float_geom;
+		r.x = m->usable.x + (r.x - old->usable.x);
+		r.y = m->usable.y + (r.y - old->usable.y);
+		if (r.w > m->usable.w)
+			r.w = m->usable.w < TP_FLOAT_MIN_W ? TP_FLOAT_MIN_W : m->usable.w;
+		if (r.h > m->usable.h)
+			r.h = m->usable.h < TP_FLOAT_MIN_H ? TP_FLOAT_MIN_H : m->usable.h;
+		if (r.x < m->usable.x)
+			r.x = m->usable.x;
+		if (r.y < m->usable.y)
+			r.y = m->usable.y;
+		if (r.x + r.w > m->usable.x + m->usable.w)
+			r.x = m->usable.x + m->usable.w - r.w;
+		if (r.y + r.h > m->usable.y + m->usable.h)
+			r.y = m->usable.y + m->usable.h - r.h;
+		c->float_geom = r;
+	}
+
+	c->mon = m;
+	c->tags = tp_tagview_current(&m->view);
+	free(c->home_output);
+	c->home_output = NULL;
+
+	if (old)
+		tp_arrange(old);
+	tp_arrange(m);
+	if (follow) {
+		tp_monitor_focus(s, m);
+		tp_focus(s, c);
+	} else {
+		tp_focus_refresh(s);
+	}
 }
 
 struct tp_client *tp_client_at(struct tp_server *s, double x, double y,

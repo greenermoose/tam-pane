@@ -36,8 +36,8 @@ LIBTAM := $(LIBTAM_PREFIX)/lib/libtam.a
 # Pure logic: no wlroots, so the unit tests build without it.
 CORE_SRCS = src/tags.c src/layout/dwindle.c
 # The compositor proper.
-WM_SRCS = src/main.c src/server.c src/settings.c src/monitor.c src/client.c src/focus.c \
-	src/spawn.c src/bindings.c src/layout/arrange.c \
+WM_SRCS = src/main.c src/server.c src/settings.c src/monitor.c src/layer.c \
+	src/client.c src/focus.c src/spawn.c src/bindings.c src/layout/arrange.c \
 	src/input/input.c src/input/keyboard.c src/input/pointer.c
 
 CORE_OBJS = $(patsubst src/%.c,build/%.o,$(CORE_SRCS))
@@ -51,8 +51,10 @@ PROTO_HEADERS = build/protocols/xdg-shell-protocol.h \
 PROTO_SRCS = build/protocols/viewporter-protocol.c \
 	build/protocols/fractional-scale-v1-protocol.c
 PROTO_OBJS = $(PROTO_SRCS:.c=.o)
-CLIENT_PROTO_HEADER = build/protocols/xdg-shell-client-protocol.h
-CLIENT_PROTO_CODE = build/protocols/xdg-shell-protocol.c
+CLIENT_PROTO_HEADERS = build/protocols/xdg-shell-client-protocol.h \
+	build/protocols/wlr-layer-shell-unstable-v1-client-protocol.h
+CLIENT_PROTO_SRCS = build/protocols/xdg-shell-protocol.c \
+	build/protocols/wlr-layer-shell-unstable-v1-protocol.c
 
 all: build/tam-pane
 
@@ -77,6 +79,14 @@ build/protocols/xdg-shell-protocol.h: $(WAYLAND_PROTOCOLS)/stable/xdg-shell/xdg-
 build/protocols/wlr-layer-shell-unstable-v1-protocol.h: protocols/wlr-layer-shell-unstable-v1.xml
 	@mkdir -p $(@D)
 	$(WAYLAND_SCANNER) server-header $< $@
+
+build/protocols/wlr-layer-shell-unstable-v1-client-protocol.h: protocols/wlr-layer-shell-unstable-v1.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) client-header $< $@
+
+build/protocols/wlr-layer-shell-unstable-v1-protocol.c: protocols/wlr-layer-shell-unstable-v1.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) private-code $< $@
 
 build/protocols/xdg-shell-client-protocol.h: $(WAYLAND_PROTOCOLS)/stable/xdg-shell/xdg-shell.xml
 	@mkdir -p $(@D)
@@ -108,10 +118,10 @@ build/tests/test_%: tests/test_%.c $(CORE_OBJS) tests/check.h
 
 build/tests/test_input_headless: tests/test_input_headless.c $(CORE_OBJS) \
 	$(filter-out build/main.o,$(WM_OBJS)) $(PROTO_OBJS) $(LIBTAM) \
-	$(CLIENT_PROTO_HEADER) $(CLIENT_PROTO_CODE)
+	$(CLIENT_PROTO_HEADERS) $(CLIENT_PROTO_SRCS)
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(PKG_CFLAGS) -Ibuild/protocols -o $@ $< \
-		$(CLIENT_PROTO_CODE) $(CORE_OBJS) \
+		$(CLIENT_PROTO_SRCS) $(CORE_OBJS) \
 		$(filter-out build/main.o,$(WM_OBJS)) $(PROTO_OBJS) $(LIBTAM) $(PKG_LIBS) \
 		$(shell $(PKG_CONFIG) --libs $(CLIENT_PKGS)) -lm
 

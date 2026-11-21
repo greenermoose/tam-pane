@@ -79,6 +79,8 @@ KEYS (COMPILED IN UNTIL LUA CONFIGURATION ARRIVES)
   Meta+Ctrl+1 .. 9      add or remove a tag from the view
   Meta+Shift+Ctrl+1 .. 9 add or remove a tag from the focused window
   Meta+Tab              go back to the previous view
+  Meta+, / Meta+.       focus the previous / next monitor
+  Meta+Shift+, / .      move the focused window to the previous / next monitor
   Meta+Shift+E          quit tam-pane
 
   Meta is the key with the logo on it.

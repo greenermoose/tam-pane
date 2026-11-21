@@ -23,6 +23,7 @@ struct tp_client {
 	struct wl_list flink; /* tp_server.focus_stack */
 	struct tp_server *server;
 	struct tp_monitor *mon;
+	char *home_output; /* original output name when displaced by hot-plug */
 	struct wlr_xdg_toplevel *toplevel;
 	struct wlr_scene_tree *tree;
 	tp_tags_t tags;
@@ -58,6 +59,10 @@ void tp_client_set_floating(struct tp_client *c, bool floating);
 void tp_client_set_fullscreen(struct tp_client *c, bool fullscreen);
 void tp_client_resize_floating(struct tp_client *c, enum tp_dir dir,
 							   int32_t delta);
+
+/* Move a window to another monitor, assigning that monitor's current view. */
+void tp_client_set_monitor(struct tp_client *c, struct tp_monitor *m,
+						   bool follow);
 
 /* The window and surface under a layout point, with surface-local
  * coordinates. Any output pointer may be NULL. */

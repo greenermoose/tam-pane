@@ -5,7 +5,9 @@
 #include "tam-pane/client.h"
 #include "tam-pane/input.h"
 #include "tam-pane/focus.h"
+#include "tam-pane/layer.h"
 #include "tam-pane/monitor.h"
+#include <wlr/backend/headless.h>
 #include <wlr/types/wlr_scene.h>
 #include "tam-pane/server.h"
 #include <poll.h>
@@ -20,6 +22,7 @@
 #include <wlr/interfaces/wlr_pointer.h>
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_seat.h>
+#include "wlr-layer-shell-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 
 static const struct wlr_keyboard_impl keyboard_impl = { .name = "test" };
@@ -43,6 +46,7 @@ struct test_client {
 	struct wl_keyboard *keyboard;
 	struct wl_pointer *pointer;
 	struct xdg_wm_base *wm_base;
+	struct zwlr_layer_shell_v1 *layer_shell;
 	bool has_viewporter, has_fractional_scale;
 	struct test_window windows[3];
 	struct wl_surface *keyboard_focus;
@@ -216,6 +220,9 @@ static void registry_global(void *data, struct wl_registry *registry,
 		client->wm_base = wl_registry_bind(registry, name,
 			&xdg_wm_base_interface, 1);
 		xdg_wm_base_add_listener(client->wm_base, &wm_listener, client);
+	} else if (!strcmp(interface, zwlr_layer_shell_v1_interface.name)) {
+		client->layer_shell = wl_registry_bind(registry, name,
+			&zwlr_layer_shell_v1_interface, version < 4 ? version : 4);
 	} else if (!strcmp(interface, "wp_viewporter")) {
 		client->has_viewporter = true;
 	} else if (!strcmp(interface, "wp_fractional_scale_manager_v1")) {
@@ -248,9 +255,97 @@ static bool pump(struct test_client *client, struct tp_server *server) {
 
 static bool globals_ready(struct test_client *client) {
 	return client->compositor && client->shm && client->seat && client->wm_base &&
-		client->keyboard && client->pointer &&
+		client->layer_shell && client->keyboard && client->pointer &&
 		client->has_viewporter && client->has_fractional_scale;
 }
+
+struct test_layer {
+	struct test_client *client;
+	struct wl_surface *surface;
+	struct zwlr_layer_surface_v1 *layer_surface;
+	uint32_t width, height;
+	bool configured, closed;
+};
+
+static void layer_configure(void *data, struct zwlr_layer_surface_v1 *ls,
+		uint32_t serial, uint32_t width, uint32_t height) {
+	struct test_layer *l = data;
+	l->width = width;
+	l->height = height;
+	zwlr_layer_surface_v1_ack_configure(ls, serial);
+	if (!l->configured) {
+		l->configured = true;
+		wl_surface_attach(l->surface, l->client->buffer, 0, 0);
+		wl_surface_damage(l->surface, 0, 0, 2, 2);
+		wl_surface_commit(l->surface);
+	}
+}
+
+static void layer_closed(void *data, struct zwlr_layer_surface_v1 *ls) {
+	((struct test_layer *)data)->closed = true;
+}
+
+static const struct zwlr_layer_surface_v1_listener layer_listener = {
+	.configure = layer_configure,
+	.closed = layer_closed,
+};
+
+static void create_layer(struct test_client *client, struct test_layer *l,
+		uint32_t layer, uint32_t anchor, uint32_t w, uint32_t h,
+		int32_t excl, uint32_t kb) {
+	memset(l, 0, sizeof(*l));
+	l->client = client;
+	l->surface = wl_compositor_create_surface(client->compositor);
+	l->layer_surface = zwlr_layer_shell_v1_get_layer_surface(
+		client->layer_shell, l->surface, NULL, layer, "test-panel");
+	zwlr_layer_surface_v1_add_listener(l->layer_surface, &layer_listener, l);
+	zwlr_layer_surface_v1_set_anchor(l->layer_surface, anchor);
+	zwlr_layer_surface_v1_set_size(l->layer_surface, w, h);
+	zwlr_layer_surface_v1_set_exclusive_zone(l->layer_surface, excl);
+	zwlr_layer_surface_v1_set_keyboard_interactivity(l->layer_surface, kb);
+	wl_surface_commit(l->surface);
+}
+
+static void destroy_layer(struct test_layer *l) {
+	if (l->layer_surface)
+		zwlr_layer_surface_v1_destroy(l->layer_surface);
+	if (l->surface)
+		wl_surface_destroy(l->surface);
+	memset(l, 0, sizeof(*l));
+}
+
+struct test_popup {
+	struct test_client *client;
+	struct wl_surface *surface;
+	struct xdg_surface *xdg_surface;
+	struct xdg_popup *popup;
+	bool configured;
+};
+
+static void popup_xdg_configure(void *data, struct xdg_surface *surface,
+		uint32_t serial) {
+	struct test_popup *p = data;
+	xdg_surface_ack_configure(surface, serial);
+	if (!p->configured) {
+		p->configured = true;
+		wl_surface_attach(p->surface, p->client->buffer, 0, 0);
+		wl_surface_damage(p->surface, 0, 0, 2, 2);
+		wl_surface_commit(p->surface);
+	}
+}
+
+static const struct xdg_surface_listener popup_surface_listener = {
+	.configure = popup_xdg_configure,
+};
+
+static void popup_configure(void *data, struct xdg_popup *popup,
+		int32_t x, int32_t y, int32_t w, int32_t h) {}
+static void popup_done(void *data, struct xdg_popup *popup) {}
+
+static const struct xdg_popup_listener popup_listener = {
+	.configure = popup_configure,
+	.popup_done = popup_done,
+};
 
 static int create_shm_buffer(struct test_client *client) {
 	char name[64];
@@ -662,6 +757,182 @@ int main(void) {
 	CHECK(wl_list_length(&server.clients) == 2);
 	CHECK(server.grab.mode == TP_GRAB_NONE);
 	send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_RELEASED, 124);
+
+	/* ---- 0.0.5: layer-shell exclusive zone, popups, keyboard focus ---- */
+	struct tp_monitor *m1 = server.selmon;
+	CHECK(m1 != NULL);
+	struct tp_rect area1 = m1->area;
+
+	struct test_layer bar;
+	create_layer(&client, &bar, ZWLR_LAYER_SHELL_V1_LAYER_TOP,
+		ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP |
+		ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT |
+		ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT,
+		0, 32, 32, ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE);
+	for (unsigned int i = 0; i < 200 && !bar.configured; i++)
+		if (!pump(&client, &server)) goto fail;
+	for (unsigned int i = 0; i < 20; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(bar.configured);
+	CHECK(bar.width == (uint32_t)area1.w && bar.height == 32);
+	CHECK(m1->usable.y == area1.y + 32);
+	CHECK(m1->usable.h == area1.h - 32);
+	CHECK(c0->geom.y >= m1->usable.y);
+	CHECK(c1->geom.y >= m1->usable.y);
+
+	/* Clicking a NONE-interactivity bar delivers pointer button without
+	 * stealing keyboard focus from the active toplevel. */
+	tp_focus(&server, c0);
+	for (unsigned int i = 0; i < 10; i++)
+		if (!pump(&client, &server)) goto fail;
+	buttons_before = client.pointer_buttons;
+	wlr_cursor_warp(server.cursor, &pointer.base, area1.x + 1.0, area1.y + 1.0);
+	emit_motion(&server, &pointer, 0, 0, 130);
+	emit_button(&server, &pointer, BTN_LEFT, WL_POINTER_BUTTON_STATE_PRESSED, 131);
+	emit_button(&server, &pointer, BTN_LEFT, WL_POINTER_BUTTON_STATE_RELEASED, 132);
+	for (unsigned int i = 0; i < 20; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(client.pointer_buttons > buttons_before);
+	CHECK(tp_focused(&server) == c0);
+	CHECK(server.focused_layer == NULL);
+
+	/* Layer popup attaches to TP_LAYER_OVERLAY, configures, and receives clicks. */
+	struct test_popup pop = { .client = &client };
+	struct xdg_positioner *pos = xdg_wm_base_create_positioner(client.wm_base);
+	xdg_positioner_set_size(pos, 100, 80);
+	xdg_positioner_set_anchor_rect(pos, 0, 0, 20, 32);
+	xdg_positioner_set_anchor(pos, XDG_POSITIONER_ANCHOR_BOTTOM_LEFT);
+	xdg_positioner_set_gravity(pos, XDG_POSITIONER_GRAVITY_BOTTOM_RIGHT);
+	pop.surface = wl_compositor_create_surface(client.compositor);
+	pop.xdg_surface = xdg_wm_base_get_xdg_surface(client.wm_base, pop.surface);
+	xdg_surface_add_listener(pop.xdg_surface, &popup_surface_listener, &pop);
+	pop.popup = xdg_surface_get_popup(pop.xdg_surface, NULL, pos);
+	xdg_popup_add_listener(pop.popup, &popup_listener, &pop);
+	zwlr_layer_surface_v1_get_popup(bar.layer_surface, pop.popup);
+	xdg_positioner_destroy(pos);
+	wl_surface_commit(pop.surface);
+	for (unsigned int i = 0; i < 200 && !pop.configured; i++)
+		if (!pump(&client, &server)) goto fail;
+	for (unsigned int i = 0; i < 20; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(pop.configured);
+	xdg_popup_destroy(pop.popup);
+	xdg_surface_destroy(pop.xdg_surface);
+	wl_surface_destroy(pop.surface);
+
+	/* Destroying the bar restores m1->usable and expands tiled windows. */
+	destroy_layer(&bar);
+	for (unsigned int i = 0; i < 50 && m1->usable.y != area1.y; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(m1->usable.y == area1.y && m1->usable.h == area1.h);
+	CHECK(c0->geom.y < area1.y + 32);
+
+	/* EXCLUSIVE layer surface grabs keyboard focus on map, restores on destroy. */
+	struct test_layer launcher;
+	create_layer(&client, &launcher, ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY,
+		ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT,
+		200, 100, 0, ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE);
+	for (unsigned int i = 0; i < 200 && !launcher.configured; i++)
+		if (!pump(&client, &server)) goto fail;
+	for (unsigned int i = 0; i < 20; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(server.focused_layer != NULL);
+	CHECK(client.keyboard_focus == launcher.surface);
+	CHECK(tp_focused(&server) == NULL);
+	destroy_layer(&launcher);
+	for (unsigned int i = 0; i < 50 && server.focused_layer != NULL; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(server.focused_layer == NULL);
+	CHECK(tp_focused(&server) == c0);
+
+	/* ON_DEMAND layer surface takes focus only when clicked, yields on window click. */
+	struct test_layer ondemand;
+	create_layer(&client, &ondemand, ZWLR_LAYER_SHELL_V1_LAYER_TOP,
+		ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT,
+		200, 100, 0, ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_ON_DEMAND);
+	for (unsigned int i = 0; i < 200 && !ondemand.configured; i++)
+		if (!pump(&client, &server)) goto fail;
+	for (unsigned int i = 0; i < 20; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(server.focused_layer == NULL);
+	CHECK(tp_focused(&server) == c0);
+	wlr_cursor_warp(server.cursor, &pointer.base, area1.x + 1.0, area1.y + 1.0);
+	emit_motion(&server, &pointer, 0, 0, 140);
+	emit_button(&server, &pointer, BTN_LEFT, WL_POINTER_BUTTON_STATE_PRESSED, 141);
+	emit_button(&server, &pointer, BTN_LEFT, WL_POINTER_BUTTON_STATE_RELEASED, 142);
+	for (unsigned int i = 0; i < 20; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(server.focused_layer != NULL);
+	CHECK(client.keyboard_focus == ondemand.surface);
+	destroy_layer(&ondemand);
+	for (unsigned int i = 0; i < 50 && server.focused_layer != NULL; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(tp_focused(&server) == c0);
+
+	/* ---- 0.0.5: multi-monitor focus, window move, hot-plug recovery ---- */
+	struct wlr_backend *headless = m1->output->backend;
+	struct wlr_output *o2 = wlr_headless_add_output(headless, 800, 600);
+	CHECK(o2 != NULL);
+	for (unsigned int i = 0; i < 20; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(wl_list_length(&server.monitors) == 2);
+	struct tp_monitor *m2 = o2->data;
+	CHECK(m2 != NULL && m2 != m1);
+	CHECK(tp_monitor_in_dir(&server, m1, TP_DIR_RIGHT) == m2);
+	CHECK(tp_monitor_in_dir(&server, m2, TP_DIR_LEFT) == m1);
+
+	/* Meta+Period / Meta+Comma switch selected monitor. */
+	CHECK(server.selmon == m1);
+	chord(&keyboard, KEY_DOT, false, false);
+	CHECK(server.selmon == m2);
+	chord(&keyboard, KEY_COMMA, false, false);
+	CHECK(server.selmon == m1);
+
+	/* Meta+Shift+Period moves focused window c1 from m1 to m2. */
+	tp_focus(&server, c1);
+	chord(&keyboard, KEY_DOT, true, false);
+	CHECK(c1->mon == m2 && c0->mon == m1);
+	CHECK(c1->geom.x >= m2->usable.x);
+	chord(&keyboard, KEY_DOT, false, false);
+	CHECK(server.selmon == m2 && tp_focused(&server) == c1);
+
+	/* Layer surface on m2 is cleanly closed when m2 is unplugged; c1 moves
+	 * to m1 keeping its tags and remembering m2's output name. */
+	struct test_layer bar2;
+	create_layer(&client, &bar2, ZWLR_LAYER_SHELL_V1_LAYER_TOP,
+		ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP |
+		ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT |
+		ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT,
+		0, 24, 24, ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE);
+	for (unsigned int i = 0; i < 200 && !bar2.configured; i++)
+		if (!pump(&client, &server)) goto fail;
+	for (unsigned int i = 0; i < 20; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(m2->usable.y == m2->area.y + 24);
+
+	tp_tags_t saved_tags = c1->tags;
+	char saved_name[64];
+	snprintf(saved_name, sizeof(saved_name), "%s", o2->name);
+	wlr_output_destroy(o2);
+	for (unsigned int i = 0; i < 50 && !bar2.closed; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(bar2.closed);
+	destroy_layer(&bar2);
+	CHECK(wl_list_length(&server.monitors) == 1);
+	CHECK(c1->mon == m1);
+	CHECK(c1->tags == saved_tags);
+	CHECK(c1->home_output != NULL && strcmp(c1->home_output, saved_name) == 0);
+
+	/* When a monitor with the remembered name returns, c1 moves back. */
+	free(c1->home_output);
+	c1->home_output = strdup("HEADLESS-3");
+	struct wlr_output *o3 = wlr_headless_add_output(headless, 800, 600);
+	CHECK(o3 != NULL && strcmp(o3->name, "HEADLESS-3") == 0);
+	for (unsigned int i = 0; i < 20; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(c1->mon == o3->data);
+	CHECK(c1->home_output == NULL);
+	CHECK(c1->tags == saved_tags);
 
 	wl_display_disconnect(client.display);
 	if (client.shm_data && client.shm_data != MAP_FAILED)

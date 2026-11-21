@@ -1,4 +1,4 @@
-# Data structures (0.0.4)
+# Data structures (0.0.5)
 
 This file describes the structures as they are built today. Update it in
 the same commit as any change to them.
@@ -19,6 +19,9 @@ the same commit as any change to them.
   - the listeners, grouped by the module that owns them;
   - `grab` (`struct tp_pointer_grab`), explicit state for an active
     `Meta+Left/Right` pointer move or resize drag (no globals).
+  - `layer_shell` (`struct wlr_layer_shell_v1`) and `focused_layer`
+    (`struct tp_layer_surface *`) for exclusive or on-demand layer keyboard
+    focus.
 - **Listener ownership:** each module removes its own listeners in its
   `*_finish` function, before `tp_server_finish` destroys anything.
 - **Settings:** `settings` (`struct tp_settings`) holds every user setting
@@ -30,7 +33,8 @@ the same commit as any change to them.
 ## tp_monitor (`include/tam-pane/monitor.h`)
 
 - **`area`:** the whole output, in layout coordinates.
-- **`usable`:** `area` minus panels' exclusive zones (layer-shell, 0.0.5).
+- **`usable`:** `area` minus panels' exclusive zones (`tp_layers_arrange`).
+- **`layers`:** `tp_layer_surface` list bound to this monitor.
 - **`focus`:** remembered window per single tag, plus shared slot 0 for
   combined views. Focus changes update only the active slot; invalid
   candidates fall back to the most recently focused visible window.
@@ -39,10 +43,24 @@ the same commit as any change to them.
   0, which is shared by every multi-tag view. `tp_monitor_tree()` returns
   the tree for the current view, so each tag keeps its own layout.
 
+## tp_layer_surface (`include/tam-pane/layer.h`)
+
+- One `wlr_layer_surface_v1` (panel, bar, launcher, or notification) bound to
+  a `tp_monitor`.
+- **Fields:** `mon`, `layer_surface`, `scene` (`wlr_scene_layer_surface_v1`,
+  with `node.data` left `NULL` so `tp_client_at` never confuses it with a
+  toplevel), `popup_tree` (in `TP_LAYER_OVERLAY`, synced to the surface's
+  layout position), `mapped`, current `layer`, and its five listeners.
+- **Arrangement:** `tp_layers_arrange()` runs two passes (exclusive surfaces
+  first, then non-exclusive) from `OVERLAY` down to `BACKGROUND` to shrink
+  `tp_monitor.usable`.
+
 ## tp_client (`include/tam-pane/client.h`)
 
 - One xdg toplevel.
-- **Fields:** its monitor; its tag mask; whether it is mapped, floating or
+- **Fields:** its monitor; `home_output` (remembered output name when
+  displaced by hot-plug disconnect, cleared when reclaimed or explicitly moved
+  to another monitor); its tag mask; whether it is mapped, floating or
   fullscreen; its current and floating geometry; its scene tree; and its
   listeners.
 - **Kept small on purpose.** Effects, animations and Lua state will live

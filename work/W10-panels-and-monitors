@@ -1,0 +1,59 @@
+W10 PANELS AND MONITORS (0.0.5)
+
+Date: 2026-11-21
+AI harness: agy 1.5.14
+AI model: Gemini 4 Neon (Medium)
+Commits: 7011c87 (0.0.4 acceptance), plus the 0.0.5 implementation commit
+
+
+GUIDANCE
+
+  Fred: "/plan Complete the next slice of work for tam-pane."
+  Fred: "/plan The nested check passed. Update the plan and the repo to note that."
+  Fred: "Accepted. Proceed."
+
+
+DONE
+
+  - Recorded 0.0.4 acceptance (commit 9745163, binary SHA-256
+    1593e83af26158b6897c47979ce7da34d71a4c249d4685fe8e7f2e287269f9b9) in
+    ROADMAP.md, plans/P1-foundation.md, work/WHATNOW, and
+    work/W9-tiling-complete (commit 7011c87).
+  - Added layer-shell module (include/tam-pane/layer.h, src/layer.c)
+    supporting wlr-layer-shell-unstable-v1 v4: two-pass exclusive-zone
+    arrangement shrinking tp_monitor.usable, layer reparenting across
+    BACKGROUND/BOTTOM/TOP/OVERLAY, layer popups on TP_LAYER_OVERLAY
+    unconstrained to monitor bounds on initial_commit, and clean teardown
+    on monitor hot-unplug.
+  - Wired layer keyboard interactivity (NONE, ON_DEMAND on click,
+    EXCLUSIVE grabbing focus on map and restoring toplevel focus on
+    unmap/destroy) across src/focus.c and src/input/pointer.c; guarded
+    src/client.c on_new_popup against NULL popup->parent for layer popups.
+  - Added multi-monitor navigation and window movement:
+    tp_monitor_cycle, tp_monitor_in_dir, tp_monitor_focus (src/monitor.c),
+    tp_client_set_monitor (src/client.c), cross-monitor floating drags
+    (src/input/pointer.c), and Meta+,/. / Meta+Shift+,/. bindings
+    (src/bindings.c).
+  - Added hot-plug recovery by output name: displaced windows record
+    home_output on monitor destroy, move to a remaining monitor keeping
+    their tags (with floating windows clamped into usable area), and
+    return automatically when an output with the remembered name
+    reconnects.
+  - Added 44 headless integration checks in tests/test_input_headless.c
+    covering exclusive zones, NONE/ON_DEMAND/EXCLUSIVE keyboard focus,
+    layer popups, multi-monitor focus/move, and hot-plug disconnect/return.
+  - Bumped VERSION to 0.0.5; updated README, arch/data-structures.md,
+    and Makefile.
+  - Clean build with zero warnings and full test suite pass: 28 tag
+    checks, 133 dwindle checks, 186 headless input checks, both smoke
+    checks, and tests/test_nested_input.py.
+  - Candidate binary SHA-256 (0.0.5):
+    5c2a1b2befab973d9212d3c82ff64a8149e74a365bf4264f193d8c5da1401295
+
+
+HANDOFF
+
+  - 0.0.5 code and automated tests are complete on dev; waiting for
+    Fred's brief nested check of a layer-shell bar (e.g., Quickshell)
+    and multi-monitor focus/move.
+  - Next phase: P2, 0.1.0 (Lua 5.5 interpreter and init.lua).

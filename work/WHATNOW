@@ -3,30 +3,31 @@ WHATNOW
 What tam-pane is doing now and what comes next. Read this first; revise
 it at the end of every session (work/README-work).
 
-Updated: 2026-11-21, with W9
+Updated: 2026-11-21, with W10
 
 
 STATE
 
-  Version 0.0.4 on branch dev (tiling complete, accepted by Fred on
-  2026-11-21 on commit 9745163; binary SHA-256:
-  1593e83af26158b6897c47979ce7da34d71a4c249d4685fe8e7f2e287269f9b9).
+  Version 0.0.5 on branch dev (candidate ready for Fred's brief nested
+  check; 0.0.4 was the last accepted milestone, on 2026-11-21).
 
-  W9 completed 0.0.4, tiling complete (plans/P1-foundation.md): keyboard
-  split resizing (Meta+Alt+Arrow), directional swap (Meta+Shift+Arrow),
-  directional move (Meta+Ctrl+Arrow), pointer move/resize of floating
-  windows and tiled splits (Meta+Left/Right-drag), optional proportional
-  resizing on insert/remove (proportional_split), and native host
-  fractional-scale rendering for nested Wayland outputs.
+  W10 completed 0.0.5, panels and monitors (plans/P1-foundation.md):
+  wlr-layer-shell-unstable-v1 v4 (exclusive zones shrinking
+  tp_monitor.usable, layer popups on TP_LAYER_OVERLAY, and
+  NONE/ON_DEMAND/EXCLUSIVE keyboard interactivity) and multi-monitor
+  support (Meta+,/. focus, Meta+Shift+,/. move, cross-monitor floating
+  drags, and hot-plug recovery by output name).
 
   Automated checks pass with zero warnings: 28 tag checks, 133 dwindle
-  checks, 142 headless input checks, both smoke checks, and
-  tests/test_nested_input.py.
+  checks, 186 headless input checks, both smoke checks, and
+  tests/test_nested_input.py. Candidate build/tam-pane SHA-256:
+  5c2a1b2befab973d9212d3c82ff64a8149e74a365bf4264f193d8c5da1401295.
 
   Dynamic tiling (dwindle), resizing, directional swap/move, floating
-  move/resize, fullscreen, and interactive tags work; Lua, panels,
-  multiple monitors, and the desktop protocols do not yet. Dependencies
-  today: wlroots 0.20, wayland-server, xkbcommon, libtam.
+  move/resize, fullscreen, interactive tags, layer-shell panels/popups,
+  and multiple monitors work; Lua and the P3 desktop protocols do not
+  yet. Dependencies today: wlroots 0.20, wayland-server, xkbcommon,
+  libtam.
 
   Development runs nested in Hyprland (tools/nested-input, which passes
   host shortcuts through while the nested window has focus) and headless
@@ -35,8 +36,10 @@ STATE
 
 NEXT
 
-  1. 0.0.5, panels and monitors: layer-shell and several monitors, so a
-     Quickshell bar runs and windows move between monitors.
+  1. Accept 0.0.5 once Fred completes his brief nested try of a
+     layer-shell bar (Quickshell) and multi-monitor focus/move, then
+     update ROADMAP.md and plans/P1-foundation.md with the accepted
+     build hash.
 
   2. P2, 0.1.0 (Lua 5.5): link without -rdynamic, so tam-pane does not
      export its lua_* symbols; check with nm -D build/tam-pane that none
@@ -48,7 +51,11 @@ NEXT
 
 WAITING FOR FRED
 
-  - Review and approval of the 0.0.5 (panels and monitors) plan.
+  - 0.0.5 brief nested try on build/tam-pane (SHA-256
+    5c2a1b2befab973d9212d3c82ff64a8149e74a365bf4264f193d8c5da1401295):
+    run a layer-shell bar (e.g., Quickshell) against the nested
+    WAYLAND_DISPLAY to confirm exclusive space and tiled placement, and
+    with WLR_WL_OUTPUTS=2 try Meta+,/. and Meta+Shift+,/. across outputs.
 
 
 WATCH OUT

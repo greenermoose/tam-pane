@@ -122,6 +122,19 @@ static void toggle_client_tag(struct tp_server *s, union tp_arg a) {
 		tp_client_toggle_tags(c, tp_tag_mask(a.u));
 }
 
+static void focus_monitor(struct tp_server *s, union tp_arg a) {
+	struct tp_monitor *m = tp_monitor_cycle(s, a.i);
+	if (m)
+		tp_monitor_focus(s, m);
+}
+
+static void move_to_monitor(struct tp_server *s, union tp_arg a) {
+	struct tp_client *c = tp_focused(s);
+	struct tp_monitor *m = tp_monitor_cycle(s, a.i);
+	if (c && m)
+		tp_client_set_monitor(c, m, false);
+}
+
 #define META TP_MOD_META
 #define SHIFT WLR_MODIFIER_SHIFT
 #define CTRL WLR_MODIFIER_CTRL
@@ -145,6 +158,10 @@ static const struct tp_binding bindings[] = {
 	{META, XKB_KEY_v, toggle_floating, {0}},
 	{META, XKB_KEY_f, toggle_fullscreen, {0}},
 	{META, XKB_KEY_Tab, view_back, {0}},
+	{META, XKB_KEY_comma, focus_monitor, {.i = -1}},
+	{META, XKB_KEY_period, focus_monitor, {.i = +1}},
+	{META | SHIFT, XKB_KEY_comma, move_to_monitor, {.i = -1}},
+	{META | SHIFT, XKB_KEY_period, move_to_monitor, {.i = +1}},
 	DIR(XKB_KEY_Left, TP_DIR_LEFT),
 	DIR(XKB_KEY_Right, TP_DIR_RIGHT),
 	DIR(XKB_KEY_Up, TP_DIR_UP),

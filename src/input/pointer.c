@@ -5,15 +5,18 @@
 #include "tam-pane/client.h"
 #include "tam-pane/focus.h"
 #include "tam-pane/input.h"
+#include "tam-pane/layer.h"
 #include "tam-pane/layout/arrange.h"
 #include "tam-pane/monitor.h"
 #include "tam-pane/server.h"
 #include <linux/input-event-codes.h>
+#include <stdlib.h>
 #include <tam.h>
 #include <time.h>
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/types/wlr_keyboard.h>
+#include <wlr/types/wlr_layer_shell_v1.h>
 #include <wlr/types/wlr_pointer.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_xcursor_manager.h>
@@ -73,6 +76,20 @@ static void update_grab(struct tp_server *s) {
 	if (g->mode == TP_GRAB_MOVE) {
 		c->float_geom.x = g->start_geom.x + (int32_t)dx;
 		c->float_geom.y = g->start_geom.y + (int32_t)dy;
+		struct tp_monitor *m = tp_monitor_at(s, s->cursor->x, s->cursor->y);
+		if (m && m != c->mon) {
+			if (c->mon) {
+				for (unsigned int i = 0; i < TP_TAG_SLOTS; i++)
+					if (c->mon->focus[i] == c)
+						c->mon->focus[i] = NULL;
+				tp_monitor_forget(c->mon, c);
+			}
+			c->mon = m;
+			c->tags = tp_tagview_current(&m->view);
+			free(c->home_output);
+			c->home_output = NULL;
+			m->focus[tp_tags_slot(tp_tagview_current(&m->view))] = c;
+		}
 		tp_client_place(c, c->float_geom);
 		return;
 	}
@@ -213,10 +230,18 @@ static void on_button(struct wl_listener *l, void *data) {
 	}
 
 	if (ev->state == WL_POINTER_BUTTON_STATE_PRESSED) {
+		struct wlr_surface *surface = NULL;
 		struct tp_client *c =
-			tp_client_at(s, s->cursor->x, s->cursor->y, NULL, NULL, NULL);
-		if (c && c != tp_focused(s))
-			tp_focus(s, c);
+			tp_client_at(s, s->cursor->x, s->cursor->y, &surface, NULL, NULL);
+		if (c) {
+			if (c != tp_focused(s))
+				tp_focus(s, c);
+		} else if (surface) {
+			struct tp_layer_surface *ls = tp_layer_from_surface(surface);
+			if (ls && ls->layer_surface->current.keyboard_interactive ==
+						  ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_ON_DEMAND)
+				tp_focus_layer(s, ls);
+		}
 
 		struct wlr_keyboard *kb = wlr_seat_get_keyboard(s->seat);
 		uint32_t mods = kb ? wlr_keyboard_get_modifiers(kb) : 0;

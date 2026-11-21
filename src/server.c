@@ -2,6 +2,7 @@
 #include "tam-pane/server.h"
 #include "tam-pane/client.h"
 #include "tam-pane/input.h"
+#include "tam-pane/layer.h"
 #include "tam-pane/monitor.h"
 #include <signal.h>
 #include <stdlib.h>
@@ -12,6 +13,7 @@
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_fractional_scale_v1.h>
+#include <wlr/types/wlr_layer_shell_v1.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_subcompositor.h>
@@ -69,8 +71,10 @@ bool tp_server_init(struct tp_server *s) {
 	s->scene_layout = wlr_scene_attach_output_layout(s->scene, s->output_layout);
 
 	s->xdg_shell = wlr_xdg_shell_create(s->display, 6);
+	s->layer_shell = wlr_layer_shell_v1_create(s->display, 4);
 
 	tp_monitors_init(s);
+	tp_layers_init(s);
 	tp_clients_init(s);
 	if (!tp_input_init(s) || !tp_pointer_init(s))
 		return false;
@@ -113,6 +117,7 @@ void tp_server_finish(struct tp_server *s) {
 	tp_pointer_finish(s);
 	tp_input_finish(s);
 	tp_clients_finish(s);
+	tp_layers_finish(s);
 	tp_monitors_finish(s);
 
 	if (s->backend)

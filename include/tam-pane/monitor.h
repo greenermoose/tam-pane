@@ -23,6 +23,7 @@ struct tp_monitor {
 	struct wlr_scene_output *scene_output;
 	struct tp_rect area;   /* the whole output, layout coordinates */
 	struct tp_rect usable; /* area minus panels' exclusive zones */
+	struct wl_list layers; /* tp_layer_surface.link */
 	struct tp_tagview view;
 	struct tp_client *focus[TP_TAG_SLOTS]; /* slot 0: combined views */
 	struct tp_dwindle trees[TP_TAG_SLOTS]; /* see tp_tags_slot() */
@@ -43,6 +44,16 @@ void tp_monitors_finish(struct tp_server *s);
 
 /* The monitor under a layout point, or NULL. */
 struct tp_monitor *tp_monitor_at(struct tp_server *s, double x, double y);
+
+/* The next (dir > 0) or previous monitor from s->selmon, or NULL if < 2. */
+struct tp_monitor *tp_monitor_cycle(struct tp_server *s, int dir);
+
+/* The adjacent monitor in `dir` from `m`, or NULL. */
+struct tp_monitor *tp_monitor_in_dir(struct tp_server *s, struct tp_monitor *m,
+									 enum tp_dir dir);
+
+/* Select `m`, move the pointer onto it if needed, and refresh focus. */
+void tp_monitor_focus(struct tp_server *s, struct tp_monitor *m);
 
 /* The layout tree for the monitor's current view. */
 struct tp_dwindle *tp_monitor_tree(struct tp_monitor *m);

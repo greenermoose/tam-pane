@@ -3,6 +3,8 @@
 #include "fractional-scale-v1-client-protocol.h"
 #include "tam-pane/client.h"
 #include "tam-pane/focus.h"
+#include "tam-pane/input.h"
+#include "tam-pane/layer.h"
 #include "tam-pane/layout/arrange.h"
 #include "tam-pane/server.h"
 #include "viewporter-client-protocol.h"
@@ -14,6 +16,7 @@
 #include <wayland-client-core.h>
 #include <wlr/backend.h>
 #include <wlr/backend/wayland.h>
+#include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_scene.h>
@@ -23,7 +26,29 @@ static void update_area(struct tp_monitor *m) {
 	struct wlr_box box;
 	wlr_output_layout_get_box(m->server->output_layout, m->output, &box);
 	m->area = (struct tp_rect){box.x, box.y, box.width, box.height};
-	m->usable = m->area; /* panels reserve space here from 0.0.5 */
+	tp_layers_arrange(m);
+}
+
+static void clamp_float_to(struct tp_client *c, struct tp_rect from,
+						   struct tp_rect to) {
+	if (!c->floating || to.w <= 0 || to.h <= 0)
+		return;
+	struct tp_rect r = c->float_geom;
+	if (r.w > to.w)
+		r.w = to.w < TP_FLOAT_MIN_W ? TP_FLOAT_MIN_W : to.w;
+	if (r.h > to.h)
+		r.h = to.h < TP_FLOAT_MIN_H ? TP_FLOAT_MIN_H : to.h;
+	r.x = to.x + (r.x - from.x);
+	r.y = to.y + (r.y - from.y);
+	if (r.x < to.x)
+		r.x = to.x;
+	if (r.y < to.y)
+		r.y = to.y;
+	if (r.x + r.w > to.x + to.w)
+		r.x = to.x + to.w - r.w;
+	if (r.y + r.h > to.y + to.h)
+		r.y = to.y + to.h - r.h;
+	c->float_geom = r;
 }
 
 static void on_frame(struct wl_listener *l, void *data) {
@@ -174,6 +199,11 @@ static void on_request_state(struct wl_listener *l, void *data) {
 static void on_destroy(struct wl_listener *l, void *data) {
 	struct tp_monitor *m = wl_container_of(l, m, destroy);
 	struct tp_server *s = m->server;
+	const char *name = m->output->name;
+
+	if (s->grab.client && s->grab.client->mon == m)
+		tp_pointer_cancel_grab(s, NULL);
+	tp_layers_monitor_destroy(m);
 
 	finish_nested_scale(m);
 	wl_list_remove(&m->frame.link);
@@ -183,12 +213,23 @@ static void on_destroy(struct wl_listener *l, void *data) {
 	for (unsigned int i = 0; i < TP_TAG_SLOTS; i++)
 		tp_dwindle_clear(&m->trees[i]);
 
-	/* Windows move to another monitor, keeping their tags. */
+	/* Windows move to another monitor, keeping their tags and remembering
+	 * their original output name so they return when it comes back. */
 	struct tp_monitor *heir = wl_list_empty(&s->monitors)
 								  ? NULL
 								  : wl_container_of(s->monitors.next, heir, link);
 	struct tp_client *c;
-	wl_list_for_each(c, &s->clients, link) if (c->mon == m) c->mon = heir;
+	wl_list_for_each(c, &s->clients, link) {
+		if (c->mon != m)
+			continue;
+		if (!c->home_output && name && *name)
+			c->home_output = strdup(name);
+		c->mon = heir;
+		if (heir)
+			clamp_float_to(c, m->usable, heir->usable);
+		else
+			wlr_scene_node_set_enabled(&c->tree->node, false);
+	}
 	if (s->selmon == m)
 		s->selmon = heir;
 	free(m);
@@ -244,6 +285,7 @@ static void on_new_output(struct wl_listener *l, void *data) {
 	m->server = s;
 	m->output = output;
 	output->data = m;
+	wl_list_init(&m->layers);
 	tp_tagview_init(&m->view, tp_tag_mask(1));
 	for (unsigned int i = 0; i < TP_TAG_SLOTS; i++) {
 		tp_dwindle_init(&m->trees[i]);
@@ -268,6 +310,36 @@ static void on_new_output(struct wl_listener *l, void *data) {
 	setup_nested_scale(m);
 	if (!s->selmon)
 		s->selmon = m;
+
+	/* Reclaim windows displaced when this output was unplugged, and adopt
+	 * any orphaned windows that had no monitor left. */
+	bool moved = false;
+	struct tp_client *c;
+	wl_list_for_each(c, &s->clients, link) {
+		bool match = c->home_output && output->name &&
+					 strcmp(c->home_output, output->name) == 0;
+		if (!match && c->mon != NULL)
+			continue;
+		struct tp_monitor *old = c->mon;
+		if (old && old != m) {
+			for (unsigned int i = 0; i < TP_TAG_SLOTS; i++)
+				if (old->focus[i] == c)
+					old->focus[i] = NULL;
+			tp_monitor_forget(old, c);
+			clamp_float_to(c, old->usable, m->usable);
+		}
+		c->mon = m;
+		if (match) {
+			free(c->home_output);
+			c->home_output = NULL;
+		}
+		moved = true;
+	}
+	if (moved) {
+		tp_arrange_all(s);
+		if (!tp_focused(s))
+			tp_focus_refresh(s);
+	}
 	tam_log_info("output %s: %dx%d at %d,%d scale %.2f", output->name,
 				 m->area.w, m->area.h, m->area.x, m->area.y, output->scale);
 }
@@ -297,6 +369,55 @@ void tp_monitors_finish(struct tp_server *s) {
 struct tp_monitor *tp_monitor_at(struct tp_server *s, double x, double y) {
 	struct wlr_output *o = wlr_output_layout_output_at(s->output_layout, x, y);
 	return o ? o->data : NULL;
+}
+
+struct tp_monitor *tp_monitor_cycle(struct tp_server *s, int dir) {
+	if (!s->selmon || wl_list_length(&s->monitors) < 2)
+		return NULL;
+	struct wl_list *pos = dir >= 0 ? s->selmon->link.next : s->selmon->link.prev;
+	if (pos == &s->monitors)
+		pos = dir >= 0 ? s->monitors.next : s->monitors.prev;
+	return wl_container_of(pos, (struct tp_monitor *)NULL, link);
+}
+
+struct tp_monitor *tp_monitor_in_dir(struct tp_server *s, struct tp_monitor *m,
+									 enum tp_dir dir) {
+	if (!m)
+		return NULL;
+	enum wlr_direction wdir;
+	switch (dir) {
+	case TP_DIR_LEFT:
+		wdir = WLR_DIRECTION_LEFT;
+		break;
+	case TP_DIR_RIGHT:
+		wdir = WLR_DIRECTION_RIGHT;
+		break;
+	case TP_DIR_UP:
+		wdir = WLR_DIRECTION_UP;
+		break;
+	case TP_DIR_DOWN:
+		wdir = WLR_DIRECTION_DOWN;
+		break;
+	default:
+		return NULL;
+	}
+	double cx = m->area.x + m->area.w / 2.0;
+	double cy = m->area.y + m->area.h / 2.0;
+	struct wlr_output *o = wlr_output_layout_adjacent_output(
+		s->output_layout, wdir, m->output, cx, cy);
+	return o ? o->data : NULL;
+}
+
+void tp_monitor_focus(struct tp_server *s, struct tp_monitor *m) {
+	if (!m)
+		return;
+	s->selmon = m;
+	if (s->cursor && tp_monitor_at(s, s->cursor->x, s->cursor->y) != m) {
+		double x = m->usable.x + m->usable.w / 2.0;
+		double y = m->usable.y + m->usable.h / 2.0;
+		wlr_cursor_warp(s->cursor, NULL, x, y);
+	}
+	tp_focus_refresh(s);
 }
 
 struct tp_dwindle *tp_monitor_tree(struct tp_monitor *m) {

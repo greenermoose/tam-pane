@@ -4,10 +4,14 @@
 
 struct tp_server;
 struct tp_client;
+struct tp_layer_surface;
 struct tp_monitor;
 
 /* Give keyboard focus to `c` (NULL clears focus) and raise it. */
 void tp_focus(struct tp_server *s, struct tp_client *c);
+
+/* Give keyboard focus to a layer surface (exclusive or on-demand). */
+void tp_focus_layer(struct tp_server *s, struct tp_layer_surface *ls);
 
 /* The focused window, or NULL. */
 struct tp_client *tp_focused(struct tp_server *s);
