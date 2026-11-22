@@ -7,7 +7,7 @@ milestone inside it.
 
 **Current version:** 0.1.19 (Phase P2 complete at 0.1.4, hardened
 from 0.1.5 to 0.1.17 for review R1, pre-0.2.0 R1 design work 0.1.18–0.1.19
-on branch `dev`).
+accepted by Fred on 2026-11-22; development continues on branch `dev`).
 
 ## Tamlinux timing
 

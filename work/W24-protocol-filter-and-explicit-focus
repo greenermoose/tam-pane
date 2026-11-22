@@ -3,7 +3,7 @@ W24 PROTOCOL FILTER AND EXPLICIT FOCUS
 Date: 2026-11-22
 AI harness: Antigravity 1.5.14
 AI model: gemini-4-neon
-Commits: ab14afb
+Commits: ab14afb, 9fbac92
 
 GUIDANCE
 
@@ -45,6 +45,7 @@ DONE
     Lua, 4 smoke, 432 headless input, nm -D, test_nested_input.py).
     0.1.19 binary SHA-256:
     f774e4b1c63a160d495d12c6dbc0833986a159db1c26c4052afef33927506dda.
+  - Fred ran sandbox/demo-0.1.19 and passed 0.1.19 ("pass. Good work.").
 
 FAILED
 
@@ -52,7 +53,7 @@ FAILED
 
 HANDOFF
 
-  - Fred can run sandbox/demo-0.1.19 to check 0.1.19 nested. Next in P3
-    is 0.2.0 (foreign-toplevel, ext-workspace, session-lock, idle notify
-    and inhibit, output power), with a binding gate for session-lock
-    (R1 finding 17) and per-role grants per arch/protocols.md.
+  - 0.1.18 and 0.1.19 are accepted. Next in P3 is 0.2.0
+    (foreign-toplevel, ext-workspace, session-lock with a binding gate
+    from R1 finding 17, idle notify and inhibit, output power), with
+    per-role grants per arch/protocols.md.

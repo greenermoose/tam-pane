@@ -8,15 +8,17 @@ Updated: 2026-11-22, with W24
 
 STATE
 
-  Version 0.1.19 on branch dev (W24). Pre-0.2.0 R1 design work is done:
-  0.1.18 (ab14afb) added the privileged-protocol filter (R1 finding 9)
-  with wl_display_set_global_filter, wp_security_context_manager_v1,
-  explicit global classification in src/security.c and arch/protocols.md,
-  and exclusive OVERLAY keyboard focus reserved for the configured shell
-  connection (tp_server.shell_client). 0.1.19 added explicit
+  Version 0.1.19 on branch dev (9fbac92), accepted by Fred on 2026-11-22
+  after his nested sandbox/demo-0.1.19 check (W24). Pre-0.2.0 R1 design
+  work is done: 0.1.18 (ab14afb) added the privileged-protocol filter
+  (R1 finding 9) with wl_display_set_global_filter,
+  wp_security_context_manager_v1, explicit global classification in
+  src/security.c and arch/protocols.md, and exclusive OVERLAY keyboard
+  focus reserved for the configured shell connection
+  (tp_server.shell_client). 0.1.19 (9fbac92) added explicit
   tp_server.focused_client (R1 finding 16) so window bindings and unmap
-  focus restoration keep working across popup grabs, with
-  sandbox/demo-0.1.19 for Fred's nested check. 0.1.19 binary SHA-256:
+  focus restoration keep working across popup grabs. 0.1.19 binary
+  SHA-256:
   f774e4b1c63a160d495d12c6dbc0833986a159db1c26c4052afef33927506dda
 
   Prior accepted baseline: 0.1.17 (3425435, accepted on 1504699). Review
@@ -45,7 +47,6 @@ NEXT
 
 WAITING FOR FRED
 
-  - Nested check of 0.1.19 (sandbox/demo-0.1.19).
   - Whether to report GTK 4.24.1's divide by a zero refresh upstream
     (B6).
   - At the first run on real hardware (P4): the VT half of B5, and the
