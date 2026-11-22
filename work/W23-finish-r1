@@ -1,0 +1,59 @@
+W23 FINISH REVIEW R1: NEW WINDOWS SPLIT THE FOCUSED WINDOW (0.1.11)
+
+Date: 2026-11-21
+AI harness: Claude Code 2.1.330
+AI model: claude-opus-5-5
+Commits: 9c0bf49 (0.1.11), and the commit that adds this record
+Continues: W21
+
+
+GUIDANCE
+
+  Fred: "Finish the tam-pane review."
+  Plan approved by Fred: R1 findings 12, 4, 5 and 14 as one version
+  each (0.1.11 to 0.1.14), then 9, 11 and 15 to 17 written into the P3
+  and P4 plans. Stop after each demo for Fred's check.
+
+
+DONE
+
+  - R1 finding 12 fixed in 0.1.11 (9c0bf49). sync_tree in
+    src/layout/arrange.c now takes "near" from a new helper,
+    focused_in_tree: the most recently focused window on the monitor
+    that is already in the tree. on_map's order is unchanged.
+  - Test first: tests/test_input_headless.c focuses c0 in [c0 | c1],
+    opens a window and checks that its sibling is c0. It failed on
+    0.1.10 (line 876) and passes on 0.1.11. No older test needed a
+    changed expectation.
+  - make test passes: 28 tag, 143 dwindle, 444 Lua, 346 headless
+    input, 4 smoke, the nm -D check, tests/test_nested_input.py. Under
+    ASan the headless test has no memory errors.
+  - sandbox/demo-0.1.11 and .lua: Fred opens two terminals, clicks the
+    guide, opens a third. Hooks on window.focus and window.open check
+    that each new window lies inside the space the focused window had,
+    and the launcher prints PASS or FAIL. The Lua was loaded headless
+    with foot windows and logged "ok" lines.
+  - Docs: ROADMAP.md (current version, 0.1.11 entry),
+    arch/data-structures.md (Arrange step 2), R1 finding 12 status.
+  - 0.1.11 binary SHA-256:
+    31bb18c0629e96c798b80697b8bf39048723981f36e61829ab8e273417d9a9e8
+
+
+FAILED
+
+  - The demo's first verdict grep looked for "^[demo]", but Lua print
+    output is logged as "[INFO] lua: [demo] ...". Fixed before the
+    commit. The pattern no longer anchors at the start of the line.
+  - Under ASan with leak detection on, the headless test reports 15
+    leaked allocations (1440 bytes), all in the test client's own
+    Wayland proxies (registry binds, surfaces, the shm buffer). The
+    same 15 show on 0.1.10, so they predate this work and are not
+    compositor leaks. Earlier "clean under ASan" meant no memory
+    errors. Run with ASAN_OPTIONS=detect_leaks=0, or fix the test
+    client's teardown.
+
+
+HANDOFF
+
+  - Waiting for Fred's sandbox/demo-0.1.11 check. Then go on to R1
+    finding 4 (0.1.12) as work/WHATNOW NEXT says.
