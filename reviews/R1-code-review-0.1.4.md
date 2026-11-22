@@ -84,7 +84,7 @@ schedules are not findings here.
   surface coordinates. Fred's check of 0.1.13 found B6 instead (Files
   crashed nested). His check of 0.1.14 found the menu still off-screen:
   the fix missed `xdg_popup.reposition`, so the finding became B7,
-  fixed in 0.1.15.
+  fixed in c5ec224 (0.1.15), verified by Fred.
 
 ### 6. A floating move across monitors skips the bookkeeping (low)
 

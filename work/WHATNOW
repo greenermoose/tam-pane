@@ -8,10 +8,11 @@ Updated: 2026-11-21, with W23
 
 STATE
 
-  Version 0.1.15 on branch dev, a candidate waiting for Fred's
-  sandbox/demo-0.1.15 check (B7 and B6). His 0.1.13 check found B6
-  (Files crashed nested); his 0.1.14 check found B7 (the menu still ran
-  off-screen: reposition was not handled). 0.1.12 was accepted on 91f1fff
+  Version 0.1.15 on branch dev (c5ec224), accepted by Fred after his
+  sandbox/demo-0.1.15 check; B6 and B7 are Verified. His 0.1.13 check
+  found B6 (Files crashed nested), and his 0.1.14 check found B7 (the
+  menu still ran off-screen: reposition was not handled), so 0.1.13
+  and 0.1.14 were not accepted on their own. 0.1.12 was accepted on 91f1fff
   (ff5dc75), 0.1.11 on b4a8570 (9c0bf49). 0.1.10 passes the
   automated checks, and Fred deferred his own check of it to the first
   run on real hardware (plans/P4-dogfood-tamlinux-0.7.md). 0.1.9 was
@@ -47,24 +48,19 @@ NEXT
   updated (W19 lists them). The order and design are in W23 and the
   approved plan:
 
-  1. After Fred passes demo-0.1.15, commit "Accept 0.1.15" and mark B6
-     and B7 Verified. If the menu still runs off, read the "popup on"
-     lines the demo prints before changing code.
-  2. R1 finding 14 (0.1.16): finish the de-duplication. 0.1.10 already
+  1. R1 finding 14 (0.1.16): finish the de-duplication. 0.1.10 already
      merged the float clamp (tp_client_carry_float). What is left: the
      default floating size (on_map / tp_client_set_floating), "now in
      ms", first_tag_num vs tp_tags_first, and the Lua integer
      validators. No behaviour change, so no demo.
-  3. R1 findings 9, 11 and 15 to 17: write them into the P3 plan (9,
+  2. R1 findings 9, 11 and 15 to 17: write them into the P3 plan (9,
      15, 16, 17) and the P4 plan (11) as design work, and set their
      status lines.
-  4. Then P3, 0.2.0 (plans/P3-daily-parity.md).
+  3. Then P3, 0.2.0 (plans/P3-daily-parity.md).
 
 
 WAITING FOR FRED
 
-  - sandbox/demo-0.1.15: Files stays open, and a right-click menu near
-    the edge stays on screen (needs nautilus; the launcher asks y/n).
   - Whether to report GTK 4.24.1's divide by a zero refresh upstream
     (B6).
   - At the first run on real hardware (P4): the VT half of B5, and the

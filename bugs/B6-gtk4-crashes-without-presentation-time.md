@@ -1,6 +1,6 @@
 # B6: GTK 4 programs crash on a nested output (no presentation-time)
 
-- **Status:** Fix available
+- **Status:** Verified
 - **Severity:** medium
 - **Affected versions:** 0.0.1 to 0.1.13
 - **Fixed in:** 0.1.14
@@ -57,4 +57,7 @@ the output never enabled. It was reverted before any commit.
 - End-to-end, headless, as in Steps to reproduce: nautilus mapped at
   1248x688 on the inner output and kept running on 0.1.14; on 0.1.13 it
   died with SIGFPE.
-- Fred's check: `sandbox/demo-0.1.14`, which also covers R1 finding 5.
+- Fred's checks: with `sandbox/demo-0.1.14` (commit 4ca7976) Files
+  stayed open; he passed `sandbox/demo-0.1.15` on 2026-11-21 (commit
+  c5ec224, binary SHA-256
+  `8f1a2fec892aeedab09cc2d9030de8e82782a59a604fe415844faf937a94f163`).

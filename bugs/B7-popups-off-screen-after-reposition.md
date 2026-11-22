@@ -1,6 +1,6 @@
 # B7: menus open off-screen after the program repositions them
 
-- **Status:** Fix available (cause inferred; Fred's check confirms it)
+- **Status:** Verified
 - **Severity:** medium
 - **Affected versions:** 0.0.1 to 0.1.14
 - **Fixed in:** 0.1.15
@@ -51,4 +51,9 @@ prints them.
 - Regression test: the case above. The test client now binds
   xdg_wm_base version 3 to send reposition. Layer-surface popups have
   no reposition case yet.
-- Fred's check: `sandbox/demo-0.1.15`.
+- Fred's check: he passed `sandbox/demo-0.1.15` on 2026-11-21 (commit
+  c5ec224, binary SHA-256
+  `8f1a2fec892aeedab09cc2d9030de8e82782a59a604fe415844faf937a94f163`):
+  Files opened on the right and its menu near the bottom-right corner
+  stayed on screen. That confirms the inferred cause, as 0.1.14 differed
+  only in the reposition handling.
