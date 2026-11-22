@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "tam-pane/output_power.h"
+#include "tam-pane/output_mgmt.h"
 #include "tam-pane/server.h"
 #include <tam.h>
 #include <wlr/types/wlr_output.h>
@@ -19,6 +20,8 @@ static void on_set_mode(struct wl_listener *l, void *data) {
 		tam_log_warn("output-power: cannot set output %s %s",
 					 ev->output->name ? ev->output->name : "(unnamed)",
 					 enable ? "on" : "off");
+	} else {
+		tp_output_mgmt_update(s);
 	}
 	wlr_output_state_finish(&state);
 }

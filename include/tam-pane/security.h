@@ -58,4 +58,16 @@ void tp_security_set_locker_client(struct tp_server *s,
 bool tp_security_allow_session_lock(const struct tp_server *s,
 									const struct wl_client *client);
 
+/* Authorize (or revoke) a connection for the raw capture globals
+ * (zwlr_screencopy_manager_v1, ext_image_copy_capture_manager_v1, and
+ * capture-source companions). Automatically revoked on disconnect. */
+bool tp_security_add_capture_client(struct tp_server *s,
+									struct wl_client *client);
+void tp_security_remove_capture_client(struct tp_server *s,
+									   struct wl_client *client);
+
+/* Whether `client` is authorized to see and bind raw capture globals. */
+bool tp_security_allow_capture(const struct tp_server *s,
+							   const struct wl_client *client);
+
 #endif

@@ -1,0 +1,32 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/*
+ * Screen capture protocols (0.2.1):
+ *   - zwlr_screencopy_manager_v1
+ *   - ext_image_copy_capture_manager_v1
+ *   - ext_output_image_capture_source_manager_v1
+ *   - ext_foreign_toplevel_image_capture_source_manager_v1
+ *
+ * All four globals are hidden from ordinary clients and granted only to
+ * connections registered via tp_security_add_capture_client() (such as
+ * tools or portal backends launched with tp_capture_launch*).
+ */
+#ifndef TAM_PANE_CAPTURE_H
+#define TAM_PANE_CAPTURE_H
+
+#include <stdbool.h>
+
+struct tp_client;
+struct tp_server;
+
+bool tp_capture_init(struct tp_server *s);
+void tp_capture_finish(struct tp_server *s);
+
+/* Detach any cached toplevel capture source when a client unmaps/destroys. */
+void tp_capture_client_finish(struct tp_client *c);
+
+/* Launch a capture tool or portal backend over a pre-created WAYLAND_SOCKET
+ * and grant that exact connection access to the raw capture globals. */
+void tp_capture_launch(struct tp_server *s, const char *cmd);
+void tp_capture_launch_argv(struct tp_server *s, const char *const argv[]);
+
+#endif

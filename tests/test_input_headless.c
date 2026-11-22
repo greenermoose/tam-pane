@@ -40,6 +40,13 @@
 #include "ext-idle-notify-v1-client-protocol.h"
 #include "idle-inhibit-unstable-v1-client-protocol.h"
 #include "wlr-output-power-management-unstable-v1-client-protocol.h"
+#include "wlr-screencopy-unstable-v1-client-protocol.h"
+#include "ext-image-capture-source-v1-client-protocol.h"
+#include "ext-image-copy-capture-v1-client-protocol.h"
+#include "wlr-output-management-unstable-v1-client-protocol.h"
+#include "wlr-gamma-control-unstable-v1-client-protocol.h"
+#include "cursor-shape-v1-client-protocol.h"
+#include "xdg-output-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 
 static const struct wlr_keyboard_impl keyboard_impl = { .name = "test" };
@@ -98,13 +105,26 @@ struct test_client {
 	struct ext_idle_notifier_v1 *idle_notifier;
 	struct zwp_idle_inhibit_manager_v1 *idle_inhibit_mgr;
 	struct zwlr_output_power_manager_v1 *output_power_mgr;
+	struct zwlr_screencopy_manager_v1 *screencopy_mgr;
+	struct ext_image_copy_capture_manager_v1 *image_copy_mgr;
+	struct ext_output_image_capture_source_manager_v1 *output_src_mgr;
+	struct ext_foreign_toplevel_image_capture_source_manager_v1 *toplevel_src_mgr;
+	struct zwlr_output_manager_v1 *output_mgr;
+	struct zwlr_gamma_control_manager_v1 *gamma_mgr;
+	struct wp_cursor_shape_manager_v1 *cursor_shape_mgr;
+	struct zxdg_output_manager_v1 *xdg_output_mgr;
 	uint32_t layer_shell_name;
 	uint32_t lock_mgr_name;
+	uint32_t screencopy_mgr_name;
+	uint32_t output_mgr_name;
+	uint32_t pointer_enter_serial;
 	unsigned int unclassified_globals;
 	bool has_viewporter, has_fractional_scale, has_presentation;
 	bool has_wlr_foreign_toplevel, has_ext_foreign_toplevel;
 	bool has_ext_workspace, has_ext_session_lock;
 	bool has_idle_notify, has_idle_inhibit, has_output_power;
+	bool has_screencopy, has_image_copy, has_output_capture_src, has_toplevel_capture_src;
+	bool has_output_mgmt, has_gamma_control, has_cursor_shape, has_xdg_output;
 	struct test_ft_wlr ft_wlr[8];
 	size_t ft_wlr_count;
 	struct test_ft_ext ft_ext[8];
@@ -205,7 +225,9 @@ static const struct wl_keyboard_listener keyboard_listener = {
 static void pointer_enter(void *data, struct wl_pointer *pointer,
 		uint32_t serial, struct wl_surface *surface, wl_fixed_t sx,
 		wl_fixed_t sy) {
-	((struct test_client *)data)->pointer_enters++;
+	struct test_client *client = data;
+	client->pointer_enters++;
+	client->pointer_enter_serial = serial;
 }
 
 static void pointer_leave(void *data, struct wl_pointer *pointer,
@@ -532,6 +554,317 @@ static const struct zwlr_output_power_v1_listener power_listener = {
 	.failed = power_failed,
 };
 
+struct test_screencopy_state {
+	bool got_buffer, buffer_done, ready, failed;
+	uint32_t format, width, height, stride;
+};
+static void sc_buffer(void *data, struct zwlr_screencopy_frame_v1 *f,
+		uint32_t format, uint32_t w, uint32_t h, uint32_t stride) {
+	struct test_screencopy_state *st = data;
+	st->got_buffer = true;
+	st->format = format;
+	st->width = w;
+	st->height = h;
+	st->stride = stride;
+}
+static void sc_flags(void *data, struct zwlr_screencopy_frame_v1 *f,
+		uint32_t flags) { (void)data; (void)f; (void)flags; }
+static void sc_ready(void *data, struct zwlr_screencopy_frame_v1 *f,
+		uint32_t sec_hi, uint32_t sec_lo, uint32_t nsec) {
+	(void)f; (void)sec_hi; (void)sec_lo; (void)nsec;
+	((struct test_screencopy_state *)data)->ready = true;
+}
+static void sc_failed(void *data, struct zwlr_screencopy_frame_v1 *f) {
+	(void)f;
+	((struct test_screencopy_state *)data)->failed = true;
+}
+static void sc_damage(void *data, struct zwlr_screencopy_frame_v1 *f,
+		uint32_t x, uint32_t y, uint32_t w, uint32_t h) {
+	(void)data; (void)f; (void)x; (void)y; (void)w; (void)h;
+}
+static void sc_linux_dmabuf(void *data, struct zwlr_screencopy_frame_v1 *f,
+		uint32_t fmt, uint32_t w, uint32_t h) {
+	(void)data; (void)f; (void)fmt; (void)w; (void)h;
+}
+static void sc_buffer_done(void *data, struct zwlr_screencopy_frame_v1 *f) {
+	(void)f;
+	((struct test_screencopy_state *)data)->buffer_done = true;
+}
+static const struct zwlr_screencopy_frame_v1_listener sc_frame_listener = {
+	.buffer = sc_buffer,
+	.flags = sc_flags,
+	.ready = sc_ready,
+	.failed = sc_failed,
+	.damage = sc_damage,
+	.linux_dmabuf = sc_linux_dmabuf,
+	.buffer_done = sc_buffer_done,
+};
+
+struct test_icc_session_state {
+	uint32_t width, height;
+	uint32_t shm_format;
+	bool has_shm_format, done, stopped;
+};
+static void icc_buffer_size(void *data,
+		struct ext_image_copy_capture_session_v1 *s, uint32_t w, uint32_t h) {
+	(void)s;
+	struct test_icc_session_state *st = data;
+	st->width = w;
+	st->height = h;
+}
+static void icc_shm_format(void *data,
+		struct ext_image_copy_capture_session_v1 *s, uint32_t fmt) {
+	(void)s;
+	struct test_icc_session_state *st = data;
+	if (!st->has_shm_format || fmt == WL_SHM_FORMAT_ARGB8888 ||
+		fmt == WL_SHM_FORMAT_XRGB8888) {
+		st->shm_format = fmt;
+		st->has_shm_format = true;
+	}
+}
+static void icc_dmabuf_device(void *data,
+		struct ext_image_copy_capture_session_v1 *s, struct wl_array *dev) {
+	(void)data; (void)s; (void)dev;
+}
+static void icc_dmabuf_format(void *data,
+		struct ext_image_copy_capture_session_v1 *s, uint32_t fmt,
+		struct wl_array *mods) {
+	(void)data; (void)s; (void)fmt; (void)mods;
+}
+static void icc_done(void *data, struct ext_image_copy_capture_session_v1 *s) {
+	(void)s;
+	((struct test_icc_session_state *)data)->done = true;
+}
+static void icc_stopped(void *data,
+		struct ext_image_copy_capture_session_v1 *s) {
+	(void)s;
+	((struct test_icc_session_state *)data)->stopped = true;
+}
+static const struct ext_image_copy_capture_session_v1_listener
+	icc_session_listener = {
+	.buffer_size = icc_buffer_size,
+	.shm_format = icc_shm_format,
+	.dmabuf_device = icc_dmabuf_device,
+	.dmabuf_format = icc_dmabuf_format,
+	.done = icc_done,
+	.stopped = icc_stopped,
+};
+
+struct test_icc_frame_state {
+	bool ready, failed;
+};
+static void iccf_transform(void *data,
+		struct ext_image_copy_capture_frame_v1 *f, uint32_t transform) {
+	(void)data; (void)f; (void)transform;
+}
+static void iccf_damage(void *data, struct ext_image_copy_capture_frame_v1 *f,
+		int32_t x, int32_t y, int32_t w, int32_t h) {
+	(void)data; (void)f; (void)x; (void)y; (void)w; (void)h;
+}
+static void iccf_presentation_time(void *data,
+		struct ext_image_copy_capture_frame_v1 *f, uint32_t hi, uint32_t lo,
+		uint32_t ns) {
+	(void)data; (void)f; (void)hi; (void)lo; (void)ns;
+}
+static void iccf_ready(void *data, struct ext_image_copy_capture_frame_v1 *f) {
+	(void)f;
+	((struct test_icc_frame_state *)data)->ready = true;
+}
+static void iccf_failed(void *data, struct ext_image_copy_capture_frame_v1 *f,
+		uint32_t reason) {
+	(void)f; (void)reason;
+	((struct test_icc_frame_state *)data)->failed = true;
+}
+static const struct ext_image_copy_capture_frame_v1_listener
+	icc_frame_listener = {
+	.transform = iccf_transform,
+	.damage = iccf_damage,
+	.presentation_time = iccf_presentation_time,
+	.ready = iccf_ready,
+	.failed = iccf_failed,
+};
+
+struct test_om_head {
+	struct zwlr_output_head_v1 *head;
+	char name[64];
+	bool enabled, finished;
+	int32_t x, y;
+	double scale;
+};
+struct test_om_state {
+	struct test_om_head heads[8];
+	size_t head_count;
+	uint32_t serial;
+	bool got_done;
+};
+static void om_head_name(void *data, struct zwlr_output_head_v1 *h,
+		const char *name) {
+	(void)h;
+	struct test_om_head *th = data;
+	snprintf(th->name, sizeof(th->name), "%s", name ? name : "");
+}
+static void om_head_desc(void *data, struct zwlr_output_head_v1 *h,
+		const char *d) { (void)data; (void)h; (void)d; }
+static void om_head_phys(void *data, struct zwlr_output_head_v1 *h,
+		int32_t w, int32_t hh) { (void)data; (void)h; (void)w; (void)hh; }
+static void om_head_mode(void *data, struct zwlr_output_head_v1 *h,
+		struct zwlr_output_mode_v1 *m) { (void)data; (void)h; (void)m; }
+static void om_head_enabled(void *data, struct zwlr_output_head_v1 *h,
+		int32_t en) {
+	(void)h;
+	((struct test_om_head *)data)->enabled = en != 0;
+}
+static void om_head_current_mode(void *data, struct zwlr_output_head_v1 *h,
+		struct zwlr_output_mode_v1 *m) { (void)data; (void)h; (void)m; }
+static void om_head_position(void *data, struct zwlr_output_head_v1 *h,
+		int32_t x, int32_t y) {
+	(void)h;
+	struct test_om_head *th = data;
+	th->x = x;
+	th->y = y;
+}
+static void om_head_transform(void *data, struct zwlr_output_head_v1 *h,
+		int32_t t) { (void)data; (void)h; (void)t; }
+static void om_head_scale(void *data, struct zwlr_output_head_v1 *h,
+		wl_fixed_t s) {
+	(void)h;
+	((struct test_om_head *)data)->scale = wl_fixed_to_double(s);
+}
+static void om_head_finished(void *data, struct zwlr_output_head_v1 *h) {
+	(void)h;
+	((struct test_om_head *)data)->finished = true;
+}
+static void om_head_make(void *data, struct zwlr_output_head_v1 *h,
+		const char *s) { (void)data; (void)h; (void)s; }
+static void om_head_model(void *data, struct zwlr_output_head_v1 *h,
+		const char *s) { (void)data; (void)h; (void)s; }
+static void om_head_serial_number(void *data, struct zwlr_output_head_v1 *h,
+		const char *s) { (void)data; (void)h; (void)s; }
+static void om_head_adaptive_sync(void *data, struct zwlr_output_head_v1 *h,
+		uint32_t st) { (void)data; (void)h; (void)st; }
+static const struct zwlr_output_head_v1_listener om_head_listener = {
+	.name = om_head_name,
+	.description = om_head_desc,
+	.physical_size = om_head_phys,
+	.mode = om_head_mode,
+	.enabled = om_head_enabled,
+	.current_mode = om_head_current_mode,
+	.position = om_head_position,
+	.transform = om_head_transform,
+	.scale = om_head_scale,
+	.finished = om_head_finished,
+	.make = om_head_make,
+	.model = om_head_model,
+	.serial_number = om_head_serial_number,
+	.adaptive_sync = om_head_adaptive_sync,
+};
+static void om_mgr_head(void *data, struct zwlr_output_manager_v1 *m,
+		struct zwlr_output_head_v1 *h) {
+	(void)m;
+	struct test_om_state *st = data;
+	if (st->head_count >= 8)
+		return;
+	struct test_om_head *th = &st->heads[st->head_count++];
+	memset(th, 0, sizeof(*th));
+	th->head = h;
+	zwlr_output_head_v1_add_listener(h, &om_head_listener, th);
+}
+static void om_mgr_done(void *data, struct zwlr_output_manager_v1 *m,
+		uint32_t serial) {
+	(void)m;
+	struct test_om_state *st = data;
+	st->serial = serial;
+	st->got_done = true;
+}
+static void om_mgr_finished(void *data, struct zwlr_output_manager_v1 *m) {
+	(void)data; (void)m;
+}
+static const struct zwlr_output_manager_v1_listener om_mgr_listener = {
+	.head = om_mgr_head,
+	.done = om_mgr_done,
+	.finished = om_mgr_finished,
+};
+
+struct test_om_cfg_state {
+	bool succeeded, failed, cancelled;
+};
+static void om_cfg_succeeded(void *data,
+		struct zwlr_output_configuration_v1 *c) {
+	(void)c;
+	((struct test_om_cfg_state *)data)->succeeded = true;
+}
+static void om_cfg_failed(void *data, struct zwlr_output_configuration_v1 *c) {
+	(void)c;
+	((struct test_om_cfg_state *)data)->failed = true;
+}
+static void om_cfg_cancelled(void *data,
+		struct zwlr_output_configuration_v1 *c) {
+	(void)c;
+	((struct test_om_cfg_state *)data)->cancelled = true;
+}
+static const struct zwlr_output_configuration_v1_listener om_cfg_listener = {
+	.succeeded = om_cfg_succeeded,
+	.failed = om_cfg_failed,
+	.cancelled = om_cfg_cancelled,
+};
+
+struct test_gamma_state {
+	bool got_size, failed;
+	uint32_t size;
+};
+static void gamma_size_cb(void *data, struct zwlr_gamma_control_v1 *g,
+		uint32_t size) {
+	(void)g;
+	struct test_gamma_state *st = data;
+	st->got_size = true;
+	st->size = size;
+}
+static void gamma_failed_cb(void *data, struct zwlr_gamma_control_v1 *g) {
+	(void)g;
+	((struct test_gamma_state *)data)->failed = true;
+}
+static const struct zwlr_gamma_control_v1_listener gamma_listener = {
+	.gamma_size = gamma_size_cb,
+	.failed = gamma_failed_cb,
+};
+
+struct test_xdg_out_state {
+	int32_t x, y, w, h;
+	char name[64];
+	bool done;
+};
+static void xo_pos(void *data, struct zxdg_output_v1 *xo, int32_t x, int32_t y) {
+	(void)xo;
+	struct test_xdg_out_state *st = data;
+	st->x = x;
+	st->y = y;
+}
+static void xo_size(void *data, struct zxdg_output_v1 *xo, int32_t w, int32_t h) {
+	(void)xo;
+	struct test_xdg_out_state *st = data;
+	st->w = w;
+	st->h = h;
+}
+static void xo_done(void *data, struct zxdg_output_v1 *xo) {
+	(void)xo;
+	((struct test_xdg_out_state *)data)->done = true;
+}
+static void xo_name(void *data, struct zxdg_output_v1 *xo, const char *name) {
+	(void)xo;
+	struct test_xdg_out_state *st = data;
+	snprintf(st->name, sizeof(st->name), "%s", name ? name : "");
+}
+static void xo_desc(void *data, struct zxdg_output_v1 *xo, const char *d) {
+	(void)data; (void)xo; (void)d;
+}
+static const struct zxdg_output_v1_listener xdg_out_listener = {
+	.logical_position = xo_pos,
+	.logical_size = xo_size,
+	.done = xo_done,
+	.name = xo_name,
+	.description = xo_desc,
+};
+
 static void registry_global(void *data, struct wl_registry *registry,
 		uint32_t name, const char *interface, uint32_t version) {
 	struct test_client *client = data;
@@ -611,6 +944,41 @@ static void registry_global(void *data, struct wl_registry *registry,
 		client->has_output_power = true;
 		client->output_power_mgr = wl_registry_bind(registry, name,
 			&zwlr_output_power_manager_v1_interface, 1);
+	} else if (!strcmp(interface, zwlr_screencopy_manager_v1_interface.name)) {
+		client->has_screencopy = true;
+		client->screencopy_mgr_name = name;
+		client->screencopy_mgr = wl_registry_bind(registry, name,
+			&zwlr_screencopy_manager_v1_interface,
+			version < 3 ? version : 3);
+	} else if (!strcmp(interface, ext_image_copy_capture_manager_v1_interface.name)) {
+		client->has_image_copy = true;
+		client->image_copy_mgr = wl_registry_bind(registry, name,
+			&ext_image_copy_capture_manager_v1_interface, 1);
+	} else if (!strcmp(interface, ext_output_image_capture_source_manager_v1_interface.name)) {
+		client->has_output_capture_src = true;
+		client->output_src_mgr = wl_registry_bind(registry, name,
+			&ext_output_image_capture_source_manager_v1_interface, 1);
+	} else if (!strcmp(interface, ext_foreign_toplevel_image_capture_source_manager_v1_interface.name)) {
+		client->has_toplevel_capture_src = true;
+		client->toplevel_src_mgr = wl_registry_bind(registry, name,
+			&ext_foreign_toplevel_image_capture_source_manager_v1_interface, 1);
+	} else if (!strcmp(interface, zwlr_output_manager_v1_interface.name)) {
+		client->has_output_mgmt = true;
+		client->output_mgr_name = name;
+		client->output_mgr = wl_registry_bind(registry, name,
+			&zwlr_output_manager_v1_interface, version < 4 ? version : 4);
+	} else if (!strcmp(interface, zwlr_gamma_control_manager_v1_interface.name)) {
+		client->has_gamma_control = true;
+		client->gamma_mgr = wl_registry_bind(registry, name,
+			&zwlr_gamma_control_manager_v1_interface, 1);
+	} else if (!strcmp(interface, wp_cursor_shape_manager_v1_interface.name)) {
+		client->has_cursor_shape = true;
+		client->cursor_shape_mgr = wl_registry_bind(registry, name,
+			&wp_cursor_shape_manager_v1_interface, 1);
+	} else if (!strcmp(interface, zxdg_output_manager_v1_interface.name)) {
+		client->has_xdg_output = true;
+		client->xdg_output_mgr = wl_registry_bind(registry, name,
+			&zxdg_output_manager_v1_interface, version < 3 ? version : 3);
 	}
 }
 
@@ -747,11 +1115,12 @@ static const struct xdg_popup_listener popup_listener = {
 
 /* A blank w x h buffer, for a window with a real size (the shared buffer
  * is 2x2, below TP_FLOAT_MIN_W/H). */
-static struct wl_buffer *create_sized_buffer(struct test_client *client,
-		int32_t w, int32_t h) {
+static struct wl_buffer *create_sized_buffer_fmt(struct test_client *client,
+		int32_t w, int32_t h, uint32_t format) {
+	static unsigned int seq = 0;
 	char name[64];
-	snprintf(name, sizeof(name), "/tam-pane-test-%ld-%dx%d", (long)getpid(),
-		w, h);
+	snprintf(name, sizeof(name), "/tam-pane-test-%ld-%u-%dx%d", (long)getpid(),
+		++seq, w, h);
 	int fd = shm_open(name, O_CREAT | O_EXCL | O_RDWR, 0600);
 	if (fd < 0) return NULL;
 	shm_unlink(name);
@@ -762,10 +1131,15 @@ static struct wl_buffer *create_sized_buffer(struct test_client *client,
 	}
 	struct wl_shm_pool *pool = wl_shm_create_pool(client->shm, fd, size);
 	struct wl_buffer *b = wl_shm_pool_create_buffer(pool, 0, w, h, w * 4,
-		WL_SHM_FORMAT_ARGB8888);
+		format);
 	wl_shm_pool_destroy(pool);
 	close(fd); /* libwayland sent a duplicate */
 	return b;
+}
+
+static struct wl_buffer *create_sized_buffer(struct test_client *client,
+		int32_t w, int32_t h) {
+	return create_sized_buffer_fmt(client, w, h, WL_SHM_FORMAT_ARGB8888);
 }
 
 static int create_shm_buffer(struct test_client *client) {
@@ -2340,6 +2714,8 @@ int main(void) {
 			CHECK(sb.wm_base != NULL);
 			CHECK(sb.seat != NULL);
 			CHECK(sb.has_idle_inhibit);
+			CHECK(sb.has_cursor_shape);
+			CHECK(sb.has_xdg_output);
 			CHECK(sb.layer_shell == NULL);
 			CHECK(sb.security_context_mgr == NULL);
 			CHECK(!sb.has_wlr_foreign_toplevel);
@@ -2348,6 +2724,12 @@ int main(void) {
 			CHECK(!sb.has_ext_session_lock);
 			CHECK(!sb.has_idle_notify);
 			CHECK(!sb.has_output_power);
+			CHECK(!sb.has_output_mgmt);
+			CHECK(!sb.has_gamma_control);
+			CHECK(!sb.has_screencopy);
+			CHECK(!sb.has_image_copy);
+			CHECK(!sb.has_output_capture_src);
+			CHECK(!sb.has_toplevel_capture_src);
 
 			/* Active bind rejection: attempting to bind the hidden
 			 * zwlr_layer_shell_v1 global by its numeric name must fail
@@ -2876,6 +3258,353 @@ int main(void) {
 		zwlr_output_power_v1_destroy(op);
 		for (unsigned int i = 0; i < 10; i++)
 			if (!pump(&client, &server)) goto fail;
+	}
+
+	/* ---- 0.2.1: screens and capture ---- */
+	CHECK(client.unclassified_globals == 0);
+	CHECK(tp_security_classify_global("wp_cursor_shape_manager_v1") ==
+		  TP_GLOBAL_UNPRIVILEGED);
+	CHECK(tp_security_classify_global("zxdg_output_manager_v1") ==
+		  TP_GLOBAL_UNPRIVILEGED);
+	CHECK(client.has_output_mgmt);
+	CHECK(client.has_gamma_control);
+	CHECK(client.has_cursor_shape);
+	CHECK(client.has_xdg_output);
+	/* Ordinary direct same-UID client must NOT see raw-capture globals. */
+	CHECK(!client.has_screencopy);
+	CHECK(!client.has_image_copy);
+	CHECK(!client.has_output_capture_src);
+	CHECK(!client.has_toplevel_capture_src);
+
+	/* 1) Authorized capture client via socketpair + tp_security_add_capture_client:
+	 *    exercises screencopy, ext-image-copy-capture (output + toplevel),
+	 *    unauthorized bind rejection, and automatic revocation on disconnect. */
+	{
+		struct test_window cw = {0};
+		configure_window_app(&client, &cw, "cap-app", "Capture Target");
+		for (unsigned int i = 0; i < 200 && !cw.configured; i++)
+			if (!pump(&client, &server)) goto fail;
+		for (unsigned int i = 0; i < 15; i++)
+			if (!pump(&client, &server)) goto fail;
+
+		int csv[2] = {-1, -1};
+		CHECK(socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, csv) == 0);
+		struct wl_client *srv_cap = wl_client_create(server.display, csv[0]);
+		CHECK(srv_cap != NULL);
+		CHECK(tp_security_add_capture_client(&server, srv_cap));
+		CHECK(tp_security_allow_capture(&server, srv_cap));
+
+		struct test_client cap = { .shm_fd = -1 };
+		cap.display = wl_display_connect_to_fd(csv[1]);
+		CHECK(cap.display != NULL);
+		if (cap.display) {
+			cap.registry = wl_display_get_registry(cap.display);
+			wl_registry_add_listener(cap.registry, &registry_listener, &cap);
+			for (unsigned int i = 0; i < 20; i++)
+				if (!pump(&cap, &server)) break;
+			CHECK(cap.has_screencopy && cap.screencopy_mgr != NULL);
+			CHECK(cap.has_image_copy && cap.image_copy_mgr != NULL);
+			CHECK(cap.has_output_capture_src && cap.output_src_mgr != NULL);
+			CHECK(cap.has_toplevel_capture_src && cap.toplevel_src_mgr != NULL);
+			CHECK(cap.screencopy_mgr_name != 0 && cap.output != NULL);
+
+			/* Unauthorized direct client attempting to bind screencopy gets EPROTO. */
+			struct test_client rogue_cap = { .shm_fd = -1 };
+			rogue_cap.display = wl_display_connect(server.socket);
+			CHECK(rogue_cap.display != NULL);
+			if (rogue_cap.display) {
+				rogue_cap.registry = wl_display_get_registry(rogue_cap.display);
+				wl_registry_add_listener(rogue_cap.registry, &registry_listener,
+										 &rogue_cap);
+				for (unsigned int i = 0; i < 15; i++)
+					if (!pump(&rogue_cap, &server)) break;
+				CHECK(!rogue_cap.has_screencopy);
+				struct zwlr_screencopy_manager_v1 *bad_sc = wl_registry_bind(
+					rogue_cap.registry, cap.screencopy_mgr_name,
+					&zwlr_screencopy_manager_v1_interface, 1);
+				(void)bad_sc;
+				for (unsigned int i = 0; i < 10; i++)
+					if (!pump(&rogue_cap, &server)) break;
+				CHECK(wl_display_get_error(rogue_cap.display) == EPROTO);
+				wl_display_disconnect(rogue_cap.display);
+			}
+
+			/* 1a) zwlr_screencopy_manager_v1 output capture. */
+			struct test_screencopy_state scst = {0};
+			struct zwlr_screencopy_frame_v1 *scf =
+				zwlr_screencopy_manager_v1_capture_output(
+					cap.screencopy_mgr, 0, cap.output);
+			zwlr_screencopy_frame_v1_add_listener(scf, &sc_frame_listener, &scst);
+			for (unsigned int i = 0; i < 30 && !scst.buffer_done; i++)
+				if (!pump(&cap, &server)) break;
+			CHECK(scst.got_buffer && scst.buffer_done && scst.width > 0 &&
+				  scst.height > 0);
+			if (scst.buffer_done) {
+				struct wl_buffer *scbuf = create_sized_buffer_fmt(
+					&cap, (int32_t)scst.width, (int32_t)scst.height,
+					scst.format);
+				CHECK(scbuf != NULL);
+				if (scbuf) {
+					zwlr_screencopy_frame_v1_copy(scf, scbuf);
+					struct tp_monitor *pm;
+					wl_list_for_each(pm, &server.monitors, link)
+						wlr_output_schedule_frame(pm->output);
+					for (unsigned int i = 0; i < 40 && !scst.ready && !scst.failed; i++) {
+						usleep(5000);
+						if (!pump(&cap, &server)) break;
+					}
+					CHECK(scst.ready && !scst.failed);
+					wl_buffer_destroy(scbuf);
+				}
+			}
+			zwlr_screencopy_frame_v1_destroy(scf);
+
+			/* 1b) ext-image-copy-capture output capture. */
+			struct ext_image_capture_source_v1 *out_src =
+				ext_output_image_capture_source_manager_v1_create_source(
+					cap.output_src_mgr, cap.output);
+			struct ext_image_copy_capture_session_v1 *out_sess =
+				ext_image_copy_capture_manager_v1_create_session(
+					cap.image_copy_mgr, out_src, 0);
+			struct test_icc_session_state osst = {0};
+			ext_image_copy_capture_session_v1_add_listener(
+				out_sess, &icc_session_listener, &osst);
+			for (unsigned int i = 0; i < 30 && !osst.done; i++)
+				if (!pump(&cap, &server)) break;
+			CHECK(osst.done && !osst.stopped && osst.width > 0 &&
+				  osst.height > 0 && osst.has_shm_format);
+			if (osst.done && osst.width > 0 && osst.height > 0) {
+				struct wl_buffer *obuf = create_sized_buffer_fmt(
+					&cap, (int32_t)osst.width, (int32_t)osst.height,
+					osst.shm_format);
+				CHECK(obuf != NULL);
+				if (obuf) {
+					struct ext_image_copy_capture_frame_v1 *of =
+						ext_image_copy_capture_session_v1_create_frame(out_sess);
+					struct test_icc_frame_state ofst = {0};
+					ext_image_copy_capture_frame_v1_add_listener(
+						of, &icc_frame_listener, &ofst);
+					ext_image_copy_capture_frame_v1_attach_buffer(of, obuf);
+					ext_image_copy_capture_frame_v1_capture(of);
+					struct tp_monitor *pm;
+					wl_list_for_each(pm, &server.monitors, link)
+						wlr_output_schedule_frame(pm->output);
+					for (unsigned int i = 0; i < 40 && !ofst.ready && !ofst.failed; i++) {
+						usleep(5000);
+						if (!pump(&cap, &server)) break;
+					}
+					CHECK(ofst.ready && !ofst.failed);
+					ext_image_copy_capture_frame_v1_destroy(of);
+					wl_buffer_destroy(obuf);
+				}
+			}
+			ext_image_copy_capture_session_v1_destroy(out_sess);
+			ext_image_capture_source_v1_destroy(out_src);
+
+			/* 1c) ext-image-copy-capture foreign toplevel capture. */
+			struct ext_foreign_toplevel_handle_v1 *cap_ft = NULL;
+			for (size_t i = 0; i < cap.ft_ext_count; i++) {
+				if (!cap.ft_ext[i].closed &&
+					strcmp(cap.ft_ext[i].app_id, "cap-app") == 0) {
+					cap_ft = cap.ft_ext[i].handle;
+					break;
+				}
+			}
+			CHECK(cap_ft != NULL);
+			if (cap_ft) {
+				struct ext_image_capture_source_v1 *tl_src =
+					ext_foreign_toplevel_image_capture_source_manager_v1_create_source(
+						cap.toplevel_src_mgr, cap_ft);
+				struct ext_image_copy_capture_session_v1 *tl_sess =
+					ext_image_copy_capture_manager_v1_create_session(
+						cap.image_copy_mgr, tl_src, 0);
+				struct test_icc_session_state tsst = {0};
+				ext_image_copy_capture_session_v1_add_listener(
+					tl_sess, &icc_session_listener, &tsst);
+				for (unsigned int i = 0; i < 30 && !tsst.done && !tsst.stopped; i++)
+					if (!pump(&cap, &server)) break;
+				CHECK(tsst.done && !tsst.stopped && tsst.width > 0 &&
+					  tsst.height > 0);
+				if (tsst.done && tsst.width > 0 && tsst.height > 0) {
+					struct wl_buffer *tbuf = create_sized_buffer_fmt(
+						&cap, (int32_t)tsst.width, (int32_t)tsst.height,
+						tsst.has_shm_format ? tsst.shm_format
+											: WL_SHM_FORMAT_ARGB8888);
+					CHECK(tbuf != NULL);
+					if (tbuf) {
+						struct ext_image_copy_capture_frame_v1 *tf =
+							ext_image_copy_capture_session_v1_create_frame(tl_sess);
+						struct test_icc_frame_state tfst = {0};
+						ext_image_copy_capture_frame_v1_add_listener(
+							tf, &icc_frame_listener, &tfst);
+						ext_image_copy_capture_frame_v1_attach_buffer(tf, tbuf);
+						ext_image_copy_capture_frame_v1_capture(tf);
+						for (unsigned int i = 0; i < 40 && !tfst.ready && !tfst.failed; i++) {
+							usleep(5000);
+							if (!pump(&cap, &server)) break;
+						}
+						CHECK(tfst.ready && !tfst.failed);
+						ext_image_copy_capture_frame_v1_destroy(tf);
+						wl_buffer_destroy(tbuf);
+					}
+				}
+				ext_image_copy_capture_session_v1_destroy(tl_sess);
+				ext_image_capture_source_v1_destroy(tl_src);
+			}
+
+			/* Unfocused client cursor-shape request must be ignored. */
+			if (cap.cursor_shape_mgr && cap.pointer) {
+				struct wp_cursor_shape_device_v1 *cdev =
+					wp_cursor_shape_manager_v1_get_pointer(
+						cap.cursor_shape_mgr, cap.pointer);
+				/* First focus client on cw (2x2 surface at c->geom.x,y) and set
+				 * pointer shape from client. */
+				struct tp_client *fc = tp_focused(&server);
+				CHECK(fc != NULL);
+				if (fc) {
+					wlr_cursor_warp(server.cursor, NULL,
+									fc->geom.x + 1.0, fc->geom.y + 1.0);
+					tp_pointer_refocus_now(&server);
+				}
+				for (unsigned int i = 0; i < 15; i++)
+					if (!pump(&client, &server)) goto fail;
+
+				struct wp_cursor_shape_device_v1 *fdev =
+					wp_cursor_shape_manager_v1_get_pointer(
+						client.cursor_shape_mgr, client.pointer);
+				wp_cursor_shape_device_v1_set_shape(
+					fdev, client.pointer_enter_serial,
+					WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_POINTER);
+				for (unsigned int i = 0; i < 15; i++)
+					if (!pump(&client, &server)) goto fail;
+				CHECK(server.cursor_shape_name &&
+					  strcmp(server.cursor_shape_name, "pointer") == 0);
+
+				/* Unfocused cap client cannot override cursor shape. */
+				wp_cursor_shape_device_v1_set_shape(
+					cdev, 0, WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_CROSSHAIR);
+				for (unsigned int i = 0; i < 15; i++)
+					if (!pump(&cap, &server)) break;
+				CHECK(server.cursor_shape_name &&
+					  strcmp(server.cursor_shape_name, "pointer") == 0);
+
+				wp_cursor_shape_device_v1_destroy(fdev);
+				wp_cursor_shape_device_v1_destroy(cdev);
+			}
+
+			wl_display_disconnect(cap.display);
+		}
+		for (unsigned int i = 0; i < 15; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(wl_list_empty(&server.capture_clients));
+
+		destroy_window(&cw);
+		for (unsigned int i = 0; i < 15; i++)
+			if (!pump(&client, &server)) goto fail;
+	}
+
+	/* 2) zwlr_output_manager_v1: enumerate heads, test, apply scale, restore. */
+	if (client.output_mgr_name) {
+		struct zwlr_output_manager_v1 *om = wl_registry_bind(
+			client.registry, client.output_mgr_name,
+			&zwlr_output_manager_v1_interface, 4);
+		struct test_om_state omst = {0};
+		zwlr_output_manager_v1_add_listener(om, &om_mgr_listener, &omst);
+		for (unsigned int i = 0; i < 20 && !omst.got_done; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(omst.got_done && omst.head_count >= 1);
+
+		/* Test configuration. */
+		struct zwlr_output_configuration_v1 *tcfg =
+			zwlr_output_manager_v1_create_configuration(om, omst.serial);
+		struct test_om_cfg_state tcst = {0};
+		zwlr_output_configuration_v1_add_listener(tcfg, &om_cfg_listener, &tcst);
+		for (size_t i = 0; i < omst.head_count; i++) {
+			if (omst.heads[i].finished) continue;
+			struct zwlr_output_configuration_head_v1 *ch =
+				zwlr_output_configuration_v1_enable_head(tcfg, omst.heads[i].head);
+			if (i == 0)
+				zwlr_output_configuration_head_v1_set_scale(
+					ch, wl_fixed_from_double(2.0));
+		}
+		zwlr_output_configuration_v1_test(tcfg);
+		for (unsigned int i = 0; i < 20 && !tcst.succeeded && !tcst.failed &&
+									 !tcst.cancelled;
+			 i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(tcst.succeeded && !tcst.failed && !tcst.cancelled);
+		zwlr_output_configuration_v1_destroy(tcfg);
+
+		/* Apply configuration: set head 0 scale to 1.5, verify on server. */
+		struct zwlr_output_configuration_v1 *acfg =
+			zwlr_output_manager_v1_create_configuration(om, omst.serial);
+		struct test_om_cfg_state acst = {0};
+		zwlr_output_configuration_v1_add_listener(acfg, &om_cfg_listener, &acst);
+		for (size_t i = 0; i < omst.head_count; i++) {
+			if (omst.heads[i].finished) continue;
+			struct zwlr_output_configuration_head_v1 *ch =
+				zwlr_output_configuration_v1_enable_head(acfg, omst.heads[i].head);
+			if (i == 0)
+				zwlr_output_configuration_head_v1_set_scale(
+					ch, wl_fixed_from_double(1.5));
+		}
+		omst.got_done = false;
+		zwlr_output_configuration_v1_apply(acfg);
+		for (unsigned int i = 0; i < 25 && (!acst.succeeded || !omst.got_done); i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(acst.succeeded && !acst.failed && !acst.cancelled);
+		struct tp_monitor *m0 = tp_monitor_by_name(&server, omst.heads[0].name);
+		CHECK(m0 != NULL && m0->output->scale > 1.49f &&
+			  m0->output->scale < 1.51f);
+		zwlr_output_configuration_v1_destroy(acfg);
+
+		/* Restore head 0 scale to 1.0. */
+		struct zwlr_output_configuration_v1 *rcfg =
+			zwlr_output_manager_v1_create_configuration(om, omst.serial);
+		struct test_om_cfg_state rcst = {0};
+		zwlr_output_configuration_v1_add_listener(rcfg, &om_cfg_listener, &rcst);
+		for (size_t i = 0; i < omst.head_count; i++) {
+			if (omst.heads[i].finished) continue;
+			struct zwlr_output_configuration_head_v1 *ch =
+				zwlr_output_configuration_v1_enable_head(rcfg, omst.heads[i].head);
+			if (i == 0)
+				zwlr_output_configuration_head_v1_set_scale(
+					ch, wl_fixed_from_double(1.0));
+		}
+		zwlr_output_configuration_v1_apply(rcfg);
+		for (unsigned int i = 0; i < 20 && !rcst.succeeded && !rcst.failed; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(rcst.succeeded);
+		zwlr_output_configuration_v1_destroy(rcfg);
+		zwlr_output_manager_v1_stop(om);
+		for (unsigned int i = 0; i < 10; i++)
+			if (!pump(&client, &server)) goto fail;
+	}
+
+	/* 3) zwlr_gamma_control_manager_v1: headless output responds cleanly. */
+	if (client.gamma_mgr && client.output) {
+		struct test_gamma_state gst = {0};
+		struct zwlr_gamma_control_v1 *gc =
+			zwlr_gamma_control_manager_v1_get_gamma_control(client.gamma_mgr,
+															client.output);
+		zwlr_gamma_control_v1_add_listener(gc, &gamma_listener, &gst);
+		for (unsigned int i = 0; i < 20 && !gst.got_size && !gst.failed; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(gst.got_size || gst.failed);
+		zwlr_gamma_control_v1_destroy(gc);
+	}
+
+	/* 4) zxdg_output_manager_v1: logical geometry and output name. */
+	if (client.xdg_output_mgr && client.output) {
+		struct test_xdg_out_state xost = {0};
+		struct zxdg_output_v1 *xo =
+			zxdg_output_manager_v1_get_xdg_output(client.xdg_output_mgr,
+												  client.output);
+		zxdg_output_v1_add_listener(xo, &xdg_out_listener, &xost);
+		for (unsigned int i = 0; i < 20 && !(xost.w > 0 && xost.name[0]); i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(xost.w > 0 && xost.h > 0 && xost.name[0] != '\0');
+		zxdg_output_v1_destroy(xo);
 	}
 
 	unlink(lua_cfg);

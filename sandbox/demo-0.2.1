@@ -1,0 +1,80 @@
+#!/bin/sh
+# Launch tam-pane 0.2.1 nested under Hyprland to check P3 screens & capture:
+#   - raw capture globals hidden from ordinary clients (unauthorized grim fails)
+#   - tp.capture{"grim", ...} grants raw capture over WAYLAND_SOCKET and writes
+#     a valid PNG screenshot of the nested output
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+want=$(tr -d '[:space:]' < "$ROOT/VERSION")
+have=$("$ROOT/build/tam-pane" -v 2>/dev/null | awk '{print $2}') || true
+if [ "$have" != "$want" ]; then
+	echo "build/tam-pane is '${have:-missing}', VERSION is $want: run make first" >&2
+	exit 1
+fi
+if ! command -v grim >/dev/null 2>&1; then
+	echo "missing grim on PATH" >&2
+	exit 1
+fi
+
+TMPDIR_DEMO=$(mktemp -d "${TMPDIR:-/tmp}/tam-pane-demo-0.2.1.XXXXXX")
+trap 'rm -rf "$TMPDIR_DEMO"' EXIT INT TERM
+
+CFG="$TMPDIR_DEMO/init.lua"
+GUIDE="$TMPDIR_DEMO/guide"
+SHOT="$TMPDIR_DEMO/shot.png"
+DENIED="$TMPDIR_DEMO/denied.png"
+DENIED_LOG="$TMPDIR_DEMO/denied.log"
+{
+	printf 'local GUIDE = "%s"\n' "$GUIDE"
+	printf 'local SHOT = "%s"\n' "$SHOT"
+	printf 'local DENIED = "%s"\n' "$DENIED"
+	printf 'local DENIED_LOG = "%s"\n' "$DENIED_LOG"
+	cat "$ROOT/sandbox/demo-0.2.1.lua"
+} >"$CFG"
+
+cat >"$GUIDE" <<'GUIDE'
+=== tam-pane 0.2.1 demo: screens and capture ===
+
+ 1. On startup, an ordinary (unauthorized) grim ran in the background; it
+    must be denied raw capture.
+ 2. Press Meta+S to take a screenshot via tp.capture{"grim", ...}.
+ 3. Hover over this terminal window to check cursor shape (I-beam/text).
+ 4. Press Meta+Shift+E to quit; the launcher verifies the PNG and denial.
+
+GUIDE
+
+"$ROOT/tools/nested-input" -c "$CFG" -s '' || true
+
+echo
+ok=1
+if [ -s "$SHOT" ]; then
+	sig=$(od -An -tx1 -N8 "$SHOT" | tr -d ' \n')
+	if [ "$sig" = "89504e470d0a1a0a" ]; then
+		sz=$(wc -c < "$SHOT")
+		echo "OK: authorized tp.capture grim wrote valid PNG ($sz bytes)"
+	else
+		echo "FAIL: $SHOT does not have a valid PNG header ($sig)" >&2
+		ok=0
+	fi
+else
+	echo "FAIL: authorized tp.capture grim did not create $SHOT (did you press Meta+S?)" >&2
+	ok=0
+fi
+
+if [ -e "$DENIED" ]; then
+	echo "FAIL: unauthorized grim unexpectedly created $DENIED" >&2
+	ok=0
+else
+	echo "OK: unauthorized grim was denied raw capture"
+	if [ -s "$DENIED_LOG" ]; then
+		sed 's/^/  denied log: /' "$DENIED_LOG"
+	fi
+fi
+
+if [ "$ok" -eq 1 ]; then
+	echo "PASS: 0.2.1 raw capture grant and denial verified"
+else
+	echo "FAIL: 0.2.1 check failed" >&2
+	exit 1
+fi

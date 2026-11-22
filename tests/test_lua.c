@@ -1348,6 +1348,82 @@ static void test_lock_and_binding_gate(void) {
 	tp_lua_destroy(lua);
 }
 
+static char capture_log[8][128];
+static size_t capture_log_count;
+
+static void reset_capture_log(void) { capture_log_count = 0; }
+
+static void mock_capture(const char *cmd, void *userdata) {
+	(void)userdata;
+	if (capture_log_count < 8)
+		snprintf(capture_log[capture_log_count++], 128, "sh:%s", cmd);
+}
+
+static void mock_capture_argv(const char *const argv[], void *userdata) {
+	(void)userdata;
+	if (capture_log_count >= 8)
+		return;
+	char *dst = capture_log[capture_log_count++];
+	size_t pos = (size_t)snprintf(dst, 128, "argv:");
+	for (size_t i = 0; argv[i] && pos + 2 < 128; i++)
+		pos += (size_t)snprintf(dst + pos, 128 - pos, "%s%s", i ? "|" : "",
+								argv[i]);
+}
+
+static void test_capture_launcher(void) {
+	struct tp_lua *lua = tp_lua_create();
+	CHECK(lua != NULL);
+	tp_lua_set_capture_fn(lua, mock_capture, NULL);
+	tp_lua_set_capture_argv_fn(lua, mock_capture_argv, NULL);
+
+	struct tp_settings base, out;
+	tp_settings_defaults(&base);
+	char err[256] = {0};
+
+	const char *cfg =
+		"tp.bind('Meta+s', function() tp.capture{'grim', '/tmp/shot.png'} end)\n"
+		"tp.bind('Meta+Shift+s', function() tp.capture('grim out.png') end)\n";
+	CHECK(tp_lua_exec_string(lua, cfg, strlen(cfg), "capture_cfg",
+							 TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+							 TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+							 sizeof(err)));
+
+	reset_capture_log();
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_s, false));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT, XKB_KEY_s, false));
+	CHECK(capture_log_count == 2);
+	CHECK(strcmp(capture_log[0], "argv:grim|/tmp/shot.png") == 0);
+	CHECK(strcmp(capture_log[1], "sh:grim out.png") == 0);
+
+	/* tp.capture refused at config load and rejects empty args. */
+	const char *bad[] = {
+		"tp.capture('grim')",
+		"tp.capture{'grim'}",
+	};
+	for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++) {
+		CHECK(!tp_lua_exec_string(lua, bad[i], strlen(bad[i]), "bad_capture",
+								  TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+								  TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+								  sizeof(err)));
+	}
+
+	/* Capture handlers survive tp_lua_reload_file. */
+	char dir[] = "/tmp/tam-pane-cap-reload.XXXXXX";
+	CHECK(mkdtemp(dir) != NULL);
+	char cfg_path[256];
+	snprintf(cfg_path, sizeof(cfg_path), "%s/init.lua", dir);
+	CHECK(write_text(cfg_path,
+					 "tp.bind('Meta+s', function() tp.capture{'grim'} end)\n"));
+	CHECK(tp_lua_reload_file(&lua, cfg_path, &out, err, sizeof(err)));
+	reset_capture_log();
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_s, false));
+	CHECK(capture_log_count == 1 && strcmp(capture_log[0], "argv:grim") == 0);
+	unlink(cfg_path);
+	rmdir(dir);
+
+	tp_lua_destroy(lua);
+}
+
 int main(void) {
 	tam_log_set_level(TAM_LOG_ERROR);
 	test_config_and_fallback();
@@ -1363,5 +1439,6 @@ int main(void) {
 	test_window_rules();
 	test_live_reload();
 	test_lock_and_binding_gate();
+	test_capture_launcher();
 	CHECK_DONE("test_lua");
 }

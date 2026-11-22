@@ -68,7 +68,7 @@ LUA_HOST_SRCS = src/lua.c src/lua_bindings.c src/lua_events.c src/lua_rules.c \
 WM_SRCS = src/main.c src/server.c src/security.c src/events.c src/monitor.c \
 	src/layer.c src/client.c src/focus.c src/bindings.c src/layout/arrange.c \
 	src/foreign_toplevel.c src/workspace.c src/session_lock.c src/idle.c \
-	src/output_power.c \
+	src/output_power.c src/capture.c src/output_mgmt.c \
 	src/input/input.c src/input/keyboard.c src/input/pointer.c
 
 CORE_OBJS = $(patsubst src/%.c,build/%.o,$(CORE_SRCS))
@@ -93,7 +93,14 @@ CLIENT_PROTO_HEADERS = build/protocols/xdg-shell-client-protocol.h \
 	build/protocols/ext-session-lock-v1-client-protocol.h \
 	build/protocols/ext-idle-notify-v1-client-protocol.h \
 	build/protocols/idle-inhibit-unstable-v1-client-protocol.h \
-	build/protocols/wlr-output-power-management-unstable-v1-client-protocol.h
+	build/protocols/wlr-output-power-management-unstable-v1-client-protocol.h \
+	build/protocols/wlr-screencopy-unstable-v1-client-protocol.h \
+	build/protocols/ext-image-capture-source-v1-client-protocol.h \
+	build/protocols/ext-image-copy-capture-v1-client-protocol.h \
+	build/protocols/wlr-output-management-unstable-v1-client-protocol.h \
+	build/protocols/wlr-gamma-control-unstable-v1-client-protocol.h \
+	build/protocols/cursor-shape-v1-client-protocol.h \
+	build/protocols/xdg-output-unstable-v1-client-protocol.h
 CLIENT_PROTO_SRCS = build/protocols/xdg-shell-protocol.c \
 	build/protocols/wlr-layer-shell-unstable-v1-protocol.c \
 	build/protocols/security-context-v1-protocol.c \
@@ -103,7 +110,15 @@ CLIENT_PROTO_SRCS = build/protocols/xdg-shell-protocol.c \
 	build/protocols/ext-session-lock-v1-protocol.c \
 	build/protocols/ext-idle-notify-v1-protocol.c \
 	build/protocols/idle-inhibit-unstable-v1-protocol.c \
-	build/protocols/wlr-output-power-management-unstable-v1-protocol.c
+	build/protocols/wlr-output-power-management-unstable-v1-protocol.c \
+	build/protocols/wlr-screencopy-unstable-v1-protocol.c \
+	build/protocols/ext-image-capture-source-v1-protocol.c \
+	build/protocols/ext-image-copy-capture-v1-protocol.c \
+	build/protocols/wlr-output-management-unstable-v1-protocol.c \
+	build/protocols/wlr-gamma-control-unstable-v1-protocol.c \
+	build/protocols/cursor-shape-v1-protocol.c \
+	build/protocols/tablet-v2-protocol.c \
+	build/protocols/xdg-output-unstable-v1-protocol.c
 
 all: build/tam-pane
 
@@ -237,6 +252,66 @@ build/protocols/wlr-output-power-management-unstable-v1-client-protocol.h: proto
 	$(WAYLAND_SCANNER) client-header $< $@
 
 build/protocols/wlr-output-power-management-unstable-v1-protocol.c: protocols/wlr-output-power-management-unstable-v1.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) private-code $< $@
+
+build/protocols/wlr-screencopy-unstable-v1-client-protocol.h: protocols/wlr-screencopy-unstable-v1.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) client-header $< $@
+
+build/protocols/wlr-screencopy-unstable-v1-protocol.c: protocols/wlr-screencopy-unstable-v1.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) private-code $< $@
+
+build/protocols/ext-image-capture-source-v1-client-protocol.h: $(WAYLAND_PROTOCOLS)/staging/ext-image-capture-source/ext-image-capture-source-v1.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) client-header $< $@
+
+build/protocols/ext-image-capture-source-v1-protocol.c: $(WAYLAND_PROTOCOLS)/staging/ext-image-capture-source/ext-image-capture-source-v1.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) private-code $< $@
+
+build/protocols/ext-image-copy-capture-v1-client-protocol.h: $(WAYLAND_PROTOCOLS)/staging/ext-image-copy-capture/ext-image-copy-capture-v1.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) client-header $< $@
+
+build/protocols/ext-image-copy-capture-v1-protocol.c: $(WAYLAND_PROTOCOLS)/staging/ext-image-copy-capture/ext-image-copy-capture-v1.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) private-code $< $@
+
+build/protocols/wlr-output-management-unstable-v1-client-protocol.h: protocols/wlr-output-management-unstable-v1.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) client-header $< $@
+
+build/protocols/wlr-output-management-unstable-v1-protocol.c: protocols/wlr-output-management-unstable-v1.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) private-code $< $@
+
+build/protocols/wlr-gamma-control-unstable-v1-client-protocol.h: protocols/wlr-gamma-control-unstable-v1.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) client-header $< $@
+
+build/protocols/wlr-gamma-control-unstable-v1-protocol.c: protocols/wlr-gamma-control-unstable-v1.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) private-code $< $@
+
+build/protocols/cursor-shape-v1-client-protocol.h: $(WAYLAND_PROTOCOLS)/staging/cursor-shape/cursor-shape-v1.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) client-header $< $@
+
+build/protocols/cursor-shape-v1-protocol.c: $(WAYLAND_PROTOCOLS)/staging/cursor-shape/cursor-shape-v1.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) private-code $< $@
+
+build/protocols/tablet-v2-protocol.c: $(WAYLAND_PROTOCOLS)/stable/tablet/tablet-v2.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) private-code $< $@
+
+build/protocols/xdg-output-unstable-v1-client-protocol.h: $(WAYLAND_PROTOCOLS)/unstable/xdg-output/xdg-output-unstable-v1.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) client-header $< $@
+
+build/protocols/xdg-output-unstable-v1-protocol.c: $(WAYLAND_PROTOCOLS)/unstable/xdg-output/xdg-output-unstable-v1.xml
 	@mkdir -p $(@D)
 	$(WAYLAND_SCANNER) private-code $< $@
 

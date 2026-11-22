@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "tam-pane/security.h"
 #include "tam-pane/server.h"
+#include <stdlib.h>
 #include <string.h>
 #include <tam.h>
 #include <unistd.h>
@@ -30,6 +31,8 @@ static const char *const UNPRIVILEGED_GLOBALS[] = {
 	"wp_fractional_scale_manager_v1",
 	"wp_presentation",
 	"zwp_idle_inhibit_manager_v1",
+	"wp_cursor_shape_manager_v1",
+	"zxdg_output_manager_v1",
 };
 
 static const char *const PRIVILEGED_GLOBALS[] = {
@@ -115,6 +118,13 @@ static bool global_filter(const struct wl_client *client,
 		return false;
 	if (name && strcmp(name, "ext_session_lock_manager_v1") == 0)
 		return tp_security_allow_session_lock(s, client);
+	if (name &&
+		(strcmp(name, "zwlr_screencopy_manager_v1") == 0 ||
+		 strcmp(name, "ext_image_copy_capture_manager_v1") == 0 ||
+		 strcmp(name, "ext_output_image_capture_source_manager_v1") == 0 ||
+		 strcmp(name, "ext_foreign_toplevel_image_capture_source_manager_v1") ==
+			 0))
+		return tp_security_allow_capture(s, client);
 	return true;
 }
 
@@ -172,7 +182,67 @@ bool tp_security_allow_session_lock(const struct tp_server *s,
 	return s && client && s->locker_client == client;
 }
 
+struct tp_capture_client {
+	struct wl_list link; /* tp_server.capture_clients */
+	struct wl_client *client;
+	struct wl_listener destroy;
+};
+
+static void on_capture_client_destroy(struct wl_listener *l, void *data) {
+	struct tp_capture_client *cc = wl_container_of(l, cc, destroy);
+	wl_list_remove(&cc->destroy.link);
+	wl_list_remove(&cc->link);
+	free(cc);
+}
+
+bool tp_security_add_capture_client(struct tp_server *s,
+									struct wl_client *client) {
+	if (!s || !client)
+		return false;
+	struct tp_capture_client *cc;
+	wl_list_for_each(cc, &s->capture_clients, link) {
+		if (cc->client == client)
+			return true;
+	}
+	cc = calloc(1, sizeof(*cc));
+	if (!cc)
+		return false;
+	cc->client = client;
+	cc->destroy.notify = on_capture_client_destroy;
+	wl_client_add_destroy_listener(client, &cc->destroy);
+	wl_list_insert(&s->capture_clients, &cc->link);
+	return true;
+}
+
+void tp_security_remove_capture_client(struct tp_server *s,
+									   struct wl_client *client) {
+	if (!s || !client)
+		return;
+	struct tp_capture_client *cc, *tmp;
+	wl_list_for_each_safe(cc, tmp, &s->capture_clients, link) {
+		if (cc->client == client) {
+			wl_list_remove(&cc->destroy.link);
+			wl_list_remove(&cc->link);
+			free(cc);
+			return;
+		}
+	}
+}
+
+bool tp_security_allow_capture(const struct tp_server *s,
+							   const struct wl_client *client) {
+	if (!s || !client)
+		return false;
+	const struct tp_capture_client *cc;
+	wl_list_for_each(cc, &s->capture_clients, link) {
+		if (cc->client == client)
+			return true;
+	}
+	return false;
+}
+
 bool tp_security_init(struct tp_server *s) {
+	wl_list_init(&s->capture_clients);
 	s->security_context_mgr =
 		wlr_security_context_manager_v1_create(s->display);
 	if (!s->security_context_mgr) {
@@ -188,4 +258,12 @@ void tp_security_finish(struct tp_server *s) {
 		return;
 	tp_security_set_shell_client(s, NULL);
 	tp_security_set_locker_client(s, NULL);
+	if (s->capture_clients.next) {
+		struct tp_capture_client *cc, *tmp;
+		wl_list_for_each_safe(cc, tmp, &s->capture_clients, link) {
+			wl_list_remove(&cc->destroy.link);
+			wl_list_remove(&cc->link);
+			free(cc);
+		}
+	}
 }

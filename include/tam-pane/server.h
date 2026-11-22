@@ -35,6 +35,14 @@ struct wlr_ext_workspace_manager_v1;
 struct wlr_idle_notifier_v1;
 struct wlr_idle_inhibit_manager_v1;
 struct wlr_output_power_manager_v1;
+struct wlr_screencopy_manager_v1;
+struct wlr_ext_image_copy_capture_manager_v1;
+struct wlr_ext_output_image_capture_source_manager_v1;
+struct wlr_ext_foreign_toplevel_image_capture_source_manager_v1;
+struct wlr_xdg_output_manager_v1;
+struct wlr_output_manager_v1;
+struct wlr_gamma_control_manager_v1;
+struct wlr_cursor_shape_manager_v1;
 struct wlr_xcursor_manager;
 struct wlr_xdg_shell;
 struct wlr_layer_shell_v1;
@@ -114,6 +122,7 @@ struct tp_server {
 	struct wl_listener shell_client_destroy;
 	struct wl_client *locker_client; /* granted ext_session_lock_manager_v1 */
 	struct wl_listener locker_client_destroy;
+	struct wl_list capture_clients; /* tp_capture_client.link */
 
 	struct wlr_foreign_toplevel_manager_v1 *foreign_toplevel_mgr;
 	struct wlr_ext_foreign_toplevel_list_v1 *ext_foreign_toplevel_list;
@@ -139,6 +148,20 @@ struct tp_server {
 	struct wlr_output_power_manager_v1 *output_power_mgr;
 	struct wl_listener output_power_set_mode;
 
+	struct wlr_screencopy_manager_v1 *screencopy_mgr;
+	struct wlr_ext_image_copy_capture_manager_v1 *image_copy_capture_mgr;
+	struct wlr_ext_output_image_capture_source_manager_v1 *output_capture_source_mgr;
+	struct wlr_ext_foreign_toplevel_image_capture_source_manager_v1
+		*toplevel_capture_source_mgr;
+	struct wl_listener new_toplevel_capture_request;
+
+	struct wlr_xdg_output_manager_v1 *xdg_output_mgr;
+	struct wlr_output_manager_v1 *output_mgr;
+	struct wl_listener output_mgr_apply;
+	struct wl_listener output_mgr_test;
+	bool output_mgmt_applying;
+	struct wlr_gamma_control_manager_v1 *gamma_mgr;
+
 	struct wlr_seat *seat;
 	struct wl_list keyboards; /* tp_keyboard.link */
 	struct wl_listener new_input;
@@ -147,6 +170,9 @@ struct tp_server {
 
 	struct wlr_cursor *cursor;
 	struct wlr_xcursor_manager *cursor_mgr;
+	struct wlr_cursor_shape_manager_v1 *cursor_shape_mgr;
+	struct wl_listener request_cursor_shape;
+	const char *cursor_shape_name;
 	struct wl_listener cursor_motion;
 	struct wl_listener cursor_motion_absolute;
 	struct wl_listener cursor_button;

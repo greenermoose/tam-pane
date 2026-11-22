@@ -1,6 +1,6 @@
 # tam-pane Lua API (`arch/lua-api.md`)
 
-**Status:** 0.1.0–0.1.19 shipped and accepted (Phase P2 + R1 hardening); 0.2.0 adds `tp.lock(...)` and the `tp.bind(..., { locked = true })` binding gate.
+**Status:** 0.1.0–0.1.19 shipped and accepted (Phase P2 + R1 hardening); 0.2.0 adds `tp.lock(...)` and the `tp.bind(..., { locked = true })` binding gate; 0.2.1 adds `tp.capture(...)`.
 
 tam-pane embeds **Lua 5.5.1** statically from `third_party/lua/` with no
 dynamic symbol exports (`lua_*` symbols stay internal to `tam-pane`).
@@ -171,6 +171,22 @@ Wayland `WAYLAND_SOCKET` and grants that exact client connection access to
 `ext_session_lock_manager_v1` (which is hidden from all other clients). Accepts
 the same string or argv-table forms as `tp.spawn`, and is refused while the
 config loads.
+
+### `tp.capture(cmd)` and `tp.capture{prog, arg, ...}` (0.2.1)
+
+Launches a screen-capture tool or portal backend (e.g.
+`tp.capture{"grim", "/tmp/shot.png"}` or
+`tp.capture{"/usr/lib/xdg-desktop-portal-wlr"}`) over a pre-created Wayland
+`WAYLAND_SOCKET` and grants that exact client connection access to the raw
+capture globals (`zwlr_screencopy_manager_v1`,
+`ext_image_copy_capture_manager_v1`,
+`ext_output_image_capture_source_manager_v1`, and
+`ext_foreign_toplevel_image_capture_source_manager_v1`), which are hidden from
+all other clients. Multiple concurrent capture connections are supported and
+each grant is revoked automatically on disconnect. Because `WAYLAND_SOCKET` is
+consumed by one Wayland client, launch a single capture client per `tp.capture`
+call. Accepts the same string or argv-table forms as `tp.spawn`, and is refused
+while the config loads.
 
 ### `tp.unbind(chord)`
 

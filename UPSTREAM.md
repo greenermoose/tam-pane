@@ -72,13 +72,20 @@ updated with `tools/pull-references` (see `ideas/sources`):
 
 - **tam-pane files:** `protocols/wlr-layer-shell-unstable-v1.xml`,
   `protocols/wlr-foreign-toplevel-management-unstable-v1.xml`,
-  `protocols/wlr-output-power-management-unstable-v1.xml`
-- **Source:** MangoWM `protocols/` (wlroots protocol files), commit
-  `5ba74a95`. Permissive notices kept in each file.
+  `protocols/wlr-output-power-management-unstable-v1.xml`,
+  `protocols/wlr-screencopy-unstable-v1.xml`,
+  `protocols/wlr-output-management-unstable-v1.xml`,
+  `protocols/wlr-gamma-control-unstable-v1.xml`
+- **Source:** MangoWM `protocols/` commit `5ba74a95` (layer-shell,
+  foreign-toplevel, output-power) and Hyprland `protocols/` commit
+  `f3e0768` (screencopy, output-management, gamma-control; upstream
+  `wlr-protocols` MIT/permissive notices kept in each file).
 - **How:** Copied unchanged.
 - **Why:** Panels/bars/launchers (`layer-shell`, 0.0.5), window lists
-  (`foreign-toplevel`, 0.2.0), and DPMS output power (`output-power`,
-  0.2.0) need them.
+  (`foreign-toplevel`, 0.2.0), DPMS output power (`output-power`, 0.2.0),
+  screen capture (`screencopy`, 0.2.1), runtime output configuration
+  (`output-management`, 0.2.1), and gamma ramps (`gamma-control`, 0.2.1)
+  need them.
 
 ### Lua 5.5.1 interpreter
 

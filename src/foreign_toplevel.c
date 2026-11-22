@@ -128,6 +128,8 @@ void tp_foreign_toplevel_map(struct tp_client *c) {
 	};
 	ft->ext_handle = wlr_ext_foreign_toplevel_handle_v1_create(
 		s->ext_foreign_toplevel_list, &ext_state);
+	if (ft->ext_handle)
+		ft->ext_handle->data = c;
 
 	c->foreign = ft;
 }
@@ -143,8 +145,10 @@ void tp_foreign_toplevel_unmap(struct tp_client *c) {
 		wl_list_remove(&ft->request_close.link);
 		wlr_foreign_toplevel_handle_v1_destroy(ft->wlr_handle);
 	}
-	if (ft->ext_handle)
+	if (ft->ext_handle) {
+		ft->ext_handle->data = NULL;
 		wlr_ext_foreign_toplevel_handle_v1_destroy(ft->ext_handle);
+	}
 	free(ft);
 }
 

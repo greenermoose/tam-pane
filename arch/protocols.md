@@ -1,4 +1,4 @@
-# Wayland protocols (0.2.0)
+# Wayland protocols (0.2.1)
 
 Every Wayland global `tam-pane` advertises must be listed here with its
 reason and its classification (`unprivileged` or `privileged`), and must
@@ -30,11 +30,17 @@ classification here and in `src/security.c` in the same commit.
     `tp_server.locker_client`). Hidden from all other clients, including
     direct same-UID connections.
   - **Raw capture (0.2.1)** (`zwlr_screencopy_manager_v1`,
-    `ext_image_copy_capture_manager_v1`, and capture-source companions):
-    granted to the portal backend plus any explicitly launched
-    screenshot tool.
+    `ext_image_copy_capture_manager_v1`,
+    `ext_output_image_capture_source_manager_v1`,
+    `ext_foreign_toplevel_image_capture_source_manager_v1`): granted only
+    to connections authorized via `tp.capture(...)` / `tp_capture_launch*`
+    (pre-created `socketpair` + `wl_client_create` + `WAYLAND_SOCKET`,
+    tracked in `tp_server.capture_clients`, automatically revoked on
+    disconnect) — e.g. a portal backend started in `startup` plus
+    explicitly launched screenshot tools (`grim`). Hidden from all other
+    clients, including direct same-UID connections.
 
-## Active globals (0.2.0)
+## Active globals (0.2.1)
 
 | Interface | Class | Why it is here |
 | --- | --- | --- |
@@ -53,6 +59,8 @@ classification here and in `src/security.c` in the same commit.
 | `wp_fractional_scale_manager_v1` | unprivileged | HiDPI fractional scale reporting |
 | `wp_presentation` | unprivileged | Frame presentation timing (GTK 4 nested, B6) |
 | `zwp_idle_inhibit_manager_v1` | unprivileged | Visibility-gated idle inhibition for media players and browsers (ignored while locked) |
+| `wp_cursor_shape_manager_v1` | unprivileged | Named pointer cursor shapes on the focused pointer seat |
+| `zxdg_output_manager_v1` | unprivileged | Logical output geometry and names (`grim`, `slurp`, fractional-scale clients) |
 | `wp_security_context_manager_v1` | privileged | Sandbox engines register restricted listen sockets; hidden from sandboxed clients per spec |
 | `zwlr_layer_shell_v1` | privileged | Panels, bars, wallpapers, launchers; exclusive OVERLAY keyboard focus is reserved for the configured shell connection |
 | `zwlr_foreign_toplevel_manager_v1` | privileged | Window list and activation/fullscreen/close control for bars and shells |
@@ -61,17 +69,17 @@ classification here and in `src/security.c` in the same commit.
 | `ext_session_lock_manager_v1` | privileged | Granted exclusively to the locker launched by `tam-pane` via `WAYLAND_SOCKET` |
 | `ext_idle_notifier_v1` | privileged | Idle notifications for lock/power daemons |
 | `zwlr_output_power_manager_v1` | privileged | DPMS output power control |
+| `zwlr_screencopy_manager_v1` | privileged | Raw output capture; granted only to `tp.capture` connections |
+| `ext_image_copy_capture_manager_v1` | privileged | Standard frame capture; granted only to `tp.capture` connections |
+| `ext_output_image_capture_source_manager_v1` | privileged | Output capture-source companion; granted only to `tp.capture` connections |
+| `ext_foreign_toplevel_image_capture_source_manager_v1` | privileged | Foreign-toplevel capture-source companion; granted only to `tp.capture` connections (refused while locked) |
+| `zwlr_output_manager_v1` | privileged | Runtime monitor layout, mode, scale, and transform configuration |
+| `zwlr_gamma_control_manager_v1` | privileged | Night light / per-output gamma ramps (wired through `wlr_scene`) |
 
 ## Planned P3 globals (pre-classified in `src/security.c`)
 
 | Interface | Class | Target | Notes |
 | --- | --- | --- | --- |
-| `zwlr_screencopy_manager_v1` | privileged | 0.2.1 | Raw capture: portal backend + explicitly launched screenshot tool |
-| `ext_image_copy_capture_manager_v1` | privileged | 0.2.1 | Raw capture: portal backend + explicitly launched screenshot tool |
-| `ext_output_image_capture_source_manager_v1` | privileged | 0.2.1 | Capture-source companion for raw capture |
-| `ext_foreign_toplevel_image_capture_source_manager_v1` | privileged | 0.2.1 | Capture-source companion for raw capture |
-| `zwlr_output_manager_v1` | privileged | 0.2.1 | Monitor layout configuration |
-| `zwlr_gamma_control_manager_v1` | privileged | 0.2.1 | Night light / gamma ramps |
 | `zwlr_data_control_manager_v1` | privileged | 0.2.2 | Unfocused clipboard access (`wl-clipboard`) |
 | `ext_data_control_manager_v1` | privileged | 0.2.2 | Replacement clipboard protocol |
 | `zwp_input_method_manager_v2` | privileged | 0.2.2 | Input method daemon (`fcitx5`) |

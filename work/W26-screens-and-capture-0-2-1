@@ -1,0 +1,58 @@
+W26 SCREENS AND CAPTURE (0.2.1)
+
+Date: 2026-11-22
+AI harness: Antigravity 1.5.14
+AI model: gemini-4-neon
+
+GUIDANCE
+
+  Fred: "/plan Do the next work slice for tam-pane."
+  Fred: "Approved. Proceed."
+  Fred: "Pass. Commit."
+
+DONE
+
+  - 0.2.1 (Phase P3): implemented screens and capture protocols with
+    explicit classification and per-role raw-capture authorization:
+    - Raw capture (src/capture.c, src/security.c, src/lua.c):
+      zwlr_screencopy_manager_v1, ext_image_copy_capture_manager_v1,
+      ext_output_image_capture_source_manager_v1, and
+      ext_foreign_toplevel_image_capture_source_manager_v1 (refused while
+      locked; scene-node capture source cached per client and cleared on
+      destroy). All four globals are hidden from ordinary clients
+      (including direct same-UID clients) and granted only to connections
+      authorized via tp_security_add_capture_client() / tp.capture(...)
+      over WAYLAND_SOCKET, tracked in tp_server.capture_clients and
+      revoked automatically on disconnect.
+    - Output management and gamma control (src/output_mgmt.c):
+      zwlr_output_manager_v1 (head broadcast on add/remove/layout/state/
+      power changes; test and apply via wlr_backend_test/commit plus
+      output-layout updates), zwlr_gamma_control_manager_v1 wired to
+      wlr_scene_set_gamma_control_manager_v1, and zxdg_output_manager_v1
+      (unprivileged, needed by grim and slurp for logical output geometry).
+    - Cursor shape (src/input/pointer.c): wp_cursor_shape_manager_v1
+      (unprivileged) handling pointer set_shape for the focused pointer
+      seat client (ignored when unfocused or during grabs).
+  - Added protocols/wlr-screencopy-unstable-v1.xml,
+    protocols/wlr-output-management-unstable-v1.xml, and
+    protocols/wlr-gamma-control-unstable-v1.xml (recorded in UPSTREAM.md),
+    updated arch/protocols.md, arch/lua-api.md, arch/data-structures.md,
+    ROADMAP.md, plans/P3-daily-parity.md, VERSION (0.2.1).
+  - Failing-first tests confirmed 6 checks failed before implementation;
+    full automated suite now passes: 28 tag, 143 dwindle, 509 Lua, 4
+    smoke, 582 headless input, nm -D symbol check, test_nested_input.py,
+    plus real grim headless capture/denial verification.
+    0.2.1 binary SHA-256:
+    f62e0c489523ca09600896cfdaf6eecde8950c015f147b04ac77826d20342083.
+  - Added sandbox/demo-0.2.1 and sandbox/demo-0.2.1.lua for Fred's nested
+    check using real grim. Fred ran sandbox/demo-0.2.1 and accepted 0.2.1
+    ("Pass. Commit.").
+
+FAILED
+
+  - Nothing.
+
+HANDOFF
+
+  - 0.2.1 is accepted. Next in P3 is 0.2.2 (text-input v3, input-method
+    v2, xdg-activation, primary selection, data control, xdg-decoration).

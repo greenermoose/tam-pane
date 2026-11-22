@@ -37,6 +37,8 @@ enum {
 typedef void (*tp_lua_action_fn)(const struct tp_action *act, void *userdata);
 typedef void (*tp_lua_lock_fn)(const char *cmd, void *userdata);
 typedef void (*tp_lua_lock_argv_fn)(const char *const argv[], void *userdata);
+typedef void (*tp_lua_capture_fn)(const char *cmd, void *userdata);
+typedef void (*tp_lua_capture_argv_fn)(const char *const argv[], void *userdata);
 
 struct tp_lua *tp_lua_create(void);
 void tp_lua_destroy(struct tp_lua *lua);
@@ -100,6 +102,12 @@ void tp_lua_set_action_fn(struct tp_lua *lua, tp_lua_action_fn fn,
 void tp_lua_set_lock_fn(struct tp_lua *lua, tp_lua_lock_fn fn, void *userdata);
 void tp_lua_set_lock_argv_fn(struct tp_lua *lua, tp_lua_lock_argv_fn fn,
 							 void *userdata);
+
+/* Attach the capture launch handlers used by tp.capture(cmd) and tp.capture{...}. */
+void tp_lua_set_capture_fn(struct tp_lua *lua, tp_lua_capture_fn fn,
+						   void *userdata);
+void tp_lua_set_capture_argv_fn(struct tp_lua *lua, tp_lua_capture_argv_fn fn,
+								void *userdata);
 
 /*
  * Match and execute the active binding for (mods, sym) using TP_MOD_* bits.

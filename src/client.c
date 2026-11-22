@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "tam-pane/client.h"
+#include "tam-pane/capture.h"
 #include "tam-pane/focus.h"
 #include "tam-pane/foreign_toplevel.h"
 #include "tam-pane/idle.h"
@@ -283,6 +284,7 @@ static void on_unmap(struct wl_listener *l, void *data) {
 
 static void on_destroy(struct wl_listener *l, void *data) {
 	struct tp_client *c = wl_container_of(l, c, destroy);
+	tp_capture_client_finish(c);
 	tp_foreign_toplevel_unmap(c);
 	if (c->server->focused_client == c)
 		c->server->focused_client = NULL;

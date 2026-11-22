@@ -15,6 +15,7 @@
 #include <tam.h>
 #include <time.h>
 #include <wlr/types/wlr_cursor.h>
+#include <wlr/types/wlr_cursor_shape_v1.h>
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/types/wlr_keyboard.h>
 #include <wlr/types/wlr_layer_shell_v1.h>
@@ -46,6 +47,7 @@ void tp_pointer_refocus(struct tp_server *s, uint32_t time_msec) {
 	double sx = 0, sy = 0;
 	tp_client_at(s, s->cursor->x, s->cursor->y, &surface, &sx, &sy);
 	if (!surface) {
+		s->cursor_shape_name = "default";
 		wlr_cursor_set_xcursor(s->cursor, s->cursor_mgr, "default");
 		wlr_seat_pointer_clear_focus(s->seat);
 		return;
@@ -60,8 +62,10 @@ void tp_pointer_cancel_grab(struct tp_server *s, struct tp_client *c) {
 	if (c && s->grab.client != c)
 		return;
 	s->grab = (struct tp_pointer_grab){0};
-	if (s->cursor && s->cursor_mgr)
+	if (s->cursor && s->cursor_mgr) {
+		s->cursor_shape_name = "default";
 		wlr_cursor_set_xcursor(s->cursor, s->cursor_mgr, "default");
+	}
 	if (s->stopping || !s->cursor || !s->seat)
 		return;
 	tp_pointer_refocus_now(s);
@@ -304,6 +308,22 @@ static void on_frame(struct wl_listener *l, void *data) {
 	wlr_seat_pointer_notify_frame(s->seat);
 }
 
+static void on_request_cursor_shape(struct wl_listener *l, void *data) {
+	struct tp_server *s = wl_container_of(l, s, request_cursor_shape);
+	struct wlr_cursor_shape_manager_v1_request_set_shape_event *ev = data;
+	if (ev->device_type != WLR_CURSOR_SHAPE_MANAGER_V1_DEVICE_TYPE_POINTER)
+		return;
+	if (s->grab.mode != TP_GRAB_NONE)
+		return;
+	if (ev->seat_client != s->seat->pointer_state.focused_client)
+		return;
+	const char *name = wlr_cursor_shape_v1_name(ev->shape);
+	if (name) {
+		s->cursor_shape_name = name;
+		wlr_cursor_set_xcursor(s->cursor, s->cursor_mgr, name);
+	}
+}
+
 bool tp_pointer_init(struct tp_server *s) {
 	s->cursor = wlr_cursor_create();
 	s->cursor_mgr = wlr_xcursor_manager_create(
@@ -313,6 +333,15 @@ bool tp_pointer_init(struct tp_server *s) {
 		return false;
 	}
 	wlr_cursor_attach_output_layout(s->cursor, s->output_layout);
+
+	s->cursor_shape_mgr = wlr_cursor_shape_manager_v1_create(s->display, 1);
+	if (!s->cursor_shape_mgr) {
+		tam_log_error("cannot create wp_cursor_shape_manager_v1");
+		return false;
+	}
+	s->request_cursor_shape.notify = on_request_cursor_shape;
+	wl_signal_add(&s->cursor_shape_mgr->events.request_set_shape,
+				  &s->request_cursor_shape);
 
 	s->cursor_motion.notify = on_motion;
 	wl_signal_add(&s->cursor->events.motion, &s->cursor_motion);
@@ -349,9 +378,9 @@ void tp_pointer_apply_settings(struct tp_server *s) {
 }
 
 void tp_pointer_finish(struct tp_server *s) {
-	struct wl_listener *ls[] = {&s->cursor_motion, &s->cursor_motion_absolute,
-								&s->cursor_button, &s->cursor_axis,
-								&s->cursor_frame};
+	struct wl_listener *ls[] = {&s->request_cursor_shape, &s->cursor_motion,
+								&s->cursor_motion_absolute, &s->cursor_button,
+								&s->cursor_axis, &s->cursor_frame};
 	for (size_t i = 0; i < sizeof(ls) / sizeof(ls[0]); i++) {
 		if (ls[i]->notify)
 			wl_list_remove(&ls[i]->link);

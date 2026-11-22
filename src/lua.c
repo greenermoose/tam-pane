@@ -467,6 +467,27 @@ static int l_tp_lock(lua_State *L) {
 	return 0;
 }
 
+static void call_capture_argv(const char *const argv[], void *userdata) {
+	struct tp_lua *lua = userdata;
+	if (lua && lua->capture_argv_fn)
+		lua->capture_argv_fn(argv, lua->capture_argv_userdata);
+}
+
+static int l_tp_capture(lua_State *L) {
+	struct tp_lua *lua = tp_lua_from_state(L);
+	if (lua && lua->staging)
+		return luaL_error(L, "tp.capture cannot run while the config loads");
+	if (lua_type(L, 1) == LUA_TTABLE)
+		return collect_argv_and_call(L, "tp.capture", call_capture_argv, lua);
+	size_t len = 0;
+	const char *cmd = luaL_checklstring(L, 1, &len);
+	if (len == 0)
+		return luaL_error(L, "tp.capture: command must not be empty");
+	if (lua && lua->capture_fn)
+		lua->capture_fn(cmd, lua->capture_userdata);
+	return 0;
+}
+
 static int l_tp_read_file(lua_State *L) {
 	const char *path = luaL_checkstring(L, 1);
 	size_t cap = TP_LUA_READ_FILE_DEFAULT_CAP;
@@ -511,6 +532,7 @@ static const luaL_Reg tp_funcs[] = {
 	{"config", l_tp_config},
 	{"spawn", l_tp_spawn},
 	{"lock", l_tp_lock},
+	{"capture", l_tp_capture},
 	{"read_file", l_tp_read_file},
 	{NULL, NULL},
 };
@@ -600,6 +622,22 @@ void tp_lua_set_lock_argv_fn(struct tp_lua *lua, tp_lua_lock_argv_fn fn,
 		return;
 	lua->lock_argv_fn = fn;
 	lua->lock_argv_userdata = userdata;
+}
+
+void tp_lua_set_capture_fn(struct tp_lua *lua, tp_lua_capture_fn fn,
+						   void *userdata) {
+	if (!lua)
+		return;
+	lua->capture_fn = fn;
+	lua->capture_userdata = userdata;
+}
+
+void tp_lua_set_capture_argv_fn(struct tp_lua *lua, tp_lua_capture_argv_fn fn,
+								void *userdata) {
+	if (!lua)
+		return;
+	lua->capture_argv_fn = fn;
+	lua->capture_argv_userdata = userdata;
 }
 
 bool tp_lua_default_config_path(char *out, size_t out_size) {
@@ -778,6 +816,10 @@ bool tp_lua_reload_file(struct tp_lua **lua_slot, const char *path,
 		next->lock_userdata = (*lua_slot)->lock_userdata;
 		next->lock_argv_fn = (*lua_slot)->lock_argv_fn;
 		next->lock_argv_userdata = (*lua_slot)->lock_argv_userdata;
+		next->capture_fn = (*lua_slot)->capture_fn;
+		next->capture_userdata = (*lua_slot)->capture_userdata;
+		next->capture_argv_fn = (*lua_slot)->capture_argv_fn;
+		next->capture_argv_userdata = (*lua_slot)->capture_argv_userdata;
 		next->action_fn = (*lua_slot)->action_fn;
 		next->action_userdata = (*lua_slot)->action_userdata;
 	}

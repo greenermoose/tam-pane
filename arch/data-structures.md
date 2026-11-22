@@ -1,4 +1,4 @@
-# Data structures (0.2.0)
+# Data structures (0.2.1)
 
 This file describes the structures as they are built today. Update it in
 the same commit as any change to them.
@@ -31,13 +31,16 @@ the same commit as any change to them.
     focus.
   - `security_context_mgr` (`struct wlr_security_context_manager_v1`),
     `shell_client` (`struct wl_client *`, cleared on disconnect via
-    `shell_client_destroy`), and `locker_client` (`struct wl_client *`,
-    cleared on disconnect via `locker_client_destroy`, 0.2.0) for the
+    `shell_client_destroy`), `locker_client` (`struct wl_client *`,
+    cleared on disconnect via `locker_client_destroy`, 0.2.0), and
+    `capture_clients` (`struct wl_list` of authorized raw-capture
+    connections, each automatically removed on disconnect, 0.2.1) for the
     global filter and per-role policies (`src/security.c`,
     `arch/protocols.md`). Privileged globals are denied to sandboxed
     clients and cross-UID connections, exclusive OVERLAY keyboard focus is
-    reserved for `shell_client`, and `ext_session_lock_manager_v1` is
-    granted exclusively to `locker_client`.
+    reserved for `shell_client`, `ext_session_lock_manager_v1` is granted
+    exclusively to `locker_client`, and raw capture globals are granted
+    only to `capture_clients`.
   - P3 shell protocol managers (0.2.0): `foreign_toplevel_mgr` and
     `ext_foreign_toplevel_list` (`src/foreign_toplevel.c`),
     `workspace_mgr` (`src/workspace.c`), `session_lock_mgr` +
@@ -45,6 +48,12 @@ the same commit as any change to them.
     (`src/session_lock.c`), `idle_notifier` + `idle_inhibit_mgr` +
     `idle_inhibitors` (`src/idle.c`), and `output_power_mgr`
     (`src/output_power.c`).
+  - P3 screens and capture managers (0.2.1): `screencopy_mgr`,
+    `image_copy_capture_mgr`, `output_capture_source_mgr`, and
+    `toplevel_capture_source_mgr` (`src/capture.c`); `xdg_output_mgr`,
+    `output_mgr` (with `output_mgmt_applying` guard), and `gamma_mgr`
+    wired to `wlr_scene` (`src/output_mgmt.c`); and `cursor_shape_mgr`
+    with `cursor_shape_name` (`src/input/pointer.c`).
 - **Compositor keys:** `change_vt` switches VT for Ctrl+Alt+F-keys. It is
   set only when `session` exists (DRM), and tests may substitute their
   own. `quit_requested` is set by `tp_server_quit`, which the emergency

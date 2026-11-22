@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "tam-pane/server.h"
+#include "tam-pane/capture.h"
 #include "tam-pane/client.h"
 #include "tam-pane/foreign_toplevel.h"
 #include "tam-pane/idle.h"
@@ -8,6 +9,7 @@
 #include "tam-pane/layout/arrange.h"
 #include "tam-pane/lua.h"
 #include "tam-pane/monitor.h"
+#include "tam-pane/output_mgmt.h"
 #include "tam-pane/output_power.h"
 #include "tam-pane/security.h"
 #include "tam-pane/session_lock.h"
@@ -68,6 +70,14 @@ static void server_lock_argv(const char *const argv[], void *userdata) {
 	tp_session_lock_launch_argv(userdata, argv);
 }
 
+static void server_capture(const char *cmd, void *userdata) {
+	tp_capture_launch(userdata, cmd);
+}
+
+static void server_capture_argv(const char *const argv[], void *userdata) {
+	tp_capture_launch_argv(userdata, argv);
+}
+
 bool tp_server_init(struct tp_server *s) {
 	wl_list_init(&s->monitors);
 	wl_list_init(&s->clients);
@@ -81,6 +91,8 @@ bool tp_server_init(struct tp_server *s) {
 		tp_lua_set_action_fn(s->lua, server_run_action, s);
 		tp_lua_set_lock_fn(s->lua, server_lock, s);
 		tp_lua_set_lock_argv_fn(s->lua, server_lock_argv, s);
+		tp_lua_set_capture_fn(s->lua, server_capture, s);
+		tp_lua_set_capture_argv_fn(s->lua, server_capture_argv, s);
 	}
 
 	s->display = wl_display_create();
@@ -132,7 +144,8 @@ bool tp_server_init(struct tp_server *s) {
 	s->layer_shell = wlr_layer_shell_v1_create(s->display, 4);
 	if (!tp_security_init(s) || !tp_foreign_toplevel_init(s) ||
 		!tp_workspace_init(s) || !tp_session_lock_init(s) ||
-		!tp_idle_init(s) || !tp_output_power_init(s))
+		!tp_idle_init(s) || !tp_output_power_init(s) || !tp_capture_init(s) ||
+		!tp_output_mgmt_init(s))
 		return false;
 
 	tp_monitors_init(s);
@@ -256,6 +269,8 @@ void tp_server_finish(struct tp_server *s) {
 	tp_clients_finish(s);
 	tp_layers_finish(s);
 	tp_monitors_finish(s);
+	tp_output_mgmt_finish(s);
+	tp_capture_finish(s);
 	tp_output_power_finish(s);
 	tp_idle_finish(s);
 	tp_session_lock_finish(s);

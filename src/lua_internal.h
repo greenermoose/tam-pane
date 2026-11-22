@@ -84,6 +84,10 @@ struct tp_lua {
 	void *lock_userdata;
 	tp_lua_lock_argv_fn lock_argv_fn;
 	void *lock_argv_userdata;
+	tp_lua_capture_fn capture_fn;
+	void *capture_userdata;
+	tp_lua_capture_argv_fn capture_argv_fn;
+	void *capture_argv_userdata;
 
 	tp_lua_action_fn action_fn;
 	void *action_userdata;
