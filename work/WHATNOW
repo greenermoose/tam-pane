@@ -8,7 +8,8 @@ Updated: 2026-11-21, with W23
 
 STATE
 
-  Version 0.1.16 on branch dev, a candidate with no demo: R1 finding 14
+  Version 0.1.16 on branch dev, a candidate waiting for Fred's
+  sandbox/demo-0.1.16 check: R1 finding 14
   (de-duplication) and B8 (garbled Lua error numbers). 0.1.15
   (c5ec224) was accepted on d5b85a6; B6 and B7 are Verified. Fred's
   0.1.13 check found B6 (Files crashed nested), and his 0.1.14 check
@@ -46,7 +47,8 @@ STATE
 
 NEXT
 
-  1. On Fred's word, commit "Accept 0.1.16" and mark B8 Verified.
+  1. After Fred passes demo-0.1.16, commit "Accept 0.1.16" and mark B8
+     Verified.
   2. P3, 0.2.0 (plans/P3-daily-parity.md). Begin with its "Design work
      from review R1" section: design the privileged-protocol filter
      (finding 9) and the explicit focused window (16) before 0.2.0's
@@ -57,7 +59,8 @@ NEXT
 
 WAITING FOR FRED
 
-  - His word on 0.1.16, which has no demo (W23).
+  - sandbox/demo-0.1.16: floating size, and a config error that shows
+    its numbers.
   - Whether to report GTK 4.24.1's divide by a zero refresh upstream
     (B6).
   - At the first run on real hardware (P4): the VT half of B5, and the

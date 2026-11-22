@@ -157,8 +157,14 @@ DONE
     4 smoke, nm -D, tests/test_nested_input.py). test_lua is clean
     under ASan and LeakSanitizer; the headless test has no memory
     errors.
-  - No demo: nothing a window does changed, and the error text is
-    covered by the test. Docs: ROADMAP.md, bugs/B8 and the bug index,
+  - Fred asked what to review for 0.1.16, then for a demo ("demo").
+    sandbox/demo-0.1.16 and .lua: Meta+V floats a terminal and tiles it
+    back (the merged default floating size); Meta+O appends
+    "tp.config{ gaps = 999 }" to the demo's temporary config and
+    Meta+Shift+R reloads. The launcher checks the logged error reads
+    "tp.config.gaps: 999 out of range [0, 256]" with no "%", and asks
+    y/n about the floating window. The reload path was checked
+    headless (same append, then SIGHUP): the verdict passes. Docs: ROADMAP.md, bugs/B8 and the bug index,
     R1 finding 14 status.
   - R1 findings 9, 11 and 15 to 17 written into the plans as design
     work, each placed before the version that needs it: P3 gets 9
@@ -198,7 +204,7 @@ FAILED
 
 HANDOFF
 
-  - 0.1.16 waits for Fred's word; it has no demo.
+  - 0.1.16 waits for Fred's sandbox/demo-0.1.16 check.
   - R1 is finished: every finding is fixed, became a bug, or is
     scheduled in P3 or P4. Next is P3 (0.2.0), starting with the
     privileged-protocol filter design (finding 9).

@@ -1,0 +1,70 @@
+#!/bin/sh
+# Launch tam-pane 0.1.16 nested under Hyprland to check the merged code
+# of R1 finding 14 through the default floating size, and B8: a config
+# error shows its numbers. The error is checked from the log; the
+# floating window is seen, so the launcher asks about it.
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+want=$(tr -d '[:space:]' < "$ROOT/VERSION")
+have=$("$ROOT/build/tam-pane" -v 2>/dev/null | awk '{print $2}') || true
+if [ "$have" != "$want" ]; then
+	echo "build/tam-pane is '${have:-missing}', VERSION is $want: run make first" >&2
+	exit 1
+fi
+
+TMPDIR_DEMO=$(mktemp -d "${TMPDIR:-/tmp}/tam-pane-demo-0.1.16.XXXXXX")
+trap 'rm -rf "$TMPDIR_DEMO"' EXIT INT TERM
+
+CFG="$TMPDIR_DEMO/init.lua"
+GUIDE="$TMPDIR_DEMO/guide"
+LOG="$TMPDIR_DEMO/log"
+{
+	printf 'local GUIDE = "%s"\n' "$GUIDE"
+	printf 'local CFG = "%s"\n' "$CFG"
+	cat "$ROOT/sandbox/demo-0.1.16.lua"
+} >"$CFG"
+
+cat >"$GUIDE" <<'GUIDE'
+=== tam-pane 0.1.16 demo: floating size and config error numbers ===
+
+ 1. Press Meta+Return. A terminal opens beside this guide.
+ 2. Press Meta+V. That terminal floats, centred, about half the width
+    and height of the nested window. Press Meta+V again: it tiles
+    beside the guide again.
+ 3. Press Meta+O, then Meta+Shift+R. Meta+O adds a bad line
+    (gaps = 999) to this demo's temporary config; the reload fails and
+    tam-pane keeps the previous configuration, so nothing changes.
+ 4. Press Meta+Shift+E to quit. The launcher shows the reload error and
+    checks its numbers, then asks about step 2.
+
+GUIDE
+
+"$ROOT/tools/nested-input" -c "$CFG" -s '' 2>&1 | tee "$LOG" || true
+
+echo
+status=0
+line=$(grep 'reload failed' "$LOG" | tail -1 || true)
+if [ -z "$line" ]; then
+	echo "FAIL: no reload error logged (were Meta+O and Meta+Shift+R pressed?)"
+	status=1
+else
+	echo "The reload error tam-pane logged:"
+	echo "  $line"
+	if printf '%s\n' "$line" | grep -q 'tp.config.gaps: 999 out of range \[0, 256\]' &&
+		! printf '%s\n' "$line" | grep -q '%'; then
+		echo "PASS: the error shows its numbers (before 0.1.16: '%lld ... [999, 0]')"
+	else
+		echo "FAIL: the error does not read 'tp.config.gaps: 999 out of range [0, 256]'"
+		status=1
+	fi
+fi
+
+echo
+printf 'Did the terminal float, centred at about half size, and tile again? [y/n] '
+read -r answer
+case $answer in
+y | Y | yes) echo "PASS: floating size and tiling back" ;;
+*) echo "FAIL: floating size or tiling back"; status=1 ;;
+esac
+exit "$status"
