@@ -31,6 +31,12 @@ static const char *resize_cursor_name(uint32_t edges) {
 	return "se-resize";
 }
 
+void tp_pointer_refocus_now(struct tp_server *s) {
+	struct timespec now;
+	clock_gettime(CLOCK_MONOTONIC, &now);
+	tp_pointer_refocus(s, (uint32_t)(now.tv_sec * 1000 + now.tv_nsec / 1000000));
+}
+
 void tp_pointer_refocus(struct tp_server *s, uint32_t time_msec) {
 	if (s->grab.mode != TP_GRAB_NONE)
 		return;
@@ -56,9 +62,7 @@ void tp_pointer_cancel_grab(struct tp_server *s, struct tp_client *c) {
 		wlr_cursor_set_xcursor(s->cursor, s->cursor_mgr, "default");
 	if (s->stopping || !s->cursor || !s->seat)
 		return;
-	struct timespec now;
-	clock_gettime(CLOCK_MONOTONIC, &now);
-	tp_pointer_refocus(s, (uint32_t)(now.tv_sec * 1000 + now.tv_nsec / 1000000));
+	tp_pointer_refocus_now(s);
 }
 
 static void update_grab(struct tp_server *s) {

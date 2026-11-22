@@ -39,15 +39,6 @@ bool tp_event_kind_from_name(const char *name, enum tp_event_kind *out) {
 	return false;
 }
 
-static unsigned int first_tag_num(tp_tags_t t) {
-	t &= TP_TAG_ALL;
-	for (unsigned int i = 1; i <= TP_TAG_COUNT; i++) {
-		if (t & (1u << (i - 1u)))
-			return i;
-	}
-	return 0;
-}
-
 /* ---- Hook list helpers ---- */
 
 static void hook_list_clear(lua_State *L, struct tp_lua_hook_list *list) {
@@ -127,7 +118,7 @@ static void push_window_fields(lua_State *L, const struct tp_event_window *w) {
 	lua_setfield(L, -2, "monitor");
 	lua_pushinteger(L, (lua_Integer)w->tags);
 	lua_setfield(L, -2, "tags");
-	lua_pushinteger(L, (lua_Integer)first_tag_num(w->tags));
+	lua_pushinteger(L, (lua_Integer)tp_tags_first(w->tags));
 	lua_setfield(L, -2, "tag");
 	lua_pushboolean(L, w->floating);
 	lua_setfield(L, -2, "floating");
@@ -166,7 +157,7 @@ static void push_event_table(lua_State *L, const struct tp_event *ev) {
 		lua_setfield(L, -2, "tags");
 		lua_pushinteger(L, (lua_Integer)ev->tag.prev_tags);
 		lua_setfield(L, -2, "prev_tags");
-		lua_pushinteger(L, (lua_Integer)first_tag_num(ev->tag.tags));
+		lua_pushinteger(L, (lua_Integer)tp_tags_first(ev->tag.tags));
 		lua_setfield(L, -2, "tag");
 		break;
 	case TP_EVENT_MONITOR_ADD:

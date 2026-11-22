@@ -141,6 +141,44 @@ static void test_config_and_fallback(void) {
 							  TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
 							  sizeof(err)));
 	CHECK(strstr(err, "boom") != NULL);
+
+	/* One integer check for config, rules and dispatchers (R1 finding
+	 * 14): the same two messages everywhere. Every message is fully
+	 * formatted: lua_pushfstring knows only %d %I %f %s %c %p %U, and
+	 * before 0.1.16 %lld, %u, %zu and %.2f reached the user (B8). */
+	{
+		static const struct {
+			const char *src, *want;
+		} cases[] = {
+			{"tp.config{ gaps = 999 }",
+			 "tp.config.gaps: 999 out of range [0, 256]"},
+			{"tp.config{ gaps = 1.5 }", "tp.config.gaps: expected integer"},
+			{"tp.dsp.tag('view', 10)", "tp.dsp.tag: 10 out of range [1, 9]"},
+			{"tp.dsp.tag('view', 'x')", "tp.dsp.tag: expected integer"},
+			{"tp.rule{ match = { title = 'x' }, tag = 0 }",
+			 "tp.rule.tag: 0 out of range [1, 9]"},
+			{"tp.rule{ match = { title = 'x' }, size = { 100, 200, 3 } }",
+			 "unexpected index 3"},
+			{"tp.config{ width_bias = 100 }",
+			 "tp.config.width_bias: value out of range [0.10, 10.00]"},
+			{"tp.dsp.spawn(string.rep('x', 100000))",
+			 "tp.dsp.spawn: command too long (max "},
+			{"tp.rule{ match = { title = string.rep('x', 100000) } }",
+			 "string too long (max "},
+		};
+		for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+			out = base;
+			err[0] = '\0';
+			CHECK(!tp_lua_exec_string(lua, cases[i].src, strlen(cases[i].src),
+									  "int-check", TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+									  TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+									  sizeof(err)));
+			if (!strstr(err, cases[i].want))
+				fprintf(stderr, "int-check %zu: got '%s'\n", i, err);
+			CHECK(strstr(err, cases[i].want) != NULL);
+			CHECK(strchr(err, '%') == NULL);
+		}
+	}
 	CHECK(out.gap_inner == base.gap_inner);
 	CHECK(out.gap_outer == base.gap_outer);
 

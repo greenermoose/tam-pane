@@ -40,6 +40,8 @@ void tp_pointer_apply_settings(struct tp_server *s);
 
 /* Re-send pointer focus after windows move under a still cursor. */
 void tp_pointer_refocus(struct tp_server *s, uint32_t time_msec);
+/* The same, stamped with the current CLOCK_MONOTONIC time. */
+void tp_pointer_refocus_now(struct tp_server *s);
 
 /* End an active pointer grab if it belongs to `c` (or any client when NULL). */
 void tp_pointer_cancel_grab(struct tp_server *s, struct tp_client *c);

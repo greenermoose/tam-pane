@@ -111,19 +111,9 @@ static void copy_nonempty_str(lua_State *L, int idx, const char *ctx,
 	if (len == 0)
 		luaL_error(L, "%s: must not be empty", ctx);
 	if (len >= dst_size)
-		luaL_error(L, "%s: string too long (max %zu bytes)", ctx, dst_size - 1);
+		luaL_error(L, "%s: string too long (max %d bytes)", ctx,
+				   (int)(dst_size - 1));
 	memcpy(dst, s, len + 1);
-}
-
-static int32_t check_rule_int(lua_State *L, int idx, const char *ctx,
-							  int32_t lo, int32_t hi) {
-	if (lua_type(L, idx) != LUA_TNUMBER || !lua_isinteger(L, idx))
-		luaL_error(L, "%s: expected integer", ctx);
-	lua_Integer v = lua_tointeger(L, idx);
-	if (v < lo || v > hi)
-		luaL_error(L, "%s: %lld out of range [%d, %d]", ctx, (long long)v, lo,
-				   hi);
-	return (int32_t)v;
 }
 
 static void parse_match_table(struct tp_lua *lua, lua_State *L, int idx,
@@ -172,7 +162,7 @@ static tp_tags_t parse_tags_table(lua_State *L, int idx) {
 			lua_tointeger(L, -2) < 1)
 			luaL_error(L, "tp.rule.tags: expected array of tag numbers 1..%d",
 					   TP_TAG_COUNT);
-		int32_t t = check_rule_int(L, -1, "tp.rule.tags", 1, TP_TAG_COUNT);
+		int32_t t = tp_lua_check_int(L, -1, "tp.rule.tags", 1, TP_TAG_COUNT);
 		mask |= tp_tag_mask((unsigned int)t);
 		count++;
 		lua_pop(L, 1);
@@ -202,22 +192,22 @@ static void parse_int_pair(lua_State *L, int idx, const char *ctx,
 			lua_Integer k = lua_tointeger(L, -2);
 			saw_index = true;
 			if (k == 1) {
-				v1 = check_rule_int(L, -1, ctx, lo, hi);
+				v1 = tp_lua_check_int(L, -1, ctx, lo, hi);
 				has1 = true;
 			} else if (k == 2) {
-				v2 = check_rule_int(L, -1, ctx, lo, hi);
+				v2 = tp_lua_check_int(L, -1, ctx, lo, hi);
 				has2 = true;
 			} else {
-				luaL_error(L, "%s: unexpected index %lld", ctx, (long long)k);
+				luaL_error(L, "%s: unexpected index %I", ctx, k);
 			}
 		} else if (kt == LUA_TSTRING) {
 			const char *k = lua_tostring(L, -2);
 			saw_named = true;
 			if (strcmp(k, k1) == 0) {
-				v1 = check_rule_int(L, -1, ctx, lo, hi);
+				v1 = tp_lua_check_int(L, -1, ctx, lo, hi);
 				has1 = true;
 			} else if (strcmp(k, k2) == 0) {
-				v2 = check_rule_int(L, -1, ctx, lo, hi);
+				v2 = tp_lua_check_int(L, -1, ctx, lo, hi);
 				has2 = true;
 			} else {
 				luaL_error(L, "%s: unknown key '%s'", ctx, k);
@@ -261,7 +251,7 @@ static int l_tp_rule(lua_State *L) {
 			parse_match_table(lua, L, -1, &entry);
 			has_match = true;
 		} else if (strcmp(key, "tag") == 0) {
-			int32_t t = check_rule_int(L, -1, "tp.rule.tag", 1, TP_TAG_COUNT);
+			int32_t t = tp_lua_check_int(L, -1, "tp.rule.tag", 1, TP_TAG_COUNT);
 			entry.tags = tp_tag_mask((unsigned int)t);
 			entry.has_tags = true;
 			has_tag_single = true;

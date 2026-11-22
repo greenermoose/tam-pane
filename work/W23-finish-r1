@@ -1,11 +1,12 @@
-W23 FINISH REVIEW R1: SPLIT, FULLSCREEN, POPUPS, B6, B7 (0.1.11-0.1.15)
+W23 FINISH REVIEW R1: FIXES 0.1.11 TO 0.1.16, B6 TO B8
 
 Date: 2026-11-21
 AI harness: Claude Code 2.1.330
 AI model: claude-opus-5-5
 Commits: 9c0bf49 (0.1.11), b4a8570 (accept), ff5dc75 (0.1.12),
-         91f1fff (accept), 41ef9ad (0.1.13), 4ca7976 (0.1.14), the
-         0.1.15 commit, and the commit that last updates this record
+         91f1fff (accept), 41ef9ad (0.1.13), 4ca7976 (0.1.14), c5ec224
+         (0.1.15), d5b85a6 (accept), the 0.1.16 commit, and the commit
+         that last updates this record
 Continues: W21
 
 
@@ -136,8 +137,31 @@ DONE
     0.1.14. 370 checks pass on 0.1.15; ASan finds no memory errors.
   - 0.1.15 binary SHA-256:
     8f1a2fec892aeedab09cc2d9030de8e82782a59a604fe415844faf937a94f163
-  - 0.1.15 accepted by Fred; B6 and B7 Verified. 0.1.13 and 0.1.14
-    were never accepted on their own; 0.1.15 contains both.
+  - 0.1.15 accepted by Fred in d5b85a6; B6 and B7 Verified. 0.1.13
+    and 0.1.14 were never accepted on their own; 0.1.15 contains both.
+  - R1 finding 14 in 0.1.16, no change in what windows do:
+    default_float_size (src/client.c) replaces the two copies of the
+    default floating size; tp_pointer_refocus_now (src/input/pointer.c)
+    the two "now in ms" copies; lua_events.c uses tp_tags_first instead
+    of its own first_tag_num; tp_lua_check_int (src/lua.c, declared in
+    src/lua_internal.h) replaces check_rule_int and check_tag_num and
+    backs check_int_range.
+  - Test first, for the merged validator: tests/test_lua.c loads bad
+    configs and checks each error message. It found B8: lua_pushfstring
+    knows no %lld, %u, %zu or %.2f, and seven host messages used them,
+    so every range error was garbled ("gaps: %lld out of range [999,
+    0]"). Fixed in the same version; 13 of the new checks fail on
+    0.1.15's Lua code, and all 471 pass on 0.1.16. tp.dsp.tag's error
+    wording now matches the others.
+  - make test passes (28 tag, 143 dwindle, 471 Lua, 370 headless input,
+    4 smoke, nm -D, tests/test_nested_input.py). test_lua is clean
+    under ASan and LeakSanitizer; the headless test has no memory
+    errors.
+  - No demo: nothing a window does changed, and the error text is
+    covered by the test. Docs: ROADMAP.md, bugs/B8 and the bug index,
+    R1 finding 14 status.
+  - 0.1.16 binary SHA-256:
+    5ae4b804de0fa5d431ab296967ec413945411cf3ef0cb52cd7dd357873a8c288
 
 
 FAILED
@@ -167,7 +191,8 @@ FAILED
 
 HANDOFF
 
-  - R1 finding 14 (0.1.16) as work/WHATNOW NEXT says.
+  - 0.1.16 waits for Fred's word; it has no demo. Then R1 findings 9,
+    11 and 15 to 17 go into the P3 and P4 plans (documentation only).
   - GTK 4.24.1 divides by a refresh the protocol allows to be 0. Filing
     it upstream is Fred's decision, by the upstream engagement guide in
     config-fred-tamlinux (agent/docs/agent-guides/).

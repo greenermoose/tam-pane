@@ -6,7 +6,6 @@
 #include "tam-pane/monitor.h"
 #include "tam-pane/server.h"
 #include <stdlib.h>
-#include <time.h>
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_scene.h>
 
@@ -91,10 +90,7 @@ void tp_arrange(struct tp_monitor *m) {
 	sync_tree(m, tree);
 	tp_dwindle_layout(tree, tp_rect_inset(m->usable, s->settings.gap_outer),
 					  s->settings.gap_inner, place_tile, NULL);
-
-	struct timespec now;
-	clock_gettime(CLOCK_MONOTONIC, &now);
-	tp_pointer_refocus(s, (uint32_t)(now.tv_sec * 1000 + now.tv_nsec / 1000000));
+	tp_pointer_refocus_now(s);
 }
 
 void tp_arrange_all(struct tp_server *s) {

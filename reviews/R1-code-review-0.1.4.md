@@ -186,7 +186,10 @@ schedules are not findings here.
   `tp_client_set_floating`). The "now in ms" code is repeated,
   `first_tag_num` duplicates `tp_tags_first`, and there are three
   near-identical Lua integer validators.
-- **Status:** open
+- **Status:** fixed in 0.1.16. The float clamp was merged in 0.1.10
+  (`tp_client_carry_float`); 0.1.16 adds `default_float_size`,
+  `tp_pointer_refocus_now` and `tp_lua_check_int`, and uses
+  `tp_tags_first`. The test written for the validators found B8.
 
 ### 15. Layout runs eagerly (low)
 

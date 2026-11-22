@@ -112,6 +112,18 @@ static void on_new_popup(struct wl_listener *l, void *data) {
 
 /* ---- toplevels ---- */
 
+/* Give a floating window with no usable size half its monitor, at least
+ * the minimum. Returns whether it changed the size. */
+static bool default_float_size(struct tp_client *c) {
+	if (c->float_geom.w >= TP_FLOAT_MIN_W && c->float_geom.h >= TP_FLOAT_MIN_H)
+		return false;
+	int32_t w = c->mon->usable.w / 2;
+	int32_t h = c->mon->usable.h / 2;
+	c->float_geom.w = w < TP_FLOAT_MIN_W ? TP_FLOAT_MIN_W : w;
+	c->float_geom.h = h < TP_FLOAT_MIN_H ? TP_FLOAT_MIN_H : h;
+	return true;
+}
+
 /* Put the window in its layer and tell it whether its edges are tiled, so
  * it draws square corners and no shadows when tiled. */
 static void apply_floating(struct tp_client *c) {
@@ -185,17 +197,8 @@ static void on_map(struct wl_listener *l, void *data) {
 	if (rule.has_size) {
 		c->float_geom.w = rule.width;
 		c->float_geom.h = rule.height;
-	} else if (c->floating && c->mon &&
-			   (c->float_geom.w < TP_FLOAT_MIN_W ||
-				c->float_geom.h < TP_FLOAT_MIN_H)) {
-		int32_t w = c->mon->usable.w / 2;
-		int32_t h = c->mon->usable.h / 2;
-		if (w < TP_FLOAT_MIN_W)
-			w = TP_FLOAT_MIN_W;
-		if (h < TP_FLOAT_MIN_H)
-			h = TP_FLOAT_MIN_H;
-		c->float_geom.w = w;
-		c->float_geom.h = h;
+	} else if (c->floating && c->mon) {
+		default_float_size(c);
 	}
 
 	if (c->mon) {
@@ -371,21 +374,11 @@ void tp_client_set_floating(struct tp_client *c, bool floating) {
 		return;
 	tp_pointer_cancel_grab(c->server, c);
 	c->floating = floating;
-	if (floating && c->mon &&
-		(c->float_geom.w < TP_FLOAT_MIN_W ||
-		 c->float_geom.h < TP_FLOAT_MIN_H)) {
-		int32_t w = c->mon->usable.w / 2;
-		int32_t h = c->mon->usable.h / 2;
-		if (w < TP_FLOAT_MIN_W)
-			w = TP_FLOAT_MIN_W;
-		if (h < TP_FLOAT_MIN_H)
-			h = TP_FLOAT_MIN_H;
-		c->float_geom = (struct tp_rect){
-			c->mon->usable.x + (c->mon->usable.w - w) / 2,
-			c->mon->usable.y + (c->mon->usable.h - h) / 2,
-			w,
-			h,
-		};
+	if (floating && c->mon && default_float_size(c)) {
+		c->float_geom.x =
+			c->mon->usable.x + (c->mon->usable.w - c->float_geom.w) / 2;
+		c->float_geom.y =
+			c->mon->usable.y + (c->mon->usable.h - c->float_geom.h) / 2;
 	}
 	apply_floating(c);
 	if (c->mon)

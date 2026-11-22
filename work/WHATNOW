@@ -8,18 +8,19 @@ Updated: 2026-11-21, with W23
 
 STATE
 
-  Version 0.1.15 on branch dev (c5ec224), accepted by Fred after his
-  sandbox/demo-0.1.15 check; B6 and B7 are Verified. His 0.1.13 check
-  found B6 (Files crashed nested), and his 0.1.14 check found B7 (the
-  menu still ran off-screen: reposition was not handled), so 0.1.13
-  and 0.1.14 were not accepted on their own. 0.1.12 was accepted on 91f1fff
-  (ff5dc75), 0.1.11 on b4a8570 (9c0bf49). 0.1.10 passes the
-  automated checks, and Fred deferred his own check of it to the first
-  run on real hardware (plans/P4-dogfood-tamlinux-0.7.md). 0.1.9 was
-  accepted on 92f1b11, apart from its VT switch, which is also checked
-  in P4.
-  Earlier acceptances: 0.1.8 on 9b5f27b, 0.1.7 on 51b0425, 0.1.6 on
-  0735f35, 0.1.5 on 3b808fd, 0.1.4 (Phase P2) on 0a98a51.
+  Version 0.1.16 on branch dev, a candidate with no demo: R1 finding 14
+  (de-duplication) and B8 (garbled Lua error numbers). 0.1.15
+  (c5ec224) was accepted on d5b85a6; B6 and B7 are Verified. Fred's
+  0.1.13 check found B6 (Files crashed nested), and his 0.1.14 check
+  found B7 (the menu still ran off-screen: reposition was not
+  handled), so 0.1.13 and 0.1.14 were not accepted on their own.
+  0.1.12 was accepted on 91f1fff (ff5dc75), 0.1.11 on b4a8570
+  (9c0bf49). 0.1.10 passes the automated checks, and Fred deferred his
+  own check of it to the first run on real hardware
+  (plans/P4-dogfood-tamlinux-0.7.md). 0.1.9 was accepted on 92f1b11,
+  apart from its VT switch, which is also checked in P4. Earlier
+  acceptances: 0.1.8 on 9b5f27b, 0.1.7 on 51b0425, 0.1.6 on 0735f35,
+  0.1.5 on 3b808fd, 0.1.4 (Phase P2) on 0a98a51.
 
   Review R1 (reviews/R1-code-review-0.1.4.md) is being worked through:
   B1 to B4 verified, B5 verified apart from the VT switch. 0.1.10
@@ -28,10 +29,11 @@ STATE
   (finding 12), 0.1.12 keeps fullscreen right across map and remap
   (finding 4), 0.1.13 unconstrains xdg popups (finding 5), and 0.1.14
   adds presentation-time so GTK 4 programs run nested (B6), and 0.1.15
-  unconstrains popups again on reposition (B7). 0.1.15 binary SHA-256:
-  8f1a2fec892aeedab09cc2d9030de8e82782a59a604fe415844faf937a94f163
+  unconstrains popups again on reposition (B7). 0.1.16 merges the
+  duplicated code (finding 14) and fixes B8. 0.1.16 binary SHA-256:
+  5ae4b804de0fa5d431ab296967ec413945411cf3ef0cb52cd7dd357873a8c288
 
-  Automated checks pass: 28 tag, 143 dwindle, 444 Lua, 370 headless
+  Automated checks pass: 28 tag, 143 dwindle, 471 Lua, 370 headless
   input, 4 smoke, nm -D symbol check, tests/test_nested_input.py. Under
   ASan the headless test has no memory errors. Its 15 leaks are in the
   test client's own proxies and predate 0.1.11 (W23).
@@ -48,11 +50,7 @@ NEXT
   updated (W19 lists them). The order and design are in W23 and the
   approved plan:
 
-  1. R1 finding 14 (0.1.16): finish the de-duplication. 0.1.10 already
-     merged the float clamp (tp_client_carry_float). What is left: the
-     default floating size (on_map / tp_client_set_floating), "now in
-     ms", first_tag_num vs tp_tags_first, and the Lua integer
-     validators. No behaviour change, so no demo.
+  1. On Fred's word, commit "Accept 0.1.16" and mark B8 Verified.
   2. R1 findings 9, 11 and 15 to 17: write them into the P3 plan (9,
      15, 16, 17) and the P4 plan (11) as design work, and set their
      status lines.
@@ -61,6 +59,7 @@ NEXT
 
 WAITING FOR FRED
 
+  - His word on 0.1.16, which has no demo (W23).
   - Whether to report GTK 4.24.1's divide by a zero refresh upstream
     (B6).
   - At the first run on real hardware (P4): the VT half of B5, and the

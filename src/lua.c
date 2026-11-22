@@ -273,15 +273,23 @@ static int l_print(lua_State *L) {
 	return 0;
 }
 
+int32_t tp_lua_check_int(lua_State *L, int idx, const char *ctx, int32_t lo,
+						 int32_t hi) {
+	if (lua_type(L, idx) != LUA_TNUMBER || !lua_isinteger(L, idx))
+		luaL_error(L, "%s: expected integer", ctx);
+	lua_Integer v = lua_tointeger(L, idx);
+	/* lua_pushfstring knows %I (lua_Integer), not %lld. */
+	if (v < lo || v > hi)
+		luaL_error(L, "%s: %I out of range [%d, %d]", ctx, v, (int)lo,
+				   (int)hi);
+	return (int32_t)v;
+}
+
 static int32_t check_int_range(lua_State *L, int idx, const char *key,
 							   int32_t lo, int32_t hi) {
-	if (lua_type(L, idx) != LUA_TNUMBER || !lua_isinteger(L, idx))
-		luaL_error(L, "tp.config.%s: expected integer", key);
-	lua_Integer v = lua_tointeger(L, idx);
-	if (v < lo || v > hi)
-		luaL_error(L, "tp.config.%s: %lld out of range [%d, %d]", key,
-				   (long long)v, lo, hi);
-	return (int32_t)v;
+	char ctx[64];
+	snprintf(ctx, sizeof(ctx), "tp.config.%s", key);
+	return tp_lua_check_int(L, idx, ctx, lo, hi);
 }
 
 static float check_float_range(lua_State *L, int idx, const char *key,
@@ -289,9 +297,12 @@ static float check_float_range(lua_State *L, int idx, const char *key,
 	if (lua_type(L, idx) != LUA_TNUMBER)
 		luaL_error(L, "tp.config.%s: expected number", key);
 	lua_Number v = lua_tonumber(L, idx);
-	if (isnan(v) || v < (lua_Number)lo || v > (lua_Number)hi)
-		luaL_error(L, "tp.config.%s: value out of range [%.2f, %.2f]", key,
-				   (double)lo, (double)hi);
+	if (isnan(v) || v < (lua_Number)lo || v > (lua_Number)hi) {
+		/* lua_pushfstring has no precision; format the bounds here. */
+		char range[64];
+		snprintf(range, sizeof(range), "[%.2f, %.2f]", (double)lo, (double)hi);
+		luaL_error(L, "tp.config.%s: value out of range %s", key, range);
+	}
 	return (float)v;
 }
 
@@ -310,8 +321,8 @@ static void check_string_buf(lua_State *L, int idx, const char *key,
 	if (!allow_empty && len == 0)
 		luaL_error(L, "tp.config.%s: must not be empty", key);
 	if (len >= dst_size)
-		luaL_error(L, "tp.config.%s: string too long (max %zu bytes)", key,
-				   dst_size - 1);
+		luaL_error(L, "tp.config.%s: string too long (max %d bytes)", key,
+				   (int)(dst_size - 1));
 	memcpy(dst, s, len + 1);
 }
 

@@ -100,6 +100,11 @@ struct tp_lua {
 };
 
 struct tp_lua *tp_lua_from_state(lua_State *L);
+
+/* The integer at idx, in [lo, hi], or a Lua error naming ctx: "<ctx>:
+ * expected integer" or "<ctx>: <n> out of range [lo, hi]". */
+int32_t tp_lua_check_int(lua_State *L, int idx, const char *ctx, int32_t lo,
+						 int32_t hi);
 /* Deadline check for the patched pattern matcher (LUAI_PATTERNCHECK). */
 void tp_lua_pattern_check(lua_State *L);
 int tp_lua_guarded_pcall(struct tp_lua *lua, int nargs, int nresults,

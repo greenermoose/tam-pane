@@ -107,3 +107,6 @@ IN THIS REPOSITORY
     B7-popups-off-screen-after-reposition.md
                                       menus open off-screen after the
                                       program repositions them
+    B8-lua-errors-print-c-format-codes.md
+                                      Lua config errors print C format
+                                      codes instead of numbers

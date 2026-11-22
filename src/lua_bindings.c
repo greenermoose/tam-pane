@@ -358,16 +358,6 @@ static int check_cycle_dir(lua_State *L, int idx, const char *fn) {
 	return luaL_error(L, "tp.dsp.%s: expected 'next' or 'prev'", fn);
 }
 
-static unsigned int check_tag_num(lua_State *L, int idx) {
-	if (lua_type(L, idx) != LUA_TNUMBER || !lua_isinteger(L, idx))
-		return (unsigned int)luaL_error(L, "tp.dsp.tag: tag must be an integer");
-	lua_Integer n = lua_tointeger(L, idx);
-	if (n < 1 || n > (lua_Integer)TP_TAG_COUNT)
-		return (unsigned int)luaL_error(L, "tp.dsp.tag: tag out of range [1, %u]",
-										TP_TAG_COUNT);
-	return (unsigned int)n;
-}
-
 static int l_dsp_spawn(lua_State *L) {
 	size_t len = 0;
 	const char *cmd = luaL_checklstring(L, 1, &len);
@@ -375,8 +365,8 @@ static int l_dsp_spawn(lua_State *L) {
 		return luaL_error(L, "tp.dsp.spawn: command must not be empty");
 	struct tp_action act = {.kind = TP_ACT_SPAWN};
 	if (len >= sizeof(act.cmd))
-		return luaL_error(L, "tp.dsp.spawn: command too long (max %zu bytes)",
-						  sizeof(act.cmd) - 1);
+		return luaL_error(L, "tp.dsp.spawn: command too long (max %d bytes)",
+						  (int)(sizeof(act.cmd) - 1));
 	memcpy(act.cmd, cmd, len + 1);
 	return push_dispatcher(L, &act);
 }
@@ -467,7 +457,8 @@ static int l_dsp_tag(lua_State *L) {
 			L, "tp.dsp.tag: expected 'view', 'toggle_view', 'move', "
 			   "'toggle_client', or 'back'");
 	}
-	act.tag = check_tag_num(L, 2);
+	act.tag = (unsigned int)tp_lua_check_int(L, 2, "tp.dsp.tag", 1,
+											 (int32_t)TP_TAG_COUNT);
 	return push_dispatcher(L, &act);
 }
 
