@@ -50,7 +50,7 @@ epoll runs between batches. Each queued event carries its cascade depth.
 Past `TP_EVENT_CASCADE_MAX` (16) rounds it is dropped, and one warning is
 logged. Regression test: the cascade case above. `make test` passes, and
 the ASan build of the headless test is clean. Fred checked 0.1.6
-nested with `tools/demo-0.1.6` on 2026-11-21 (commit 0735f35, binary
+nested with `sandbox/demo-0.1.6` on 2026-11-21 (commit 0735f35, binary
 SHA-256
 `4f292cbbb9933cab6370cf81d2c3c74815ea6fe205de9d63320e6f5bdd898080`): the tag
 ping-pong and focus spin each stopped with one warning, and input kept

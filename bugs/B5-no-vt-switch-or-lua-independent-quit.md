@@ -55,10 +55,10 @@ Tests:
 - with every binding cleared, Meta+Shift+E does nothing,
   Ctrl+Alt+Backspace does nothing, and Ctrl+Alt+Shift+Backspace quits.
 
-`make test` passes. `tools/demo-0.1.9` is Fred's nested check of the
+`make test` passes. `sandbox/demo-0.1.9` is Fred's nested check of the
 quit. By Fred's choice, VT switching is checked on real hardware at the
 first DRM trial (`plans/P4-dogfood-tamlinux-0.7.md`). Fred checked the
-quit nested with `tools/demo-0.1.9` on 2026-11-21 (commit 92f1b11, binary
+quit nested with `sandbox/demo-0.1.9` on 2026-11-21 (commit 92f1b11, binary
 SHA-256
 `17b80f2b31ef0cb0a2eb1cfc646fa6ad7608749f7a0b987fa4c0502414c04834`), and the
 demo printed PASS. Set this record to Verified once the VT switch passes

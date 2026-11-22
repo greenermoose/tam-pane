@@ -60,7 +60,7 @@ matcher runs in C with no way for the embedder to interrupt it.
 
 Tests: the case above. `make test` passes, and test_lua is clean under
 ASan and LeakSanitizer. Fred checked 0.1.8 nested with
-`tools/demo-0.1.8` on 2026-11-21 (commit 9b5f27b, binary SHA-256
+`sandbox/demo-0.1.8` on 2026-11-21 (commit 9b5f27b, binary SHA-256
 `a1704c534ad3f0c8cab4085648deb7f79191bd98e942b3b1f6498ab11feda819`). The
 runaway pattern was cut off, the memory bomb hit the cap, the long gsub
 ran, and the long-titled window stayed on its tag.
