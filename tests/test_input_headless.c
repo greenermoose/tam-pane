@@ -368,8 +368,12 @@ static int create_shm_buffer(struct test_client *client) {
 	return client->buffer ? 0 : -1;
 }
 
-static void configure_window_app(struct test_client *client,
-		struct test_window *window, const char *app_id, const char *title) {
+/* Create a toplevel and make its first commit. With fullscreen set, it
+ * asks for fullscreen before that commit, as programs that start
+ * fullscreen do. */
+static void configure_window_full(struct test_client *client,
+		struct test_window *window, const char *app_id, const char *title,
+		bool fullscreen) {
 	*window = (struct test_window){ .client = client };
 	window->surface = wl_compositor_create_surface(client->compositor);
 	window->xdg_surface = xdg_wm_base_get_xdg_surface(client->wm_base,
@@ -379,7 +383,13 @@ static void configure_window_app(struct test_client *client,
 	xdg_toplevel_add_listener(window->toplevel, &toplevel_listener, window);
 	xdg_toplevel_set_title(window->toplevel, title);
 	xdg_toplevel_set_app_id(window->toplevel, app_id);
+	if (fullscreen) xdg_toplevel_set_fullscreen(window->toplevel, NULL);
 	wl_surface_commit(window->surface);
+}
+
+static void configure_window_app(struct test_client *client,
+		struct test_window *window, const char *app_id, const char *title) {
+	configure_window_full(client, window, app_id, title, false);
 }
 
 static void configure_window(struct test_client *client,
@@ -874,6 +884,52 @@ int main(void) {
 	CHECK(nn && nn->parent);
 	if (!nn || !nn->parent) goto fail;
 	CHECK(nn->parent->child[nn->parent->child[0] == nn]->item == c0);
+	destroy_window(&client.windows[2]);
+	for (unsigned int i = 0; i < 100 && wl_list_length(&server.clients) == 3; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(wl_list_length(&server.clients) == 2);
+
+	/* Fullscreen across map and remap (R1 finding 4). A window that asks
+	 * for fullscreen before its first commit maps fullscreen. Unmapped
+	 * (null buffer) and mapped again without the request, it is tiled,
+	 * not left marked fullscreen. Before 0.1.12 it mapped tiled, and the
+	 * remapped window kept the stale fullscreen flag. */
+	configure_window_full(&client, &client.windows[2], "tam-pane-test",
+		"starts-fullscreen", true);
+	for (unsigned int i = 0; i < 1000 && wl_list_length(&server.clients) < 3; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(wl_list_length(&server.clients) == 3);
+	struct tp_client *cf = tp_focused(&server);
+	CHECK(cf && cf != c0 && cf != c1 && cf->mon);
+	if (!cf || !cf->mon) goto fail;
+	CHECK(cf->fullscreen);
+	CHECK(cf->tree->node.parent == server.layer[TP_LAYER_FULLSCREEN]);
+	CHECK(cf->geom.x == cf->mon->area.x && cf->geom.y == cf->mon->area.y &&
+		cf->geom.w == cf->mon->area.w && cf->geom.h == cf->mon->area.h);
+	CHECK(!tp_dwindle_find(tp_monitor_tree(cf->mon), cf));
+
+	/* Ask again while mapped (a no-op once the first half works), so the
+	 * remap below starts from a fullscreen window either way. */
+	xdg_toplevel_set_fullscreen(client.windows[2].toplevel, NULL);
+	for (unsigned int i = 0; i < 20; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(cf->fullscreen);
+
+	wl_surface_attach(client.windows[2].surface, NULL, 0, 0);
+	wl_surface_commit(client.windows[2].surface);
+	for (unsigned int i = 0; i < 100 && wl_list_length(&server.clients) == 3; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(wl_list_length(&server.clients) == 2);
+	CHECK(!cf->fullscreen);
+	client.windows[2].configured = false;
+	xdg_toplevel_unset_fullscreen(client.windows[2].toplevel);
+	wl_surface_commit(client.windows[2].surface);
+	for (unsigned int i = 0; i < 1000 && wl_list_length(&server.clients) < 3; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(wl_list_length(&server.clients) == 3);
+	CHECK(cf->mapped && !cf->fullscreen && !cf->floating);
+	CHECK(cf->tree->node.parent == server.layer[TP_LAYER_TILE]);
+	CHECK(tp_dwindle_find(tp_monitor_tree(cf->mon), cf) != NULL);
 	destroy_window(&client.windows[2]);
 	for (unsigned int i = 0; i < 100 && wl_list_length(&server.clients) == 3; i++)
 		if (!pump(&client, &server)) goto fail;

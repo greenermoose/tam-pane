@@ -8,8 +8,9 @@ Updated: 2026-11-21, with W23
 
 STATE
 
-  Version 0.1.11 on branch dev, accepted by Fred after his
-  sandbox/demo-0.1.11 check (9c0bf49). 0.1.10 passes the automated checks,
+  Version 0.1.12 on branch dev, a candidate waiting for Fred's
+  sandbox/demo-0.1.12 check. 0.1.11 was accepted on b4a8570
+  (9c0bf49). 0.1.10 passes the automated checks,
   and Fred deferred his own check of it to the first run on real
   hardware (plans/P4-dogfood-tamlinux-0.7.md). 0.1.9 was accepted on
   92f1b11, apart from its VT switch, which is also checked in P4.
@@ -19,11 +20,12 @@ STATE
   Review R1 (reviews/R1-code-review-0.1.4.md) is being worked through:
   B1 to B4 verified, B5 verified apart from the VT switch. 0.1.10
   (W21) brought in tp_client_attach / tp_client_detach (findings 13
-  and 6). 0.1.11 (W23) makes a new window split the focused window
-  (finding 12). 0.1.11 binary SHA-256:
-  31bb18c0629e96c798b80697b8bf39048723981f36e61829ab8e273417d9a9e8
+  and 6). In W23, 0.1.11 makes a new window split the focused window
+  (finding 12), and 0.1.12 keeps fullscreen right across map and remap
+  (finding 4). 0.1.12 binary SHA-256:
+  cdbf6d22e7a526999847ccdffa127b0bb49614c3b4ff2ad010f69b6332302037
 
-  Automated checks pass: 28 tag, 143 dwindle, 444 Lua, 346 headless
+  Automated checks pass: 28 tag, 143 dwindle, 444 Lua, 360 headless
   input, 4 smoke, nm -D symbol check, tests/test_nested_input.py. Under
   ASan the headless test has no memory errors. Its 15 leaks are in the
   test client's own proxies and predate 0.1.11 (W23).
@@ -40,15 +42,7 @@ NEXT
   updated (W19 lists them). The order and design are in W23 and the
   approved plan:
 
-  1. R1 finding 4 (0.1.12): fullscreen across map and remap. Split the
-     flag and layer part of tp_client_set_fullscreen into a helper that
-     does not arrange. In on_map, after apply_floating, apply
-     c->toplevel->requested.fullscreen before the single tp_arrange. In
-     on_unmap, clear c->fullscreen. Test: the test client asks for
-     fullscreen before its first commit; check c->fullscreen, geom ==
-     mon->area and the fullscreen layer. Then unmap, remap without the
-     request, and check that it is tiled. Demo: a terminal started
-     fullscreen (check the installed terminal's flag).
+  1. After Fred passes demo-0.1.12, commit "Accept 0.1.12".
   2. R1 finding 5 (0.1.13): in popup_commit (src/client.c), on the
      initial commit, find the root toplevel's client and unconstrain
      against its monitor's usable box in toplevel space, as
@@ -67,6 +61,8 @@ NEXT
 
 WAITING FOR FRED
 
+  - sandbox/demo-0.1.12: a program that starts fullscreen opens
+    fullscreen.
   - At the first run on real hardware (P4): the VT half of B5, and the
     multi-monitor checks of 0.1.10. Both are listed in
     plans/P4-dogfood-tamlinux-0.7.md under Acceptance.

@@ -68,6 +68,17 @@ static void apply_floating(struct tp_client *c) {
 	wlr_xdg_toplevel_set_tiled(c->toplevel, c->floating ? 0 : all);
 }
 
+/* Set the fullscreen flag, tell the client, and move the window to the
+ * matching layer. The caller arranges. */
+static void apply_fullscreen(struct tp_client *c, bool fullscreen) {
+	c->fullscreen = fullscreen;
+	wlr_xdg_toplevel_set_fullscreen(c->toplevel, fullscreen);
+	enum tp_layer layer = fullscreen	? TP_LAYER_FULLSCREEN
+						  : c->floating ? TP_LAYER_FLOAT
+										: TP_LAYER_TILE;
+	wlr_scene_node_reparent(&c->tree->node, c->server->layer[layer]);
+}
+
 static void on_commit(struct wl_listener *l, void *data) {
 	struct tp_client *c = wl_container_of(l, c, commit);
 	/* The first commit asks for a configure; 0x0 lets the client choose
@@ -144,6 +155,10 @@ static void on_map(struct wl_listener *l, void *data) {
 		}
 	}
 	apply_floating(c);
+	/* A program may ask for fullscreen before it maps; on_unmap cleared
+	 * the flag, so a remap follows the client's current request too. */
+	if (c->toplevel->requested.fullscreen)
+		apply_fullscreen(c, true);
 
 	bool focus_now = tp_client_visible(c) && c->mon == s->selmon;
 	wl_list_insert(&s->clients, &c->link);
@@ -167,6 +182,7 @@ static void on_unmap(struct wl_listener *l, void *data) {
 	bool had_focus = tp_focused(s) == c;
 
 	c->mapped = false;
+	c->fullscreen = false;
 	tp_pointer_cancel_grab(s, c);
 	tp_client_detach(c);
 	wl_list_remove(&c->link);
@@ -323,12 +339,7 @@ void tp_client_set_floating(struct tp_client *c, bool floating) {
 
 void tp_client_set_fullscreen(struct tp_client *c, bool fullscreen) {
 	tp_pointer_cancel_grab(c->server, c);
-	c->fullscreen = fullscreen;
-	wlr_xdg_toplevel_set_fullscreen(c->toplevel, fullscreen);
-	enum tp_layer layer = fullscreen	? TP_LAYER_FULLSCREEN
-						  : c->floating ? TP_LAYER_FLOAT
-										: TP_LAYER_TILE;
-	wlr_scene_node_reparent(&c->tree->node, c->server->layer[layer]);
+	apply_fullscreen(c, fullscreen);
 	if (c->mon)
 		tp_arrange(c->mon);
 }

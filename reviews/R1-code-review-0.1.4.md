@@ -69,7 +69,9 @@ schedules are not findings here.
   fullscreen do not. `on_unmap` keeps `fullscreen`, so a remapped window
   is reparented to the tile or float layer while still marked
   fullscreen.
-- **Status:** open
+- **Status:** fixed in 0.1.12: `on_map` applies
+  `requested.fullscreen`, and `on_unmap` clears the flag. No bug
+  record; the headless case covers both halves.
 
 ### 5. xdg popups are never unconstrained (medium)
 

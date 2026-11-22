@@ -105,6 +105,10 @@ the same commit as any change to them.
   - `link`, in `tp_server.clients`, newest first. Layout order uses this
     list.
   - `flink`, in `tp_server.focus_stack`, most recently focused first.
+- **Fullscreen across map (0.1.12):** `on_map` honours a fullscreen
+  request made before the window mapped, and `on_unmap` clears the flag,
+  so a remapped window follows the client's current request and is never
+  left marked fullscreen in the tile or float layer.
 - **Monitor membership (0.1.10):** every change of `mon` goes through
   `tp_client_attach` (`src/client.c`). It first calls `tp_client_detach`,
   which drops the window from its monitor's `focus` slots and layout

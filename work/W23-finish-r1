@@ -1,9 +1,10 @@
-W23 FINISH REVIEW R1: NEW WINDOWS SPLIT THE FOCUSED WINDOW (0.1.11)
+W23 FINISH REVIEW R1: FOCUSED SPLIT (0.1.11), FULLSCREEN AT MAP (0.1.12)
 
 Date: 2026-11-21
 AI harness: Claude Code 2.1.330
 AI model: claude-opus-5-5
-Commits: 9c0bf49 (0.1.11), and the commit that adds this record
+Commits: 9c0bf49 (0.1.11), b4a8570 (accept 0.1.11), the 0.1.12
+         commit, and the commit that last updates this record
 Continues: W21
 
 
@@ -13,6 +14,7 @@ GUIDANCE
   Plan approved by Fred: R1 findings 12, 4, 5 and 14 as one version
   each (0.1.11 to 0.1.14), then 9, 11 and 15 to 17 written into the P3
   and P4 plans. Stop after each demo for Fred's check.
+  Fred: "Pass. Next?" (after his sandbox/demo-0.1.11 check)
 
 
 DONE
@@ -37,6 +39,28 @@ DONE
     arch/data-structures.md (Arrange step 2), R1 finding 12 status.
   - 0.1.11 binary SHA-256:
     31bb18c0629e96c798b80697b8bf39048723981f36e61829ab8e273417d9a9e8
+  - 0.1.11 accepted by Fred in b4a8570.
+  - R1 finding 4 fixed in 0.1.12. src/client.c: apply_fullscreen (flag,
+    client state, layer; no arrange) is shared by
+    tp_client_set_fullscreen and on_map, which applies
+    toplevel->requested.fullscreen after apply_floating. on_unmap
+    clears c->fullscreen.
+  - Test first: the test client gained configure_window_full, which
+    asks for fullscreen before the first commit. The case checks that
+    the window maps fullscreen (flag, fullscreen layer, geometry ==
+    mon->area, not in the tree), then makes it fullscreen while mapped,
+    unmaps it with a null buffer and remaps it without the request, and
+    checks that it is tiled and in the tree. On 0.1.11, 7 checks failed
+    (both halves); on 0.1.12, all 360 pass. make test passes; ASan
+    finds no memory errors.
+  - sandbox/demo-0.1.12 and .lua: Meta+O starts foot --fullscreen; a
+    window.open hook reports whether it opened fullscreen. Loaded
+    headless with a real foot --fullscreen: "ok" on 0.1.12, "FAIL" on
+    a 0.1.11 build.
+  - Docs: ROADMAP.md (0.1.12 entry, current version),
+    arch/data-structures.md (fullscreen across map), R1 finding 4.
+  - 0.1.12 binary SHA-256:
+    cdbf6d22e7a526999847ccdffa127b0bb49614c3b4ff2ad010f69b6332302037
 
 
 FAILED
@@ -53,10 +77,7 @@ FAILED
     client's teardown.
 
 
-  - Fred: "Pass. Next?" (after his sandbox/demo-0.1.11 check). 0.1.11
-    accepted.
-
-
 HANDOFF
 
-  - Go on to R1 finding 4 (0.1.12) as work/WHATNOW NEXT says.
+  - Waiting for Fred's sandbox/demo-0.1.12 check. Then R1 finding 5
+    (0.1.13) as work/WHATNOW NEXT says.
