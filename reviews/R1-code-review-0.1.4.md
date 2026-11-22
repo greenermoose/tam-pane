@@ -129,7 +129,8 @@ schedules are not findings here.
   P3 adds screencopy and foreign-toplevel.
 - **Fix:** design `wl_display_set_global_filter` (later
   security-context-v1) before P3.
-- **Status:** open
+- **Status:** scheduled in `plans/P3-daily-parity.md` (Design work
+  from review R1), before 0.2.0
 
 ### 10. No VT switching and no Lua-independent quit (high)
 
@@ -148,7 +149,8 @@ schedules are not findings here.
 - **What:** tam-pane does not listen to `renderer->events.lost`.
 - **Fix:** recreate the renderer and allocator and re-init the outputs, as
   dwl and sway do.
-- **Status:** open
+- **Status:** scheduled in `plans/P4-dogfood-tamlinux-0.7.md` (Design
+  work from review R1), checked on real hardware
 
 ### 12. New windows split the last leaf, not the focused window (medium)
 
@@ -197,14 +199,16 @@ schedules are not findings here.
   `malloc`, quadratic `find`s and a pointer re-enter. A dirty flag per
   monitor with one arrange per idle or frame would save work and
   wakeups.
-- **Status:** open
+- **Status:** scheduled in `plans/P3-daily-parity.md` (Design work
+  from review R1), before 0.2.4
 
 ### 16. `tp_focused()` infers focus from the seat (low)
 
 - **What:** It returns NULL while an xdg popup grab holds the keyboard, so
   window bindings do nothing while a menu is open. An explicit focused
   client would be sturdier.
-- **Status:** open
+- **Status:** scheduled in `plans/P3-daily-parity.md` (Design work
+  from review R1), with 0.2.0
 
 ### 17. Smaller points (low)
 
@@ -224,7 +228,8 @@ schedules are not findings here.
   - The Makefile does not rebuild `main.o` and `lua.o` when `VERSION`
     changes, so a bumped build can still report the old version (seen
     while building 0.1.5).
-- **Status:** open; the Makefile point is fixed in 0.1.8
+- **Status:** the Makefile point is fixed in 0.1.8; the rest are
+  scheduled in `plans/P3-daily-parity.md` (Design work from review R1)
 
 ## Limits
 

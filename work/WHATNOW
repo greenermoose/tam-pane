@@ -22,7 +22,9 @@ STATE
   acceptances: 0.1.8 on 9b5f27b, 0.1.7 on 51b0425, 0.1.6 on 0735f35,
   0.1.5 on 3b808fd, 0.1.4 (Phase P2) on 0a98a51.
 
-  Review R1 (reviews/R1-code-review-0.1.4.md) is being worked through:
+  Review R1 (reviews/R1-code-review-0.1.4.md) is finished: every
+  finding is fixed, became a bug record, or is scheduled as design work
+  in P3 or P4 (W23). The history:
   B1 to B4 verified, B5 verified apart from the VT switch. 0.1.10
   (W21) brought in tp_client_attach / tp_client_detach (findings 13
   and 6). In W23, 0.1.11 makes a new window split the focused window
@@ -44,17 +46,13 @@ STATE
 
 NEXT
 
-  Finish R1's fix order before P3, one bumped version each, with a
-  failing-first test, a sandbox/demo-<version> for Fred where the nested
-  window can show it, the record's status lines, and every affected doc
-  updated (W19 lists them). The order and design are in W23 and the
-  approved plan:
-
   1. On Fred's word, commit "Accept 0.1.16" and mark B8 Verified.
-  2. R1 findings 9, 11 and 15 to 17: write them into the P3 plan (9,
-     15, 16, 17) and the P4 plan (11) as design work, and set their
-     status lines.
-  3. Then P3, 0.2.0 (plans/P3-daily-parity.md).
+  2. P3, 0.2.0 (plans/P3-daily-parity.md). Begin with its "Design work
+     from review R1" section: design the privileged-protocol filter
+     (finding 9) and the explicit focused window (16) before 0.2.0's
+     protocols land. Each change keeps the R1 rules: one bumped
+     version, a failing-first test, a sandbox demo where the nested
+     window can show it, and every affected doc updated.
 
 
 WAITING FOR FRED

@@ -26,6 +26,44 @@ and X11 programs.
 - **0.2.5** XWayland, behind a build option. It adds xcb as a temporary
   dependency.
 
+## Design work from review R1
+
+Review R1 (`reviews/R1-code-review-0.1.4.md`) left these for P3. Each
+is designed before the version that needs it and lands with a test that
+fails first.
+
+- **Privileged-protocol filter (finding 9), before 0.2.0.** Every global
+  is offered to every client today, so any client can take an
+  exclusive-keyboard OVERLAY layer surface and imitate a lock screen.
+  0.2.0 and 0.2.1 add foreign-toplevel, session-lock and screencopy,
+  which are worse in the wrong hands. Design which globals are
+  privileged and who may bind them, with `wl_display_set_global_filter`
+  first and security-context-v1 later.
+- **One arrange per idle (finding 15), before 0.2.4.** `tp_arrange` runs
+  several times per action, each with a `malloc`, quadratic finds and a
+  pointer re-enter. A per-monitor dirty flag and one arrange per idle or
+  frame saves work and wakeups. The new layouts in 0.2.4 should be
+  written against that.
+- **An explicit focused window (finding 16), with 0.2.0.** `tp_focused()`
+  infers focus from the seat, so while an xdg popup grab holds the
+  keyboard it returns NULL and window bindings do nothing. Session-lock
+  (0.2.0) and input methods (0.2.2) also take the keyboard. Keep the
+  focused window in the server and stop inferring it.
+- **Smaller points (finding 17).**
+  - A gate on bindings, which session-lock needs (0.2.0).
+  - Keyboard groups, so modifiers on one keyboard combine with keys on
+    another.
+  - NULL checks on the scene and output-layout helpers.
+  - `validate_lua_pattern` misses patterns malformed only after their
+    first item.
+  - Event strings can be cut inside a UTF-8 sequence.
+  - The nested backend's scale setup makes a blocking roundtrip.
+  - `tp_monitor_cycle` passes a NULL-typed pointer to `wl_container_of`.
+  - SIGHUP means reload, so closing the launching terminal reloads
+    instead of exiting. Decide with the IPC socket (0.2.3), which can
+    carry a reload request instead.
+  - ON_DEMAND layer surfaces get no focus when they map.
+
 ## Acceptance
 
 - Each protocol is checked with a real client: Quickshell, grim,

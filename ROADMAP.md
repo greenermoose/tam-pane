@@ -91,7 +91,9 @@ are fixed before P3, one version each:
   Fred's 0.1.14 check).
 - **0.1.16** Duplicated code merged (R1 finding 14), and Lua config
   errors show their numbers instead of C format codes (B8).
-- Next: R1's remaining fixes (`work/WHATNOW`).
+- R1's fixes are done. Its design points (findings 9, 11 and 15 to 17)
+  are scheduled in the P3 and P4 plans, under "Design work from review
+  R1".
 
 ### Phase P3: daily-driver parity (0.2.x), `plans/P3-daily-parity.md`
 

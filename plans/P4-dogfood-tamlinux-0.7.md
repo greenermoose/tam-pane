@@ -18,6 +18,14 @@ Hyprland still installed as the fallback session.
   titles).
 - **0.3.x** Fixes from daily use, each recorded in `bugs/`.
 
+## Design work from review R1
+
+- **Surviving a GPU reset (R1 finding 11).** tam-pane does not listen to
+  the renderer's `lost` event, so a GPU reset ends the session. Recreate
+  the renderer and allocator and re-initialize the outputs, as dwl and
+  sway do. It needs real hardware to check, so it belongs here, before
+  the full working day in Acceptance.
+
 ## Acceptance
 
 - At the first run on real hardware from a text VT: Ctrl+Alt+F-keys
