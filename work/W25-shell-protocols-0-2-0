@@ -8,6 +8,10 @@ GUIDANCE
 
   Fred: "/plan Do the next work slice for tam-pane."
   Fred: "Approved. Proceed."
+  Fred: "Let's have tam-pane manage screen blanking, but use tam-hide
+  for screen locking. I don't want to chase bugs in hyprlock. We're not
+  going to use hyprlock for Tamlinux so no point in testing with it.
+  Note that decision: hyprlock is worthless. Don't bother with it."
 
 DONE
 
@@ -45,8 +49,11 @@ DONE
     495 Lua, 4 smoke, 529 headless input, nm -D, test_nested_input.py.
     0.2.0 binary SHA-256:
     e8e011812196e348948d9a7f31dbebd7ced2754f7ba9049fc3378b2e91a63f36.
-  - Added sandbox/demo-0.2.0 and sandbox/demo-0.2.0.lua for Fred's nested
-    hyprlock check.
+  - Added sandbox/demo-locker.c (minimal ext-session-lock-v1 client for
+    nested checks), sandbox/demo-0.2.0, and sandbox/demo-0.2.0.lua.
+    Removed hyprlock from plans/P3-daily-parity.md and arch/lua-api.md
+    per Fred's decision to use tam-hide for locking and tam-pane for
+    screen blanking.
 
 FAILED
 

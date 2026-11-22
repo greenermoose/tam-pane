@@ -258,7 +258,15 @@ build/tests/test_input_headless: tests/test_input_headless.c $(CORE_OBJS) \
 		$(LIBTAM) $(PKG_LIBS) \
 		$(shell $(PKG_CONFIG) --libs $(CLIENT_PKGS)) -lm
 
-test: $(TESTS) build/tam-pane build/tests/test_input_headless
+build/sandbox/demo-locker: sandbox/demo-locker.c \
+	build/protocols/ext-session-lock-v1-client-protocol.h \
+	build/protocols/ext-session-lock-v1-protocol.c
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -Ibuild/protocols -o $@ $< \
+		build/protocols/ext-session-lock-v1-protocol.c \
+		$(shell $(PKG_CONFIG) --libs $(CLIENT_PKGS))
+
+test: $(TESTS) build/tam-pane build/tests/test_input_headless build/sandbox/demo-locker
 	@for t in $(TESTS); do $$t || exit 1; done
 	@if nm -D build/tam-pane | grep -Eq ' luaL?_'; then \
 		echo "ERROR: build/tam-pane exports dynamic lua_* symbols"; exit 1; \

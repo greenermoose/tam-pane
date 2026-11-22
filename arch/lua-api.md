@@ -166,7 +166,7 @@ cannot remove them:
 
 ### `tp.lock(cmd)` and `tp.lock{prog, arg, ...}` (0.2.0)
 
-Launches a screen locker (e.g. `tp.lock{"hyprlock"}`) over a pre-created
+Launches a screen locker (e.g. `tp.lock{"tam-hide"}`) over a pre-created
 Wayland `WAYLAND_SOCKET` and grants that exact client connection access to
 `ext_session_lock_manager_v1` (which is hidden from all other clients). Accepts
 the same string or argv-table forms as `tp.spawn`, and is refused while the

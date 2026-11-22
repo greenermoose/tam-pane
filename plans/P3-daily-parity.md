@@ -75,7 +75,9 @@ fails first.
 ## Acceptance
 
 - Each protocol is checked with a real client: Quickshell, grim,
-  xdg-desktop-portal-wlr, swaylock or hyprlock, fcitx5, wl-clipboard.
+  xdg-desktop-portal-wlr, `tam-hide` (for screen locking; `tam-pane`
+  manages screen blanking, and `hyprlock` is not used), fcitx5,
+  wl-clipboard.
 - The IPC format is documented in `arch/ipc.md`, with tests.
 
 ## Dependencies

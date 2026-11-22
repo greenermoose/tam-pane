@@ -12,6 +12,11 @@ if [ "$have" != "$want" ]; then
 	echo "build/tam-pane is '${have:-missing}', VERSION is $want: run make first" >&2
 	exit 1
 fi
+LOCKER="$ROOT/build/sandbox/demo-locker"
+if [ ! -x "$LOCKER" ]; then
+	echo "missing $LOCKER: run make build/sandbox/demo-locker (or make test)" >&2
+	exit 1
+fi
 
 TMPDIR_DEMO=$(mktemp -d "${TMPDIR:-/tmp}/tam-pane-demo-0.2.0.XXXXXX")
 trap 'rm -rf "$TMPDIR_DEMO"' EXIT INT TERM
@@ -20,16 +25,18 @@ CFG="$TMPDIR_DEMO/init.lua"
 GUIDE="$TMPDIR_DEMO/guide"
 {
 	printf 'local GUIDE = "%s"\n' "$GUIDE"
+	printf 'local DEMO_LOCKER = "%s"\n' "$LOCKER"
 	cat "$ROOT/sandbox/demo-0.2.0.lua"
 } >"$CFG"
 
 cat >"$GUIDE" <<'GUIDE'
 === tam-pane 0.2.0 demo: shell protocols and session-lock ===
 
- 1. Press Meta+L to lock the nested session (launches hyprlock via tp.lock,
-    which grants ext_session_lock_manager_v1 exclusively to that connection).
+ 1. Press Meta+L to lock the nested session (launches demo-locker via
+    tp.lock, which grants ext_session_lock_manager_v1 exclusively to
+    that connection). The nested window should turn solid dark blue.
  2. While locked, press Meta+Return: no terminal should open (binding gate).
- 3. Unlock hyprlock with your password.
+ 3. Press Escape or Enter to unlock.
     This guide window and normal bindings should return cleanly.
  4. Press Meta+Shift+E to quit, and answer the launcher's question.
 
@@ -38,7 +45,7 @@ GUIDE
 "$ROOT/tools/nested-input" -c "$CFG" -s '' || true
 
 echo
-printf 'Did Meta+L lock with hyprlock, gate Meta+Return while locked, and unlock cleanly? [y/n] '
+printf 'Did Meta+L lock to solid dark blue, gate Meta+Return while locked, and unlock on Escape/Enter? [y/n] '
 read -r answer
 case $answer in
 y | Y | yes) echo "PASS: 0.2.0 session-lock and binding gate verified" ;;
