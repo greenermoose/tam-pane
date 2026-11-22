@@ -25,6 +25,7 @@ struct wlr_scene;
 struct wlr_scene_output_layout;
 struct wlr_scene_tree;
 struct wlr_seat;
+struct wlr_security_context_manager_v1;
 struct wlr_session;
 struct wlr_xcursor_manager;
 struct wlr_xdg_shell;
@@ -97,6 +98,10 @@ struct tp_server {
 	struct wlr_layer_shell_v1 *layer_shell;
 	struct wl_listener new_layer_surface;
 	struct tp_layer_surface *focused_layer;
+
+	struct wlr_security_context_manager_v1 *security_context_mgr;
+	struct wl_client *shell_client; /* allowed exclusive OVERLAY focus */
+	struct wl_listener shell_client_destroy;
 
 	struct wlr_seat *seat;
 	struct wl_list keyboards; /* tp_keyboard.link */

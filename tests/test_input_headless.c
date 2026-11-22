@@ -9,6 +9,10 @@
 #include "tam-pane/layout/arrange.h"
 #include "tam-pane/lua.h"
 #include "tam-pane/monitor.h"
+#include "tam-pane/security.h"
+#include <errno.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 #include <wlr/backend/headless.h>
 #include <wlr/types/wlr_scene.h>
 #include "tam-pane/server.h"
@@ -27,6 +31,7 @@
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_xdg_shell.h>
+#include "security-context-v1-client-protocol.h"
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 
@@ -53,6 +58,9 @@ struct test_client {
 	struct wl_pointer *pointer;
 	struct xdg_wm_base *wm_base;
 	struct zwlr_layer_shell_v1 *layer_shell;
+	struct wp_security_context_manager_v1 *security_context_mgr;
+	uint32_t layer_shell_name;
+	unsigned int unclassified_globals;
 	bool has_viewporter, has_fractional_scale, has_presentation;
 	struct test_window windows[3];
 	struct wl_surface *keyboard_focus;
@@ -214,6 +222,10 @@ static const struct wl_seat_listener seat_listener = {
 static void registry_global(void *data, struct wl_registry *registry,
 		uint32_t name, const char *interface, uint32_t version) {
 	struct test_client *client = data;
+	if (tp_security_classify_global(interface) == TP_GLOBAL_UNKNOWN) {
+		fprintf(stderr, "unclassified global advertised: %s\n", interface);
+		client->unclassified_globals++;
+	}
 	if (!strcmp(interface, wl_compositor_interface.name))
 		client->compositor = wl_registry_bind(registry, name,
 			&wl_compositor_interface, version < 4 ? version : 4);
@@ -230,8 +242,12 @@ static void registry_global(void *data, struct wl_registry *registry,
 			&xdg_wm_base_interface, version < 3 ? version : 3);
 		xdg_wm_base_add_listener(client->wm_base, &wm_listener, client);
 	} else if (!strcmp(interface, zwlr_layer_shell_v1_interface.name)) {
+		client->layer_shell_name = name;
 		client->layer_shell = wl_registry_bind(registry, name,
 			&zwlr_layer_shell_v1_interface, version < 4 ? version : 4);
+	} else if (!strcmp(interface, wp_security_context_manager_v1_interface.name)) {
+		client->security_context_mgr = wl_registry_bind(registry, name,
+			&wp_security_context_manager_v1_interface, 1);
 	} else if (!strcmp(interface, "wp_viewporter")) {
 		client->has_viewporter = true;
 	} else if (!strcmp(interface, "wp_fractional_scale_manager_v1")) {
@@ -1133,9 +1149,10 @@ int main(void) {
 	CHECK(m1->usable.y == area1.y && m1->usable.h == area1.h);
 	CHECK(c0->geom.y < area1.y + 32);
 
-	/* EXCLUSIVE layer surface grabs keyboard focus on map, restores on destroy. */
+	/* Ordinary TOP EXCLUSIVE layer surface grabs keyboard focus on map,
+	 * restores on destroy. */
 	struct test_layer launcher;
-	create_layer(&client, &launcher, ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY,
+	create_layer(&client, &launcher, ZWLR_LAYER_SHELL_V1_LAYER_TOP,
 		ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT,
 		200, 100, 0, ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE);
 	for (unsigned int i = 0; i < 200 && !launcher.configured; i++)
@@ -1146,6 +1163,35 @@ int main(void) {
 	CHECK(client.keyboard_focus == launcher.surface);
 	CHECK(tp_focused(&server) == NULL);
 	destroy_layer(&launcher);
+	for (unsigned int i = 0; i < 50 && server.focused_layer != NULL; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(server.focused_layer == NULL);
+	CHECK(tp_focused(&server) == c0);
+
+	/* Exclusive OVERLAY keyboard focus is reserved for the configured shell
+	 * connection (0.1.18, R1 #9): an ordinary client's exclusive OVERLAY
+	 * layer surface does not steal keyboard focus, while the designated
+	 * shell client's does. */
+	struct test_layer overlay_excl;
+	create_layer(&client, &overlay_excl, ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY,
+		ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT,
+		200, 100, 0, ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE);
+	for (unsigned int i = 0; i < 200 && !overlay_excl.configured; i++)
+		if (!pump(&client, &server)) goto fail;
+	for (unsigned int i = 0; i < 20; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(server.focused_layer == NULL);
+	CHECK(tp_focused(&server) == c0);
+	tp_security_set_shell_client(&server,
+		wl_resource_get_client(c0->toplevel->resource));
+	tp_focus_refresh(&server);
+	for (unsigned int i = 0; i < 20; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(server.focused_layer != NULL);
+	CHECK(client.keyboard_focus == overlay_excl.surface);
+	CHECK(tp_focused(&server) == NULL);
+	destroy_layer(&overlay_excl);
+	tp_security_set_shell_client(&server, NULL);
 	for (unsigned int i = 0; i < 50 && server.focused_layer != NULL; i++)
 		if (!pump(&client, &server)) goto fail;
 	CHECK(server.focused_layer == NULL);
@@ -1868,6 +1914,96 @@ int main(void) {
 	send_key(&keyboard, KEY_LEFTSHIFT, WL_KEYBOARD_KEY_STATE_RELEASED, 327);
 	send_key(&keyboard, KEY_LEFTALT, WL_KEYBOARD_KEY_STATE_RELEASED, 328);
 	send_key(&keyboard, KEY_LEFTCTRL, WL_KEYBOARD_KEY_STATE_RELEASED, 329);
+
+	/* ---- 0.1.18: privileged-protocol filter (R1 finding 9) ---- */
+	/* Every global advertised by tam-pane must be explicitly classified. */
+	CHECK(client.unclassified_globals == 0);
+	CHECK(tp_security_classify_global("zwlr_layer_shell_v1") == TP_GLOBAL_PRIVILEGED);
+	CHECK(tp_security_classify_global("wp_security_context_manager_v1") == TP_GLOBAL_PRIVILEGED);
+	CHECK(tp_security_classify_global("ext_output_image_capture_source_manager_v1") == TP_GLOBAL_PRIVILEGED);
+	CHECK(tp_security_classify_global("ext_foreign_toplevel_image_capture_source_manager_v1") == TP_GLOBAL_PRIVILEGED);
+	CHECK(tp_security_classify_global("ext_data_control_manager_v1") == TP_GLOBAL_PRIVILEGED);
+	CHECK(tp_security_classify_global("xdg_wm_base") == TP_GLOBAL_UNPRIVILEGED);
+	CHECK(tp_security_classify_global("unclassified_future_global_v1") == TP_GLOBAL_UNKNOWN);
+
+	/* Cross-UID and security-context policy decisions. */
+	CHECK(tp_security_allow_privileged(false, 1000, 1000) == true);
+	CHECK(tp_security_allow_privileged(true, 1000, 1000) == false);
+	CHECK(tp_security_allow_privileged(false, 1001, 1000) == false);
+	CHECK(tp_security_allow_privileged(true, 1001, 1000) == false);
+
+	/* Direct same-UID client sees both layer-shell and security-context-v1. */
+	CHECK(client.layer_shell != NULL && client.layer_shell_name != 0);
+	CHECK(client.security_context_mgr != NULL);
+
+	/* Sandboxed client via wp_security_context_v1: unprivileged globals are
+	 * offered, privileged globals are hidden, and binding a privileged global
+	 * by its numeric name is rejected with a protocol error. */
+	if (client.security_context_mgr) {
+		char sb_dir[] = "/tmp/tam-pane-sec-XXXXXX";
+		CHECK(mkdtemp(sb_dir) != NULL);
+		char sb_sock[108];
+		snprintf(sb_sock, sizeof(sb_sock), "%s/sandbox.sock", sb_dir);
+
+		int listen_fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+		CHECK(listen_fd >= 0);
+		struct sockaddr_un addr = { .sun_family = AF_UNIX };
+		snprintf(addr.sun_path, sizeof(addr.sun_path), "%s", sb_sock);
+		CHECK(bind(listen_fd, (struct sockaddr *)&addr, sizeof(addr)) == 0);
+		CHECK(listen(listen_fd, 4) == 0);
+
+		int close_pipe[2] = { -1, -1 };
+		CHECK(pipe2(close_pipe, O_CLOEXEC) == 0);
+
+		struct wp_security_context_v1 *sc =
+			wp_security_context_manager_v1_create_listener(
+				client.security_context_mgr, listen_fd, close_pipe[0]);
+		CHECK(sc != NULL);
+		wp_security_context_v1_set_sandbox_engine(sc, "test-sandbox");
+		wp_security_context_v1_set_app_id(sc, "org.example.Sandboxed");
+		wp_security_context_v1_set_instance_id(sc, "inst-1");
+		wp_security_context_v1_commit(sc);
+		wp_security_context_v1_destroy(sc);
+		close(listen_fd);
+		close(close_pipe[0]);
+		for (unsigned int i = 0; i < 10; i++)
+			if (!pump(&client, &server)) goto fail;
+
+		struct test_client sb = { .shm_fd = -1 };
+		sb.display = wl_display_connect(sb_sock);
+		CHECK(sb.display != NULL);
+		if (sb.display) {
+			sb.registry = wl_display_get_registry(sb.display);
+			wl_registry_add_listener(sb.registry, &registry_listener, &sb);
+			for (unsigned int i = 0; i < 20; i++) {
+				if (!pump(&sb, &server)) break;
+			}
+			CHECK(sb.compositor != NULL);
+			CHECK(sb.shm != NULL);
+			CHECK(sb.wm_base != NULL);
+			CHECK(sb.seat != NULL);
+			CHECK(sb.layer_shell == NULL);
+			CHECK(sb.security_context_mgr == NULL);
+
+			/* Active bind rejection: attempting to bind the hidden
+			 * zwlr_layer_shell_v1 global by its numeric name must fail
+			 * with a Wayland protocol error (EPROTO). */
+			struct zwlr_layer_shell_v1 *bad_bind = wl_registry_bind(
+				sb.registry, client.layer_shell_name,
+				&zwlr_layer_shell_v1_interface, 1);
+			(void)bad_bind;
+			for (unsigned int i = 0; i < 10; i++) {
+				if (!pump(&sb, &server)) break;
+			}
+			CHECK(wl_display_get_error(sb.display) == EPROTO);
+			wl_display_disconnect(sb.display);
+		}
+		close(close_pipe[1]);
+		for (unsigned int i = 0; i < 10; i++)
+			if (!pump(&client, &server)) goto fail;
+		unlink(sb_sock);
+		rmdir(sb_dir);
+	}
 
 	unlink(lua_cfg);
 	rmdir(lua_dir);

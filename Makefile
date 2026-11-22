@@ -65,8 +65,8 @@ CORE_SRCS = src/tags.c src/layout/dwindle.c
 LUA_HOST_SRCS = src/lua.c src/lua_bindings.c src/lua_events.c src/lua_rules.c \
 	src/settings.c src/spawn.c
 # The compositor proper.
-WM_SRCS = src/main.c src/server.c src/events.c src/monitor.c src/layer.c \
-	src/client.c src/focus.c src/bindings.c src/layout/arrange.c \
+WM_SRCS = src/main.c src/server.c src/security.c src/events.c src/monitor.c \
+	src/layer.c src/client.c src/focus.c src/bindings.c src/layout/arrange.c \
 	src/input/input.c src/input/keyboard.c src/input/pointer.c
 
 CORE_OBJS = $(patsubst src/%.c,build/%.o,$(CORE_SRCS))
@@ -82,9 +82,11 @@ PROTO_SRCS = build/protocols/viewporter-protocol.c \
 	build/protocols/fractional-scale-v1-protocol.c
 PROTO_OBJS = $(PROTO_SRCS:.c=.o)
 CLIENT_PROTO_HEADERS = build/protocols/xdg-shell-client-protocol.h \
-	build/protocols/wlr-layer-shell-unstable-v1-client-protocol.h
+	build/protocols/wlr-layer-shell-unstable-v1-client-protocol.h \
+	build/protocols/security-context-v1-client-protocol.h
 CLIENT_PROTO_SRCS = build/protocols/xdg-shell-protocol.c \
-	build/protocols/wlr-layer-shell-unstable-v1-protocol.c
+	build/protocols/wlr-layer-shell-unstable-v1-protocol.c \
+	build/protocols/security-context-v1-protocol.c
 
 all: build/tam-pane
 
@@ -150,6 +152,14 @@ build/protocols/fractional-scale-v1-client-protocol.h: $(WAYLAND_PROTOCOLS)/stag
 	$(WAYLAND_SCANNER) client-header $< $@
 
 build/protocols/fractional-scale-v1-protocol.c: $(WAYLAND_PROTOCOLS)/staging/fractional-scale/fractional-scale-v1.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) private-code $< $@
+
+build/protocols/security-context-v1-client-protocol.h: $(WAYLAND_PROTOCOLS)/staging/security-context/security-context-v1.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) client-header $< $@
+
+build/protocols/security-context-v1-protocol.c: $(WAYLAND_PROTOCOLS)/staging/security-context/security-context-v1.xml
 	@mkdir -p $(@D)
 	$(WAYLAND_SCANNER) private-code $< $@
 

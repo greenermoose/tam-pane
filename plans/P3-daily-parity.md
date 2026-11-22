@@ -32,13 +32,18 @@ Review R1 (`reviews/R1-code-review-0.1.4.md`) left these for P3. Each
 is designed before the version that needs it and lands with a test that
 fails first.
 
-- **Privileged-protocol filter (finding 9), before 0.2.0.** Every global
-  is offered to every client today, so any client can take an
-  exclusive-keyboard OVERLAY layer surface and imitate a lock screen.
-  0.2.0 and 0.2.1 add foreign-toplevel, session-lock and screencopy,
-  which are worse in the wrong hands. Design which globals are
-  privileged and who may bind them, with `wl_display_set_global_filter`
-  first and security-context-v1 later.
+- **Privileged-protocol filter (finding 9), done in 0.1.18.**
+  `src/security.c` installs `wl_display_set_global_filter` with
+  `wp_security_context_manager_v1`. Every global requires an explicit
+  classification in `src/security.c` and `arch/protocols.md` (unknown
+  globals fail closed). Privileged globals are denied to clients with a
+  security context and to connections with a different peer UID; direct
+  same-UID clients are allowed with no executable-path allowlist.
+  Exclusive OVERLAY keyboard focus is reserved for the configured shell
+  connection (`tp_server.shell_client`) while ordinary layer-shell use
+  remains available. In P3, session lock is granted to the locker
+  launched by tam-pane, and raw capture to the portal backend plus any
+  explicitly launched screenshot tool.
 - **One arrange per idle (finding 15), before 0.2.4.** `tp_arrange` runs
   several times per action, each with a `malloc`, quadratic finds and a
   pointer re-enter. A per-monitor dirty flag and one arrange per idle or

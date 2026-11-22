@@ -5,11 +5,9 @@ of versions. Versions follow semantic versioning: during 0.x, the minor
 number marks a phase's big step and the patch number marks each
 milestone inside it.
 
-**Current version:** 0.1.17 (Phase P2 complete at 0.1.4, then hardened
-from 0.1.5 to fix review R1's findings and the bugs found while checking
-them; 0.1.5–0.1.9, 0.1.11, 0.1.12 and 0.1.15–0.1.17 accepted by Fred on
-2026-11-21, and his check of 0.1.10 deferred to P4; development
-continues on branch `dev`).
+**Current version:** 0.1.18 (Phase P2 complete at 0.1.4, hardened
+from 0.1.5 to 0.1.17 for review R1, now landing pre-0.2.0 R1 design work
+on branch `dev`).
 
 ## Tamlinux timing
 
@@ -94,6 +92,11 @@ are fixed before P3, one version each:
 - **0.1.17** Meta+V floats a window that opened tiled at half its
   monitor, centred on its own monitor, and later returns it to its last
   floating place (B9, found by Fred's 0.1.16 check).
+- **0.1.18** Privileged-protocol filter (`wl_display_set_global_filter`
+  and `wp_security_context_manager_v1`) denying privileged globals to
+  sandboxed and cross-UID clients, explicit classification in
+  `arch/protocols.md`, and exclusive OVERLAY keyboard focus reserved for
+  the configured shell connection (R1 finding 9).
 - R1's fixes are done. Its design points (findings 9, 11 and 15 to 17)
   are scheduled in the P3 and P4 plans, under "Design work from review
   R1".

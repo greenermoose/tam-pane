@@ -1,4 +1,4 @@
-# Data structures (0.1.3)
+# Data structures (0.1.18)
 
 This file describes the structures as they are built today. Update it in
 the same commit as any change to them.
@@ -26,6 +26,12 @@ the same commit as any change to them.
   - `layer_shell` (`struct wlr_layer_shell_v1`) and `focused_layer`
     (`struct tp_layer_surface *`) for exclusive or on-demand layer keyboard
     focus.
+  - `security_context_mgr` (`struct wlr_security_context_manager_v1`) and
+    `shell_client` (`struct wl_client *`, cleared on disconnect via
+    `shell_client_destroy`) for the global filter and shell-connection
+    policy (`src/security.c`, `arch/protocols.md`, 0.1.18). Privileged
+    globals are denied to sandboxed clients and cross-UID connections,
+    and exclusive OVERLAY keyboard focus is reserved for `shell_client`.
 - **Compositor keys:** `change_vt` switches VT for Ctrl+Alt+F-keys. It is
   set only when `session` exists (DRM), and tests may substitute their
   own. `quit_requested` is set by `tp_server_quit`, which the emergency

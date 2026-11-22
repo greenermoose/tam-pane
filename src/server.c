@@ -6,6 +6,7 @@
 #include "tam-pane/layout/arrange.h"
 #include "tam-pane/lua.h"
 #include "tam-pane/monitor.h"
+#include "tam-pane/security.h"
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -113,6 +114,8 @@ bool tp_server_init(struct tp_server *s) {
 
 	s->xdg_shell = wlr_xdg_shell_create(s->display, 6);
 	s->layer_shell = wlr_layer_shell_v1_create(s->display, 4);
+	if (!tp_security_init(s))
+		return false;
 
 	tp_monitors_init(s);
 	tp_layers_init(s);
@@ -235,6 +238,7 @@ void tp_server_finish(struct tp_server *s) {
 	tp_clients_finish(s);
 	tp_layers_finish(s);
 	tp_monitors_finish(s);
+	tp_security_finish(s);
 
 	if (s->backend)
 		wlr_backend_destroy(s->backend); /* outputs and devices go here */

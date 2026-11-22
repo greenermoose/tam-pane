@@ -3,6 +3,7 @@
 #include "tam-pane/client.h"
 #include "tam-pane/layer.h"
 #include "tam-pane/monitor.h"
+#include "tam-pane/security.h"
 #include "tam-pane/server.h"
 #include "tam-pane/server_events.h"
 #include <wlr/types/wlr_layer_shell_v1.h>
@@ -20,13 +21,21 @@ static void enter_keyboard(struct tp_server *s, struct wlr_surface *surface) {
 }
 
 static struct tp_layer_surface *
-exclusive_on_monitor(struct tp_monitor *m, enum zwlr_layer_shell_v1_layer l) {
+exclusive_on_monitor(struct tp_server *s, struct tp_monitor *m,
+					 enum zwlr_layer_shell_v1_layer l) {
 	struct tp_layer_surface *ls;
 	wl_list_for_each(ls, &m->layers, link) {
-		if (ls->mapped && ls->layer == (uint32_t)l &&
-			ls->layer_surface->current.keyboard_interactive ==
+		if (!ls->mapped || ls->layer != (uint32_t)l ||
+			ls->layer_surface->current.keyboard_interactive !=
 				ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE)
-			return ls;
+			continue;
+		if (l == ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY) {
+			struct wl_client *cl =
+				wl_resource_get_client(ls->layer_surface->resource);
+			if (!tp_security_allow_exclusive_overlay(s, cl))
+				continue;
+		}
+		return ls;
 	}
 	return NULL;
 }
@@ -39,7 +48,7 @@ static struct tp_layer_surface *exclusive_layer(struct tp_server *s) {
 	for (int i = 0; i < 2; i++) {
 		if (s->selmon) {
 			struct tp_layer_surface *ls =
-				exclusive_on_monitor(s->selmon, order[i]);
+				exclusive_on_monitor(s, s->selmon, order[i]);
 			if (ls)
 				return ls;
 		}
@@ -47,7 +56,8 @@ static struct tp_layer_surface *exclusive_layer(struct tp_server *s) {
 		wl_list_for_each(m, &s->monitors, link) {
 			if (m == s->selmon)
 				continue;
-			struct tp_layer_surface *ls = exclusive_on_monitor(m, order[i]);
+			struct tp_layer_surface *ls =
+				exclusive_on_monitor(s, m, order[i]);
 			if (ls)
 				return ls;
 		}
