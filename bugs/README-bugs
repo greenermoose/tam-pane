@@ -101,3 +101,6 @@ IN THIS REPOSITORY
     B5-no-vt-switch-or-lua-independent-quit.md
                                       no VT switching, and no quit that
                                       a config cannot remove
+    B6-gtk4-crashes-without-presentation-time.md
+                                      GTK 4 programs crash on a nested
+                                      output (no presentation-time)

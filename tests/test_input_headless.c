@@ -52,7 +52,7 @@ struct test_client {
 	struct wl_pointer *pointer;
 	struct xdg_wm_base *wm_base;
 	struct zwlr_layer_shell_v1 *layer_shell;
-	bool has_viewporter, has_fractional_scale;
+	bool has_viewporter, has_fractional_scale, has_presentation;
 	struct test_window windows[3];
 	struct wl_surface *keyboard_focus;
 	unsigned int key_events, pointer_enters, pointer_motions, pointer_buttons;
@@ -232,6 +232,8 @@ static void registry_global(void *data, struct wl_registry *registry,
 		client->has_viewporter = true;
 	} else if (!strcmp(interface, "wp_fractional_scale_manager_v1")) {
 		client->has_fractional_scale = true;
+	} else if (!strcmp(interface, "wp_presentation")) {
+		client->has_presentation = true;
 	}
 }
 
@@ -548,6 +550,10 @@ int main(void) {
 		if (!pump(&client, &server)) goto fail;
 	CHECK(globals_ready(&client));
 	if (!globals_ready(&client) || create_shm_buffer(&client) < 0) goto fail;
+	/* presentation-time is offered (B6). Without it GTK 4 times frames
+	 * from the output's refresh, and a nested output's refresh is 0:
+	 * GTK divides by it and crashes. Before 0.1.14 it was missing. */
+	CHECK(client.has_presentation);
 	configure_window(&client, &client.windows[0], "input-one");
 	for (unsigned int i = 0; i < 1000 && !client.windows[0].configured; i++)
 		if (!pump(&client, &server)) goto fail;

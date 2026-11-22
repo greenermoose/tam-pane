@@ -20,6 +20,7 @@
 #include <wlr/types/wlr_fractional_scale_v1.h>
 #include <wlr/types/wlr_layer_shell_v1.h>
 #include <wlr/types/wlr_output_layout.h>
+#include <wlr/types/wlr_presentation_time.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_subcompositor.h>
 #include <wlr/types/wlr_viewporter.h>
@@ -99,6 +100,10 @@ bool tp_server_init(struct tp_server *s) {
 	wlr_data_device_manager_create(s->display);
 	wlr_viewporter_create(s->display);
 	wlr_fractional_scale_manager_v1_create(s->display, 1);
+	/* The scene sends the feedback. GTK 4 needs it: without it, GTK times
+	 * frames from the output's refresh, and divides by zero on a nested
+	 * output, whose refresh is 0 (B6). */
+	wlr_presentation_create(s->display, s->backend, 2);
 
 	s->scene = wlr_scene_create();
 	for (int i = 0; i < TP_LAYER_COUNT; i++)

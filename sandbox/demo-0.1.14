@@ -1,0 +1,53 @@
+#!/bin/sh
+# Launch tam-pane 0.1.14 nested under Hyprland to show that Files, a GTK
+# 4 program, stays open (B6), and that a menu opened near the screen edge
+# stays on screen (R1 finding 5). Both are seen, not logged, so this demo
+# asks instead of printing PASS or FAIL itself; the headless tests check
+# the numbers.
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+want=$(tr -d '[:space:]' < "$ROOT/VERSION")
+have=$("$ROOT/build/tam-pane" -v 2>/dev/null | awk '{print $2}') || true
+if [ "$have" != "$want" ]; then
+	echo "build/tam-pane is '${have:-missing}', VERSION is $want: run make first" >&2
+	exit 1
+fi
+if ! command -v nautilus >/dev/null 2>&1; then
+	echo "this demo needs nautilus (Files) for its right-click menu" >&2
+	exit 1
+fi
+
+TMPDIR_DEMO=$(mktemp -d "${TMPDIR:-/tmp}/tam-pane-demo-0.1.14.XXXXXX")
+trap 'rm -rf "$TMPDIR_DEMO"' EXIT INT TERM
+
+CFG="$TMPDIR_DEMO/init.lua"
+GUIDE="$TMPDIR_DEMO/guide"
+{
+	printf 'local GUIDE = "%s"\n' "$GUIDE"
+	cat "$ROOT/sandbox/demo-0.1.14.lua"
+} >"$CFG"
+
+cat >"$GUIDE" <<'GUIDE'
+=== tam-pane 0.1.14 demo: Files stays open; edge menus stay on screen ===
+
+ 1. Press Meta+O. Files opens on the right; it may take a few seconds.
+    It should stay open. In 0.1.13 it closed at once (a GTK crash).
+ 2. In Files, right-click an empty spot close to the bottom-right
+    corner of the nested window. The menu should open up and to the
+    left, wholly inside the nested window. Before 0.1.13 it ran off
+    the edge and was cut off.
+ 3. Press Escape, close Files, then press Meta+Shift+E to quit, and
+    answer the launcher's question.
+
+GUIDE
+
+"$ROOT/tools/nested-input" -c "$CFG" -s '' || true
+
+echo
+printf 'Did Files stay open, and the menu stay inside the window? [y/n] '
+read -r answer
+case $answer in
+y | Y | yes) echo "PASS: Files stayed open and the menu stayed on screen" ;;
+*) echo "FAIL: Files closed, or the menu ran off the edge"; exit 1 ;;
+esac

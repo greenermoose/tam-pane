@@ -79,9 +79,10 @@ schedules are not findings here.
 - **Where:** `src/client.c` (`popup_commit`)
 - **What:** Menus near a screen edge open off-screen. Layer popups already
   call `wlr_xdg_popup_unconstrain_from_box`.
-- **Status:** fixed in 0.1.13: `popup_commit` finds the root toplevel
-  and unconstrains against its monitor in that toplevel's surface
-  coordinates. No bug record.
+- **Status:** fixed in 41ef9ad (0.1.13): `popup_commit` finds the root
+  toplevel and unconstrains against its monitor in that toplevel's
+  surface coordinates. No bug record. Fred's check of 0.1.13 found B6
+  instead (Files crashed nested); the menu is checked with 0.1.14.
 
 ### 6. A floating move across monitors skips the bookkeeping (low)
 
