@@ -78,8 +78,9 @@ void tp_client_detach(struct tp_client *c);
 void tp_client_attach(struct tp_client *c, struct tp_monitor *m,
 					  tp_tags_t tags);
 
-/* Shift a floating window's remembered place from usable area `from` to
- * `to`, keeping its offset and clamping it inside. */
+/* Shift a window's floating place from usable area `from` to `to`,
+ * keeping its offset and clamping it inside. Tiled windows keep a
+ * floating place too, for Meta+V (B9). */
 void tp_client_carry_float(struct tp_client *c, struct tp_rect from,
 						   struct tp_rect to);
 

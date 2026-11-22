@@ -1,0 +1,50 @@
+#!/bin/sh
+# Launch tam-pane 0.1.17 nested under Hyprland to show B9 fixed: Meta+V
+# floats a window that opened tiled at half its monitor, centred, and a
+# later Meta+V returns it to its last floating place. Placement is seen,
+# not logged, so the launcher asks. The multi-monitor half is checked by
+# the headless test.
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+want=$(tr -d '[:space:]' < "$ROOT/VERSION")
+have=$("$ROOT/build/tam-pane" -v 2>/dev/null | awk '{print $2}') || true
+if [ "$have" != "$want" ]; then
+	echo "build/tam-pane is '${have:-missing}', VERSION is $want: run make first" >&2
+	exit 1
+fi
+
+TMPDIR_DEMO=$(mktemp -d "${TMPDIR:-/tmp}/tam-pane-demo-0.1.17.XXXXXX")
+trap 'rm -rf "$TMPDIR_DEMO"' EXIT INT TERM
+
+CFG="$TMPDIR_DEMO/init.lua"
+GUIDE="$TMPDIR_DEMO/guide"
+{
+	printf 'local GUIDE = "%s"\n' "$GUIDE"
+	cat "$ROOT/sandbox/demo-0.1.17.lua"
+} >"$CFG"
+
+cat >"$GUIDE" <<'GUIDE'
+=== tam-pane 0.1.17 demo: where Meta+V floats a window ===
+
+ 1. Press Meta+Return. A terminal opens beside this guide.
+ 2. Press Meta+V. The terminal floats in the middle of the nested
+    window, half its width and half its height. In 0.1.16 it floated at
+    its own size in the top-left corner.
+ 3. Hold Meta, drag the floating terminal with the left mouse button to
+    another spot, and let go.
+ 4. Press Meta+V (it tiles), then Meta+V again: it floats where you
+    left it in step 3.
+ 5. Press Meta+Shift+E to quit, and answer the launcher's question.
+
+GUIDE
+
+"$ROOT/tools/nested-input" -c "$CFG" -s '' || true
+
+echo
+printf 'Did it float centred at half size, then come back where you left it? [y/n] '
+read -r answer
+case $answer in
+y | Y | yes) echo "PASS: Meta+V places the window as chosen" ;;
+*) echo "FAIL: Meta+V placed the window elsewhere"; exit 1 ;;
+esac

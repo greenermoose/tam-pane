@@ -37,7 +37,9 @@ Hyprland still installed as the fallback session.
   Meta+Shift+Period, and unplug and replug a monitor. Its windows leave
   and come back. These check 0.1.10's attach/detach refactor, which needs
   two or more monitors; the nested window has one. Fred deferred this
-  check to this phase on 2026-11-21.
+  check to this phase on 2026-11-21. In the same run, press Meta+V on a
+  tiled window on the second or third monitor: it floats centred at
+  half size on that monitor (B9, 0.1.17).
 - A full working day on tam-pane without falling back to Hyprland.
 - Every `bugs/` record found in this phase is Verified or Deferred, with a
   reason.

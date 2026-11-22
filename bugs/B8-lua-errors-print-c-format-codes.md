@@ -50,4 +50,6 @@ seven messages in `src/lua.c`, `src/lua_rules.c` and
 - Fred's check: `sandbox/demo-0.1.16` on 2026-11-21 (commit 845b2c2,
   binary SHA-256
   `5ae4b804de0fa5d431ab296967ec413945411cf3ef0cb52cd7dd357873a8c288`);
-  the launcher's check of the logged reload error passed.
+  Fred accepted 0.1.16 ("Accept 0.1.16, fix in 0.1.17"), an answer
+  that covered either the launcher's error check passing or acceptance
+  on the tests; he did not say which.

@@ -114,14 +114,30 @@ static void on_new_popup(struct wl_listener *l, void *data) {
 
 /* Give a floating window with no usable size half its monitor, at least
  * the minimum. Returns whether it changed the size. */
-static bool default_float_size(struct tp_client *c) {
-	if (c->float_geom.w >= TP_FLOAT_MIN_W && c->float_geom.h >= TP_FLOAT_MIN_H)
-		return false;
+static void half_monitor_size(struct tp_client *c) {
 	int32_t w = c->mon->usable.w / 2;
 	int32_t h = c->mon->usable.h / 2;
 	c->float_geom.w = w < TP_FLOAT_MIN_W ? TP_FLOAT_MIN_W : w;
 	c->float_geom.h = h < TP_FLOAT_MIN_H ? TP_FLOAT_MIN_H : h;
+}
+
+static bool default_float_size(struct tp_client *c) {
+	if (c->float_geom.w >= TP_FLOAT_MIN_W && c->float_geom.h >= TP_FLOAT_MIN_H)
+		return false;
+	half_monitor_size(c);
 	return true;
+}
+
+static bool float_on_monitor(const struct tp_client *c) {
+	struct tp_rect r = c->float_geom, u = c->mon->usable;
+	return r.x < u.x + u.w && r.x + r.w > u.x && r.y < u.y + u.h &&
+		   r.y + r.h > u.y;
+}
+
+/* Centre the floating place on the window's monitor. */
+static void center_float(struct tp_client *c) {
+	c->float_geom.x = c->mon->usable.x + (c->mon->usable.w - c->float_geom.w) / 2;
+	c->float_geom.y = c->mon->usable.y + (c->mon->usable.h - c->float_geom.h) / 2;
 }
 
 /* Put the window in its layer and tell it whether its edges are tiled, so
@@ -199,17 +215,18 @@ static void on_map(struct wl_listener *l, void *data) {
 		c->float_geom.h = rule.height;
 	} else if (c->floating && c->mon) {
 		default_float_size(c);
+	} else if (c->mon) {
+		/* Where Meta+V first floats a window that opened tiled: half its
+		 * monitor, centred (B9, Fred's choice). */
+		half_monitor_size(c);
 	}
 
 	if (c->mon) {
 		if (rule.pos_mode == TP_RULE_POS_COORDS) {
 			c->float_geom.x = c->mon->usable.x + rule.x;
 			c->float_geom.y = c->mon->usable.y + rule.y;
-		} else if (rule.pos_mode == TP_RULE_POS_CENTER || c->floating) {
-			c->float_geom.x =
-				c->mon->usable.x + (c->mon->usable.w - c->float_geom.w) / 2;
-			c->float_geom.y =
-				c->mon->usable.y + (c->mon->usable.h - c->float_geom.h) / 2;
+		} else {
+			center_float(c);
 		}
 	}
 	apply_floating(c);
@@ -374,11 +391,15 @@ void tp_client_set_floating(struct tp_client *c, bool floating) {
 		return;
 	tp_pointer_cancel_grab(c->server, c);
 	c->floating = floating;
-	if (floating && c->mon && default_float_size(c)) {
-		c->float_geom.x =
-			c->mon->usable.x + (c->mon->usable.w - c->float_geom.w) / 2;
-		c->float_geom.y =
-			c->mon->usable.y + (c->mon->usable.h - c->float_geom.h) / 2;
+	if (floating && c->mon) {
+		if (!float_on_monitor(c)) {
+			/* A window that mapped with no monitor has no floating place
+			 * yet: treat it as a first float (B9). */
+			half_monitor_size(c);
+			center_float(c);
+		} else if (default_float_size(c)) {
+			center_float(c);
+		}
 	}
 	apply_floating(c);
 	if (c->mon)
@@ -463,7 +484,9 @@ void tp_client_attach(struct tp_client *c, struct tp_monitor *m,
 
 void tp_client_carry_float(struct tp_client *c, struct tp_rect from,
 						   struct tp_rect to) {
-	if (!c->floating || to.w <= 0 || to.h <= 0)
+	/* Tiled windows too: their floating place is where Meta+V puts them,
+	 * and it must stay on their monitor (B9). */
+	if (to.w <= 0 || to.h <= 0)
 		return;
 	struct tp_rect r = c->float_geom;
 	if (r.w > to.w)

@@ -8,17 +8,16 @@ Updated: 2026-11-21, with W23
 
 STATE
 
-  Version 0.1.16 on branch dev (845b2c2), accepted by Fred after his
-  sandbox/demo-0.1.16 check: R1 finding 14 (de-duplication) and B8
-  (garbled Lua error numbers, Verified). Its demo found B9, a floating
-  bug 0.1.15 has too; the fix is 0.1.17. 0.1.15 (c5ec224) was accepted
-  on d5b85a6; B6 and B7 are Verified. Fred's
-  0.1.13 check found B6 (Files crashed nested), and his 0.1.14 check
-  found B7 (the menu still ran off-screen: reposition was not
-  handled), so 0.1.13 and 0.1.14 were not accepted on their own.
-  0.1.12 was accepted on 91f1fff (ff5dc75), 0.1.11 on b4a8570
-  (9c0bf49). 0.1.10 passes the automated checks, and Fred deferred his
-  own check of it to the first run on real hardware
+  Version 0.1.17 on branch dev, a candidate waiting for Fred's
+  sandbox/demo-0.1.17 check: B9 (Meta+V floated a window at the layout's
+  top-left). 0.1.16 (845b2c2) was accepted on ecb6d4d: R1 finding 14 and
+  B8 (Verified); its demo found B9. 0.1.15 (c5ec224) was accepted on
+  d5b85a6; B6 and B7 are Verified. Fred's 0.1.13 check found B6 (Files
+  crashed nested), and his 0.1.14 check found B7 (the menu still ran
+  off-screen: reposition was not handled), so 0.1.13 and 0.1.14 were not
+  accepted on their own. 0.1.12 was accepted on 91f1fff (ff5dc75),
+  0.1.11 on b4a8570 (9c0bf49). 0.1.10 passes the automated checks, and
+  Fred deferred his own check of it to the first run on real hardware
   (plans/P4-dogfood-tamlinux-0.7.md). 0.1.9 was accepted on 92f1b11,
   apart from its VT switch, which is also checked in P4. Earlier
   acceptances: 0.1.8 on 9b5f27b, 0.1.7 on 51b0425, 0.1.6 on 0735f35,
@@ -34,10 +33,11 @@ STATE
   (finding 4), 0.1.13 unconstrains xdg popups (finding 5), and 0.1.14
   adds presentation-time so GTK 4 programs run nested (B6), and 0.1.15
   unconstrains popups again on reposition (B7). 0.1.16 merges the
-  duplicated code (finding 14) and fixes B8. 0.1.16 binary SHA-256:
-  5ae4b804de0fa5d431ab296967ec413945411cf3ef0cb52cd7dd357873a8c288
+  duplicated code (finding 14) and fixes B8, and 0.1.17 fixes where
+  Meta+V floats a window (B9). 0.1.17 binary SHA-256:
+  e6690cd33e9bddd9d847dbd7930180096e50231ad16237a1bcd6e4e9547be785
 
-  Automated checks pass: 28 tag, 143 dwindle, 471 Lua, 370 headless
+  Automated checks pass: 28 tag, 143 dwindle, 471 Lua, 387 headless
   input, 4 smoke, nm -D symbol check, tests/test_nested_input.py. Under
   ASan the headless test has no memory errors. Its 15 leaks are in the
   test client's own proxies and predate 0.1.11 (W23).
@@ -48,10 +48,8 @@ STATE
 
 NEXT
 
-  1. B9 (0.1.17): Meta+V on a window that mapped tiled floats it at the
-     layout's top-left at its first size. Fred chose: first float is
-     half the monitor, centred on the window's own monitor; later floats
-     return to the last floating place.
+  1. After Fred passes demo-0.1.17, commit "Accept 0.1.17" and mark B9
+     Verified.
   2. P3, 0.2.0 (plans/P3-daily-parity.md). Begin with its "Design work
      from review R1" section: design the privileged-protocol filter
      (finding 9) and the explicit focused window (16) before 0.2.0's
@@ -62,10 +60,13 @@ NEXT
 
 WAITING FOR FRED
 
+  - sandbox/demo-0.1.17: Meta+V floats centred at half size and comes
+    back to where it was left.
   - Whether to report GTK 4.24.1's divide by a zero refresh upstream
     (B6).
   - At the first run on real hardware (P4): the VT half of B5, and the
-    multi-monitor checks of 0.1.10. Both are listed in
+    multi-monitor checks of 0.1.10 and of B9's floating place. Both
+    are listed in
     plans/P4-dogfood-tamlinux-0.7.md under Acceptance.
 
 

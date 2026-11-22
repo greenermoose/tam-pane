@@ -38,6 +38,7 @@ struct test_window {
 	struct wl_surface *surface;
 	struct xdg_surface *xdg_surface;
 	struct xdg_toplevel *toplevel;
+	struct wl_buffer *buffer; /* NULL: the client's shared 2x2 buffer */
 	int32_t width, height;
 	bool configured, closed;
 };
@@ -74,7 +75,8 @@ static void window_configure(void *data, struct xdg_surface *surface,
 	xdg_surface_ack_configure(surface, serial);
 	if (!window->configured) {
 		window->configured = true;
-		wl_surface_attach(window->surface, window->client->buffer, 0, 0);
+		wl_surface_attach(window->surface,
+			window->buffer ? window->buffer : window->client->buffer, 0, 0);
 		wl_surface_damage(window->surface, 0, 0, 2, 2);
 		wl_surface_commit(window->surface);
 	}
@@ -369,6 +371,29 @@ static const struct xdg_popup_listener popup_listener = {
 	.popup_done = popup_done,
 	.repositioned = popup_repositioned,
 };
+
+/* A blank w x h buffer, for a window with a real size (the shared buffer
+ * is 2x2, below TP_FLOAT_MIN_W/H). */
+static struct wl_buffer *create_sized_buffer(struct test_client *client,
+		int32_t w, int32_t h) {
+	char name[64];
+	snprintf(name, sizeof(name), "/tam-pane-test-%ld-%dx%d", (long)getpid(),
+		w, h);
+	int fd = shm_open(name, O_CREAT | O_EXCL | O_RDWR, 0600);
+	if (fd < 0) return NULL;
+	shm_unlink(name);
+	int32_t size = w * h * 4;
+	if (ftruncate(fd, size) < 0) {
+		close(fd);
+		return NULL;
+	}
+	struct wl_shm_pool *pool = wl_shm_create_pool(client->shm, fd, size);
+	struct wl_buffer *b = wl_shm_pool_create_buffer(pool, 0, w, h, w * 4,
+		WL_SHM_FORMAT_ARGB8888);
+	wl_shm_pool_destroy(pool);
+	close(fd); /* libwayland sent a duplicate */
+	return b;
+}
 
 static int create_shm_buffer(struct test_client *client) {
 	char name[64];
@@ -1216,6 +1241,80 @@ int main(void) {
 	tp_monitor_focus(&server, m2);
 	tp_focus(&server, c1);
 	CHECK(server.selmon == m2 && tp_focused(&server) == c1);
+
+	/* B9: Meta+V on a window that mapped tiled floats it at half its own
+	 * monitor, centred. A later float returns to its last floating place,
+	 * and that place follows the window to another monitor. Before 0.1.17
+	 * it floated at its first size at the layout's (0, 0), which is on
+	 * m1, and a tiled window's floating place stayed behind on a move. */
+	{
+		struct wl_buffer *big = create_sized_buffer(&client, 200, 150);
+		CHECK(big != NULL);
+		if (!big) goto fail;
+		int before = wl_list_length(&server.clients);
+		configure_window(&client, &client.windows[2], "float-later");
+		client.windows[2].buffer = big;
+		for (unsigned int i = 0;
+				i < 1000 && wl_list_length(&server.clients) == before; i++)
+			if (!pump(&client, &server)) goto fail;
+		struct tp_client *cb = tp_focused(&server);
+		CHECK(cb && cb != c0 && cb != c1);
+		if (!cb || cb == c0 || cb == c1) goto fail;
+		CHECK(cb->mon == m2 && !cb->floating);
+		CHECK(cb->toplevel->base->geometry.width == 200);
+
+		chord(&keyboard, KEY_V, false, false);
+		struct tp_rect u2 = m2->usable;
+		int32_t hw = u2.w / 2, hh = u2.h / 2;
+		CHECK(cb->floating && cb->mon == m2);
+		CHECK(cb->float_geom.w == hw && cb->float_geom.h == hh);
+		CHECK(cb->float_geom.x == u2.x + (u2.w - hw) / 2 &&
+			cb->float_geom.y == u2.y + (u2.h - hh) / 2);
+		CHECK(cb->geom.x == cb->float_geom.x && cb->geom.y == cb->float_geom.y);
+
+		/* As if Fred had moved it: tile it, float it, it comes back. */
+		cb->float_geom.x += 30;
+		struct tp_rect placed = cb->float_geom;
+		chord(&keyboard, KEY_V, false, false);
+		CHECK(!cb->floating);
+		chord(&keyboard, KEY_V, false, false);
+		CHECK(cb->floating && cb->float_geom.x == placed.x &&
+			cb->float_geom.y == placed.y && cb->float_geom.w == placed.w &&
+			cb->float_geom.h == placed.h);
+
+		/* Tile it, send it to m1 while tiled, float it: it floats on m1. */
+		chord(&keyboard, KEY_V, false, false);
+		chord(&keyboard, KEY_COMMA, true, false);
+		CHECK(cb->mon == m1 && !cb->floating);
+		tp_focus(&server, cb);
+		chord(&keyboard, KEY_V, false, false);
+		struct tp_rect u1m = m1->usable;
+		CHECK(cb->floating && cb->mon == m1);
+		CHECK(cb->float_geom.x >= u1m.x && cb->float_geom.y >= u1m.y &&
+			cb->float_geom.x + cb->float_geom.w <= u1m.x + u1m.w &&
+			cb->float_geom.y + cb->float_geom.h <= u1m.y + u1m.h);
+
+		/* A floating place off its monitor (as for a window that mapped
+		 * with no monitor) is treated as a first float. */
+		chord(&keyboard, KEY_V, false, false);
+		CHECK(!cb->floating);
+		cb->float_geom = (struct tp_rect){-5000, -5000, 200, 150};
+		chord(&keyboard, KEY_V, false, false);
+		CHECK(cb->floating && cb->float_geom.w == u1m.w / 2 &&
+			cb->float_geom.h == u1m.h / 2 &&
+			cb->float_geom.x == u1m.x + (u1m.w - u1m.w / 2) / 2 &&
+			cb->float_geom.y == u1m.y + (u1m.h - u1m.h / 2) / 2);
+
+		destroy_window(&client.windows[2]);
+		for (unsigned int i = 0;
+				i < 100 && wl_list_length(&server.clients) > before; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(wl_list_length(&server.clients) == before);
+		wl_buffer_destroy(big);
+		tp_monitor_focus(&server, m2);
+		tp_focus(&server, c1);
+		CHECK(server.selmon == m2 && tp_focused(&server) == c1);
+	}
 
 	/* Layer surface on m2 is cleanly closed when m2 is unplugged; c1 moves
 	 * to m1 keeping its tags and remembering m2's output name. */

@@ -116,6 +116,13 @@ the same commit as any change to them.
   onto the screen. It is unconstrained again on each
   `xdg_popup.reposition`, which GTK 4 uses to move a popover (0.1.15,
   B7). Layer-surface popups do the same in `src/layer.c`.
+- **Floating place (0.1.17):** every window keeps `float_geom`, the
+  place Meta+V floats it to. A window that opens tiled gets half its
+  monitor, centred; a window that opens floating keeps its own size if
+  it is at least 64x64. Every place is centred unless a rule gives
+  coordinates. `tp_client_carry_float` moves the place with the window,
+  tiled or not, and a place off the window's monitor counts as a first
+  float (B9).
 - **Monitor membership (0.1.10):** every change of `mon` goes through
   `tp_client_attach` (`src/client.c`). It first calls `tp_client_detach`,
   which drops the window from its monitor's `focus` slots and layout

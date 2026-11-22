@@ -110,3 +110,6 @@ IN THIS REPOSITORY
     B8-lua-errors-print-c-format-codes.md
                                       Lua config errors print C format
                                       codes instead of numbers
+    B9-meta-v-floats-at-top-left.md   Meta+V floats a window at the
+                                      layout's top-left, at its first
+                                      size

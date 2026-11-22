@@ -5,8 +5,9 @@ AI harness: Claude Code 2.1.330
 AI model: claude-opus-5-5
 Commits: 9c0bf49 (0.1.11), b4a8570 (accept), ff5dc75 (0.1.12),
          91f1fff (accept), 41ef9ad (0.1.13), 4ca7976 (0.1.14), c5ec224
-         (0.1.15), d5b85a6 (accept), the 0.1.16 commit, and the commit
-         that last updates this record
+         (0.1.15), d5b85a6 (accept), 845b2c2 (0.1.16), a50a62e (demo),
+         ecb6d4d (accept), the 0.1.17 commit, and the commit that last
+         updates this record
 Continues: W21
 
 
@@ -219,6 +220,27 @@ HANDOFF
     their 2x2 windows always take the half-size default. My demo guide
     described that default, not what foot gets. Recorded as B9, fixed
     in 0.1.17.
+  - The 0.1.16 acceptance commit's B8 record said the error check
+    passed; Fred's answer did not say so. Corrected in the 0.1.17
+    commit.
+  - B9 fixed in 0.1.17 (src/client.c): on_map gives a window that opens
+    tiled a floating place of half its monitor, centred, and centres
+    every place unless a rule gives coordinates; tp_client_carry_float
+    carries tiled windows' places too; tp_client_set_floating treats a
+    place off the window's monitor as a first float.
+  - Test first: the test client gained per-window buffers
+    (create_sized_buffer) so a 200x150 window could map tiled on the
+    second monitor. Its first float failed on 0.1.16 (200x150 at
+    (0, 0)). With only the on_map change the move check failed, so the
+    carry change is shown to be needed. 387 checks pass; ASan finds no
+    memory errors.
+  - sandbox/demo-0.1.17: float (centred, half size), drag, tile, float
+    again (back where dragged); the launcher asks y/n. One monitor
+    only; the multi-monitor part is the headless test.
+  - Docs: ROADMAP.md, arch/data-structures.md (floating place), bugs/B9
+    and the bug index, the client.h comment on tp_client_carry_float.
+  - 0.1.17 binary SHA-256:
+    e6690cd33e9bddd9d847dbd7930180096e50231ad16237a1bcd6e4e9547be785
   - R1 is finished: every finding is fixed, became a bug, or is
     scheduled in P3 or P4. Next is P3 (0.2.0), starting with the
     privileged-protocol filter design (finding 9).

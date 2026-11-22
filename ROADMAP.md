@@ -5,11 +5,11 @@ of versions. Versions follow semantic versioning: during 0.x, the minor
 number marks a phase's big step and the patch number marks each
 milestone inside it.
 
-**Current version:** 0.1.16 (Phase P2 complete at 0.1.4, then hardened
-from 0.1.5 to fix review R1's findings; 0.1.5–0.1.9, 0.1.11, 0.1.12,
-0.1.15 and 0.1.16 accepted by Fred on 2026-11-21, and his check of
-0.1.10 deferred to P4;
-development continues on branch `dev`).
+**Current version:** 0.1.17, a candidate (Phase P2 complete at 0.1.4,
+then hardened from 0.1.5 to fix review R1's findings; 0.1.5–0.1.9,
+0.1.11, 0.1.12, 0.1.15 and 0.1.16 accepted by Fred on 2026-11-21, and
+his check of 0.1.10 deferred to P4; development continues on branch
+`dev`).
 
 ## Tamlinux timing
 
@@ -91,6 +91,9 @@ are fixed before P3, one version each:
   Fred's 0.1.14 check).
 - **0.1.16** Duplicated code merged (R1 finding 14), and Lua config
   errors show their numbers instead of C format codes (B8).
+- **0.1.17** Meta+V floats a window that opened tiled at half its
+  monitor, centred on its own monitor, and later returns it to its last
+  floating place (B9, found by Fred's 0.1.16 check).
 - R1's fixes are done. Its design points (findings 9, 11 and 15 to 17)
   are scheduled in the P3 and P4 plans, under "Design work from review
   R1".
