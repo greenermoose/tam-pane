@@ -858,6 +858,27 @@ int main(void) {
 	send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_RELEASED, 146);
 	CHECK(server.grab.mode == TP_GRAB_NONE);
 
+	/* A new window splits the focused window, not the last leaf (R1
+	 * finding 12). In [c0 | c1], focus c0 and open a window: its sibling
+	 * must be c0. Before 0.1.11 it split c1. */
+	tp_focus(&server, c0);
+	CHECK(tp_focused(&server) == c0);
+	configure_window(&client, &client.windows[2], "split-focused");
+	for (unsigned int i = 0; i < 1000 && wl_list_length(&server.clients) < 3; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(wl_list_length(&server.clients) == 3);
+	struct tp_client *cn = tp_focused(&server);
+	CHECK(cn && cn != c0 && cn != c1 && !cn->floating && cn->mon);
+	if (!cn || !cn->mon) goto fail;
+	struct tp_dwindle_node *nn = tp_dwindle_find(tp_monitor_tree(cn->mon), cn);
+	CHECK(nn && nn->parent);
+	if (!nn || !nn->parent) goto fail;
+	CHECK(nn->parent->child[nn->parent->child[0] == nn]->item == c0);
+	destroy_window(&client.windows[2]);
+	for (unsigned int i = 0; i < 100 && wl_list_length(&server.clients) == 3; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(wl_list_length(&server.clients) == 2);
+
 	/* ---- 0.0.5: layer-shell exclusive zone, popups, keyboard focus ---- */
 	struct tp_monitor *m1 = server.selmon;
 	CHECK(m1 != NULL);

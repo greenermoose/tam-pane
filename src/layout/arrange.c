@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "tam-pane/layout/arrange.h"
 #include "tam-pane/client.h"
-#include "tam-pane/focus.h"
 #include "tam-pane/input.h"
 #include "tam-pane/layout/dwindle.h"
 #include "tam-pane/monitor.h"
@@ -17,6 +16,20 @@ static bool is_tiled(const struct tp_client *c) {
 
 static void place_tile(void *item, struct tp_rect box, void *data) {
 	tp_client_place(item, box);
+}
+
+/* The most recently focused window on m that is already in the tree. A
+ * window being mapped is at the top of the focus stack before it is in the
+ * tree, so tp_focus_top would return the newcomer itself. */
+static struct tp_client *focused_in_tree(struct tp_server *s,
+										 struct tp_monitor *m,
+										 struct tp_dwindle *tree) {
+	struct tp_client *c;
+	wl_list_for_each(c, &s->focus_stack, flink) {
+		if (c->mon == m && tp_client_visible(c) && tp_dwindle_find(tree, c))
+			return c;
+	}
+	return NULL;
 }
 
 /* Make the tree hold exactly the monitor's visible tiled windows: drop the
@@ -37,9 +50,7 @@ static void sync_tree(struct tp_monitor *m, struct tp_dwindle *tree) {
 		free(items);
 	}
 
-	struct tp_client *near = tp_focus_top(s, m);
-	if (near && !tp_dwindle_find(tree, near))
-		near = NULL;
+	struct tp_client *near = focused_in_tree(s, m, tree);
 
 	struct tp_client *c;
 	wl_list_for_each_reverse(c, &s->clients, link) {

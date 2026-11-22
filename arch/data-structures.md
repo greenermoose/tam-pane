@@ -177,7 +177,10 @@ For one monitor, arrange:
    are placed directly.
 2. Syncs the current tree: it drops leaves that are no longer visible and
    tiled on this monitor, and inserts newcomers, oldest first, next to the
-   most recently focused window.
+   most recently focused window that is already in the tree. A window
+   being mapped is already at the top of the focus stack, so the plain
+   focus top would be the newcomer itself (fixed in 0.1.11, R1 finding
+   12).
 3. Lays the tree out over `usable` minus the outer gap.
 4. Refreshes pointer focus, because windows may have moved under a still
    cursor.

@@ -153,7 +153,9 @@ schedules are not findings here.
   the focused one.
 - **Evidence:** found while writing the B1 test: with c0 focused in
   `[c0 | c1]`, a new window split c1.
-- **Status:** open
+- **Status:** fixed in 0.1.11: `sync_tree` places newcomers next to the
+  most recently focused window that is already in the tree. No bug
+  record, because the effect is placement only.
 
 ### 13. Client/monitor membership is changed by hand in five places (medium)
 

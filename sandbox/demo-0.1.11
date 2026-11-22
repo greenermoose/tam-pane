@@ -1,0 +1,52 @@
+#!/bin/sh
+# Launch tam-pane 0.1.11 nested under Hyprland to show that a new window
+# splits the focused window, not the last leaf of the tree (R1 finding
+# 12).
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+want=$(tr -d '[:space:]' < "$ROOT/VERSION")
+have=$("$ROOT/build/tam-pane" -v 2>/dev/null | awk '{print $2}') || true
+if [ "$have" != "$want" ]; then
+	echo "build/tam-pane is '${have:-missing}', VERSION is $want: run make first" >&2
+	exit 1
+fi
+
+TMPDIR_DEMO=$(mktemp -d "${TMPDIR:-/tmp}/tam-pane-demo-0.1.11.XXXXXX")
+trap 'rm -rf "$TMPDIR_DEMO"' EXIT INT TERM
+
+CFG="$TMPDIR_DEMO/init.lua"
+GUIDE="$TMPDIR_DEMO/guide"
+LOG="$TMPDIR_DEMO/log"
+{
+	printf 'local GUIDE = "%s"\n' "$GUIDE"
+	cat "$ROOT/sandbox/demo-0.1.11.lua"
+} >"$CFG"
+
+cat >"$GUIDE" <<'GUIDE'
+=== tam-pane 0.1.11 demo: new windows split the focused window ===
+
+This is the guide window, on the left once others open.
+
+ 1. Press Meta+Return twice. Two terminals open on the right, one above
+    the other.
+ 2. Click this guide window to focus it.
+ 3. Press Meta+Return once more. The new terminal should open beside
+    this guide window, taking half of its space. Before 0.1.11 it split
+    the bottom-right terminal instead.
+ 4. Press Meta+Shift+E to quit. The launcher prints PASS or FAIL.
+
+GUIDE
+
+"$ROOT/tools/nested-input" -c "$CFG" -s '' 2>&1 | tee "$LOG" || true
+
+echo
+ok=$(grep -c '\[demo\] ok:' "$LOG" || true)
+bad=$(grep -c '\[demo\] FAIL:' "$LOG" || true)
+if [ "$bad" -eq 0 ] && [ "$ok" -ge 3 ]; then
+	echo "PASS: $ok new windows each split the focused window"
+else
+	echo "FAIL: $bad of $((ok + bad)) new windows split some other window"
+	echo "      (or fewer than three windows were opened)"
+	exit 1
+fi
