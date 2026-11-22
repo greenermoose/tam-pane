@@ -122,6 +122,22 @@ bool tp_lua_handle_key(struct tp_lua *lua, uint32_t mods, xkb_keysym_t sym,
 /* Number of currently active key bindings. */
 size_t tp_lua_binding_count(const struct tp_lua *lua);
 
+/* Read-only snapshot of one active key binding (for IPC `binds`). */
+struct tp_lua_bind_info {
+	uint32_t mods;
+	xkb_keysym_t sym;
+	bool allow_locked;
+	bool is_lua;
+	struct tp_action action; /* valid when !is_lua */
+};
+
+typedef void (*tp_lua_bind_iter_fn)(const struct tp_lua_bind_info *info,
+									void *userdata);
+
+/* Invoke fn once per active key binding in registration order. */
+void tp_lua_for_each_bind(const struct tp_lua *lua, tp_lua_bind_iter_fn fn,
+						  void *userdata);
+
 /* True when at least one active binding has mods == 0. */
 bool tp_lua_has_unmodified_bindings(const struct tp_lua *lua);
 

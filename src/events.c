@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "tam-pane/server_events.h"
 #include "tam-pane/client.h"
+#include "tam-pane/ipc.h"
 #include "tam-pane/lua.h"
 #include "tam-pane/monitor.h"
 #include "tam-pane/server.h"
@@ -36,25 +37,32 @@ static void schedule_later(struct tp_server *s) {
 		wl_event_source_timer_update(q->timer, 1);
 }
 
+static bool event_has_listeners(const struct tp_server *s,
+								enum tp_event_kind kind) {
+	if (!s || s->stopping)
+		return false;
+	if (s->lua && tp_lua_has_hooks(s->lua, kind))
+		return true;
+	return tp_ipc_has_subscribers(s, kind);
+}
+
 /* Deliver the events queued now; events the hooks cause go to a later
  * batch, one cascade round deeper. */
 static void drain_events(struct tp_server *s) {
 	struct tp_event_queue *q = &s->events;
 	if (s->stopping)
 		return;
-	if (!s->lua) {
-		q->head = q->len = 0;
-		return;
-	}
 
 	size_t to_drain = q->len;
 	q->draining = true;
-	for (size_t i = 0; i < to_drain && q->len > 0 && s->lua; i++) {
+	for (size_t i = 0; i < to_drain && q->len > 0 && !s->stopping; i++) {
 		struct tp_queued_event item = q->items[q->head];
 		q->head = (q->head + 1) % q->cap;
 		q->len--;
 		q->depth = item.depth;
-		tp_lua_emit_event(s->lua, &item.ev);
+		if (s->lua && tp_lua_has_hooks(s->lua, item.ev.kind))
+			tp_lua_emit_event(s->lua, &item.ev);
+		tp_ipc_emit_event(s, &item.ev);
 	}
 	q->draining = false;
 	q->depth = 0;
@@ -96,9 +104,9 @@ void tp_events_finish(struct tp_server *s) {
 }
 
 void tp_events_emit(struct tp_server *s, const struct tp_event *ev) {
-	if (!s || !ev || s->stopping || !s->lua || !s->loop)
+	if (!s || !ev || s->stopping || !s->loop)
 		return;
-	if (!tp_lua_has_hooks(s->lua, ev->kind))
+	if (!event_has_listeners(s, ev->kind))
 		return;
 
 	struct tp_event_queue *q = &s->events;
@@ -144,7 +152,7 @@ void tp_events_emit(struct tp_server *s, const struct tp_event *ev) {
 
 void tp_events_emit_window(struct tp_server *s, enum tp_event_kind kind,
 						   const struct tp_client *c, bool focused) {
-	if (!s || s->stopping || !s->lua || !tp_lua_has_hooks(s->lua, kind))
+	if (!event_has_listeners(s, kind))
 		return;
 
 	struct tp_event ev = {.kind = kind};
@@ -172,8 +180,7 @@ void tp_events_emit_window(struct tp_server *s, enum tp_event_kind kind,
 
 void tp_events_emit_tag(struct tp_server *s, const struct tp_monitor *m,
 						tp_tags_t prev_tags, tp_tags_t new_tags) {
-	if (!s || s->stopping || !s->lua ||
-		!tp_lua_has_hooks(s->lua, TP_EVENT_TAG_CHANGE))
+	if (!event_has_listeners(s, TP_EVENT_TAG_CHANGE))
 		return;
 
 	struct tp_event ev = {.kind = TP_EVENT_TAG_CHANGE};
@@ -187,7 +194,7 @@ void tp_events_emit_tag(struct tp_server *s, const struct tp_monitor *m,
 void tp_events_emit_monitor(struct tp_server *s, enum tp_event_kind kind,
 							const char *name, struct tp_rect area,
 							float scale) {
-	if (!s || s->stopping || !s->lua || !tp_lua_has_hooks(s->lua, kind))
+	if (!event_has_listeners(s, kind))
 		return;
 
 	struct tp_event ev = {.kind = kind};

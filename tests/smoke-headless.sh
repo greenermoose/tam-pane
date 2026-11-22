@@ -6,9 +6,10 @@
 #   1. start, open the Wayland socket, exit 0 on SIGTERM;
 #   2. when foot is installed: map two windows, let one close, and still
 #      exit 0 on SIGTERM while the other is connected;
-#   3. SIGHUP reloads a valid config and keeps running on a broken one;
-#   4. a startup hook runs once, after WAYLAND_DISPLAY is set, and not
-#      again on reload.
+#   3. tam-pane msg queries (version, monitors) and live reload (valid + broken);
+#   4. a startup hook runs once, after WAYLAND_DISPLAY and TAM_PANE_SOCKET are
+#      set, and not again on reload;
+#   5. SIGHUP shuts down cleanly with exit status 0 (R1 finding 17).
 set -u
 bin=${1:-build/tam-pane}
 fail=0
@@ -86,40 +87,51 @@ else
 	echo "smoke-headless: windows: skipped (foot is not installed)"
 fi
 
-# 3. Live reload via SIGHUP: valid reload succeeds, broken reload keeps running.
-name=sighup-reload
+# 3. IPC queries and live reload via `tam-pane msg`: valid reload succeeds,
+#    broken reload returns non-zero with diagnostic and keeps running.
+name=ipc-msg-reload
 dir=$(mktemp -d "${TMPDIR:-/tmp}/tam-pane-smoke.XXXXXX") || exit 1
 chmod 700 "$dir"
 cfg="$dir/init.lua"
 printf 'tp.config{ gaps = 10 }\n' >"$cfg"
-env -u WAYLAND_DISPLAY -u DISPLAY XDG_RUNTIME_DIR="$dir" \
+env -u WAYLAND_DISPLAY -u DISPLAY -u TAM_PANE_SOCKET XDG_RUNTIME_DIR="$dir" \
 	XDG_CONFIG_HOME="$dir/config" \
 	WLR_BACKENDS=headless WLR_RENDERER=pixman WLR_HEADLESS_OUTPUTS=1 \
 	"$bin" -c "$cfg" >"$dir/log" 2>&1 &
 pid=$!
 wait_for 40 has_socket
+wsock=$(basename "$(ls "$dir"/wayland-* 2>/dev/null | head -n 1)")
+ipcsock="$dir/tam-pane/$wsock.sock"
+wait_for 40 test -S "$ipcsock"
+ver_out=$("$bin" msg -S "$ipcsock" version 2>&1)
+ver_rc=$?
+mon_out=$("$bin" msg -S "$ipcsock" monitors 2>&1)
+mon_rc=$?
 printf 'tp.config{ gaps = 24 }\n' >"$cfg"
-kill -HUP "$pid" 2>/dev/null
-wait_for 40 grep -q 'reloaded config:' "$dir/log"
+rel_ok_out=$("$bin" msg -S "$ipcsock" reload 2>&1)
+rel_ok_rc=$?
 printf 'tp.config{ gaps = \n' >"$cfg"
-kill -HUP "$pid" 2>/dev/null
-wait_for 40 grep -q 'reload failed' "$dir/log"
+rel_bad_out=$("$bin" msg -S "$ipcsock" reload 2>&1)
+rel_bad_rc=$?
 kill -TERM "$pid" 2>/dev/null
 wait "$pid"
 status=$?
+sock_gone=no
+[ ! -e "$ipcsock" ] && sock_gone=yes
 log=$(cat "$dir/log")
 rm -rf "$dir"
-if printf '%s\n' "$log" | grep -q 'reloaded config:' &&
-	printf '%s\n' "$log" | grep -q 'reload failed' &&
+if [ "$ver_rc" -eq 0 ] && printf '%s\n' "$ver_out" | grep -q '^version	' &&
+	[ "$mon_rc" -eq 0 ] && printf '%s\n' "$mon_out" | grep -q '^monitor	' &&
+	[ "$rel_ok_rc" -eq 0 ] && [ "$rel_bad_rc" -ne 0 ] &&
+	[ -n "$rel_bad_out" ] && [ "$sock_gone" = yes ] &&
 	[ "$status" -eq 0 ]; then
 	report ok
 else
-	report bad "sighup reload check failed (exit status: $status)"
+	report bad "ver_rc=$ver_rc mon_rc=$mon_rc rel_ok=$rel_ok_rc rel_bad=$rel_bad_rc sock_gone=$sock_gone status=$status"
 fi
 
-# 4. Startup hook: runs once, after tam-pane's own WAYLAND_DISPLAY is set,
-#    and not again on reload. tp.spawn{...} runs sh directly, no shell
-#    command string.
+# 4. Startup hook: runs once, after tam-pane's own WAYLAND_DISPLAY and
+#    TAM_PANE_SOCKET are set, and not again on reload.
 name=startup-once
 dir=$(mktemp -d "${TMPDIR:-/tmp}/tam-pane-smoke.XXXXXX") || exit 1
 chmod 700 "$dir"
@@ -127,19 +139,21 @@ cfg="$dir/init.lua"
 started="$dir/started"
 cat >"$cfg" <<EOF
 tp.on('startup', function()
-	tp.spawn{'sh', '-c', 'echo "\$WAYLAND_DISPLAY" >> "\$1"', 'sh', '$started'}
+	tp.spawn{'sh', '-c', 'printf "%s|%s\n" "\$WAYLAND_DISPLAY" "\$TAM_PANE_SOCKET" >> "\$1"', 'sh', '$started'}
 end)
 EOF
-env -u WAYLAND_DISPLAY -u DISPLAY XDG_RUNTIME_DIR="$dir" \
+env -u WAYLAND_DISPLAY -u DISPLAY -u TAM_PANE_SOCKET XDG_RUNTIME_DIR="$dir" \
 	XDG_CONFIG_HOME="$dir/config" \
 	WLR_BACKENDS=headless WLR_RENDERER=pixman WLR_HEADLESS_OUTPUTS=1 \
 	"$bin" -c "$cfg" >"$dir/log" 2>&1 &
 pid=$!
 wait_for 40 has_socket
 wait_for 40 test -s "$started"
-kill -HUP "$pid" 2>/dev/null
+wsock=$(basename "$(ls "$dir"/wayland-* 2>/dev/null | head -n 1)")
+ipcsock="$dir/tam-pane/$wsock.sock"
+"$bin" msg -S "$ipcsock" reload >/dev/null 2>&1
 wait_for 40 grep -q 'reloaded config:' "$dir/log"
-sleep 0.3
+sleep 0.2
 kill -TERM "$pid" 2>/dev/null
 wait "$pid"
 status=$?
@@ -147,14 +161,41 @@ lines=$(cat "$started" 2>/dev/null)
 log=$(cat "$dir/log")
 rm -rf "$dir"
 case $lines in
-wayland-*) once=yes ;;
+wayland-*\|"$dir"/tam-pane/wayland-*.sock) once=yes ;;
 *) once=no ;;
 esac
 if [ "$once" = yes ] && [ "$(printf '%s\n' "$lines" | wc -l)" -eq 1 ] &&
 	[ "$status" -eq 0 ]; then
 	report ok
 else
-	report bad "startup hook output '$lines' (want one wayland-N line), exit status: $status"
+	report bad "startup hook output '$lines' (want one wayland-N|sock line), exit status: $status"
+fi
+
+# 5. SIGHUP shuts down cleanly (R1 finding 17), not reload.
+name=sighup-shutdown
+dir=$(mktemp -d "${TMPDIR:-/tmp}/tam-pane-smoke.XXXXXX") || exit 1
+chmod 700 "$dir"
+env -u WAYLAND_DISPLAY -u DISPLAY -u TAM_PANE_SOCKET XDG_RUNTIME_DIR="$dir" \
+	XDG_CONFIG_HOME="$dir/config" \
+	WLR_BACKENDS=headless WLR_RENDERER=pixman WLR_HEADLESS_OUTPUTS=1 \
+	"$bin" >"$dir/log" 2>&1 &
+pid=$!
+wait_for 40 has_socket
+kill -HUP "$pid" 2>/dev/null
+wait_for 40 sh -c "! kill -0 $pid 2>/dev/null"
+still_alive=no
+if kill -0 "$pid" 2>/dev/null; then
+	still_alive=yes
+	kill -TERM "$pid" 2>/dev/null
+fi
+wait "$pid"
+status=$?
+log=$(cat "$dir/log")
+rm -rf "$dir"
+if [ "$still_alive" = no ] && [ "$status" -eq 0 ]; then
+	report ok
+else
+	report bad "still_alive=$still_alive exit_status=$status"
 fi
 
 exit "$fail"

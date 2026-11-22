@@ -30,6 +30,11 @@ WHAT IT DOES
   statically into tam-pane (0.1.0–0.1.4, hardened in 0.1.5–0.1.8 after
   review R1). Autostart goes in a startup hook.
 
+  Line-based IPC over a same-UID Unix socket
+  ($XDG_RUNTIME_DIR/tam-pane/<socket>.sock, exported as TAM_PANE_SOCKET)
+  with a built-in `tam-pane msg` client for queries, dispatchers, live
+  reloads and event subscriptions (0.2.3; see arch/ipc.md).
+
 
 HOW IT IS BUILT
 

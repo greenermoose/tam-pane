@@ -722,6 +722,23 @@ size_t tp_lua_binding_count(const struct tp_lua *lua) {
 	return lua ? lua->active_binds.len : 0;
 }
 
+void tp_lua_for_each_bind(const struct tp_lua *lua, tp_lua_bind_iter_fn fn,
+						  void *userdata) {
+	if (!lua || !fn)
+		return;
+	for (size_t i = 0; i < lua->active_binds.len; i++) {
+		const struct tp_lua_binding *b = &lua->active_binds.items[i];
+		struct tp_lua_bind_info info = {
+			.mods = b->mods,
+			.sym = b->sym,
+			.allow_locked = b->allow_locked,
+			.is_lua = b->is_lua,
+			.action = b->action,
+		};
+		fn(&info, userdata);
+	}
+}
+
 bool tp_lua_has_unmodified_bindings(const struct tp_lua *lua) {
 	return lua ? lua->active_binds.has_unmodified : false;
 }

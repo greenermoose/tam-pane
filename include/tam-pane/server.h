@@ -54,6 +54,7 @@ struct wlr_xcursor_manager;
 struct wlr_xdg_shell;
 struct wlr_layer_shell_v1;
 struct tp_client;
+struct tp_ipc_server;
 struct tp_layer_surface;
 struct tp_lua;
 struct tp_monitor;
@@ -212,6 +213,7 @@ struct tp_server {
 	bool quit_requested; /* set by tp_server_quit */
 	bool stopping; /* set while tearing down: no more layout or focus */
 	const char *socket;
+	struct tp_ipc_server *ipc;
 };
 
 /* Create every global and module. Returns false (after logging) when the

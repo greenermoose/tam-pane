@@ -1,0 +1,105 @@
+#!/bin/sh
+# Launch tam-pane 0.2.3 nested under Hyprland to check P3 IPC socket and
+# `tam-pane msg`:
+#   - automated startup script inside the nested session checks
+#     `tam-pane msg version`, `monitors`, `windows`, `focused`, `tags`,
+#     `cursor`, `binds`, `dispatch`, `reload`, and `subscribe`
+#   - you can also run `tam-pane msg ...` interactively inside the nested foot
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+want=$(tr -d '[:space:]' < "$ROOT/VERSION")
+have=$("$ROOT/build/tam-pane" -v 2>/dev/null | awk '{print $2}') || true
+if [ "$have" != "$want" ]; then
+	echo "build/tam-pane is '${have:-missing}', VERSION is $want: run make first" >&2
+	exit 1
+fi
+
+TMPDIR_DEMO=$(mktemp -d "${TMPDIR:-/tmp}/tam-pane-demo-0.2.3.XXXXXX")
+trap 'rm -rf "$TMPDIR_DEMO"' EXIT INT TERM
+
+CFG="$TMPDIR_DEMO/init.lua"
+GUIDE="$TMPDIR_DEMO/guide"
+IPC_RES="$TMPDIR_DEMO/ipc.result"
+CHECK_SH="$TMPDIR_DEMO/check-ipc.sh"
+
+cat >"$CHECK_SH" <<'SCRIPT'
+#!/bin/sh
+set -u
+TP="$1"
+CFG="$2"
+RES="$3"
+SUB_LOG="$4"
+
+"$TP" msg subscribe tag.change >"$SUB_LOG" 2>&1 &
+SUB_PID=$!
+sleep 0.15
+
+ver=$("$TP" msg version 2>&1) || { echo "FAIL version: $ver" >"$RES"; kill "$SUB_PID" 2>/dev/null; exit 1; }
+mon=$("$TP" msg monitors 2>&1) || { echo "FAIL monitors: $mon" >"$RES"; kill "$SUB_PID" 2>/dev/null; exit 1; }
+win=$("$TP" msg windows 2>&1) || { echo "FAIL windows: $win" >"$RES"; kill "$SUB_PID" 2>/dev/null; exit 1; }
+tag=$("$TP" msg tags 2>&1) || { echo "FAIL tags: $tag" >"$RES"; kill "$SUB_PID" 2>/dev/null; exit 1; }
+cur=$("$TP" msg cursor 2>&1) || { echo "FAIL cursor: $cur" >"$RES"; kill "$SUB_PID" 2>/dev/null; exit 1; }
+bnd=$("$TP" msg binds 2>&1) || { echo "FAIL binds: $bnd" >"$RES"; kill "$SUB_PID" 2>/dev/null; exit 1; }
+
+"$TP" msg dispatch tag view 2 >/dev/null 2>&1 || { echo "FAIL dispatch tag view 2" >"$RES"; kill "$SUB_PID" 2>/dev/null; exit 1; }
+sleep 0.1
+"$TP" msg dispatch tag view 1 >/dev/null 2>&1 || { echo "FAIL dispatch tag view 1" >"$RES"; kill "$SUB_PID" 2>/dev/null; exit 1; }
+sleep 0.15
+kill "$SUB_PID" 2>/dev/null || true
+wait "$SUB_PID" 2>/dev/null || true
+
+rel=$("$TP" msg reload 2>&1) || { echo "FAIL reload: $rel" >"$RES"; exit 1; }
+
+if printf '%s\n' "$ver" | grep -q '^version	' &&
+	printf '%s\n' "$mon" | grep -q '^monitor	' &&
+	printf '%s\n' "$tag" | grep -q '^tag	' &&
+	printf '%s\n' "$cur" | grep -q '^cursor	' &&
+	printf '%s\n' "$bnd" | grep -q '^bind	' &&
+	grep -q '^event	tag.change	' "$SUB_LOG"; then
+	echo OK >"$RES"
+else
+	printf 'FAIL unexpected output\nver=%s\nsub=%s\n' "$ver" "$(cat "$SUB_LOG")" >"$RES"
+fi
+SCRIPT
+chmod +x "$CHECK_SH"
+
+{
+	printf 'local GUIDE = "%s"\n' "$GUIDE"
+	printf 'local TP_BIN = "%s"\n' "$ROOT/build/tam-pane"
+	printf 'local CFG_PATH = "%s"\n' "$CFG"
+	printf 'local IPC_RES = "%s"\n' "$IPC_RES"
+	printf 'local SUB_LOG = "%s"\n' "$TMPDIR_DEMO/sub.log"
+	printf 'local CHECK_SH = "%s"\n' "$CHECK_SH"
+	cat "$ROOT/sandbox/demo-0.2.3.lua"
+} >"$CFG"
+
+cat >"$GUIDE" <<'GUIDE'
+=== tam-pane 0.2.3 demo: IPC socket & tam-pane msg ===
+
+ 1. On startup, an automated check ran `tam-pane msg` against $TAM_PANE_SOCKET:
+    version, monitors, windows, tags, cursor, binds, dispatch (tag 2 -> 1),
+    subscribe (tag.change event), and reload.
+ 2. Try running commands yourself in this terminal, for example:
+      ./build/tam-pane msg version
+      ./build/tam-pane msg monitors
+      ./build/tam-pane msg windows
+      ./build/tam-pane msg binds
+      ./build/tam-pane msg dispatch toggle_float
+ 3. Press Meta+Shift+E to quit; the launcher verifies the automated IPC check.
+
+GUIDE
+
+"$ROOT/tools/nested-input" -c "$CFG" -s '' || true
+
+echo
+if [ -f "$IPC_RES" ] && grep -qx 'OK' "$IPC_RES"; then
+	echo "OK: tam-pane msg queries, dispatch, subscribe, and reload succeeded"
+	echo "PASS: 0.2.3 IPC socket and tam-pane msg check verified"
+else
+	echo "FAIL: tam-pane msg check did not succeed" >&2
+	if [ -f "$IPC_RES" ]; then
+		sed 's/^/  /' "$IPC_RES" >&2
+	fi
+	exit 1
+fi

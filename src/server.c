@@ -6,6 +6,7 @@
 #include "tam-pane/foreign_toplevel.h"
 #include "tam-pane/idle.h"
 #include "tam-pane/input.h"
+#include "tam-pane/ipc.h"
 #include "tam-pane/layer.h"
 #include "tam-pane/layout/arrange.h"
 #include "tam-pane/lua.h"
@@ -43,12 +44,6 @@
 static int on_signal(int signo, void *data) {
 	tam_log_info("signal %d: shutting down", signo);
 	tp_server_quit(data);
-	return 0;
-}
-
-static int on_sighup(int signo, void *data) {
-	tam_log_info("signal %d (SIGHUP): reloading configuration", signo);
-	tp_server_request_reload(data);
 	return 0;
 }
 
@@ -109,7 +104,7 @@ bool tp_server_init(struct tp_server *s) {
 	s->loop = wl_display_get_event_loop(s->display);
 	s->sigterm = wl_event_loop_add_signal(s->loop, SIGTERM, on_signal, s);
 	s->sigint = wl_event_loop_add_signal(s->loop, SIGINT, on_signal, s);
-	s->sighup = wl_event_loop_add_signal(s->loop, SIGHUP, on_sighup, s);
+	s->sighup = wl_event_loop_add_signal(s->loop, SIGHUP, on_signal, s);
 
 	s->backend = wlr_backend_autocreate(s->loop, &s->session);
 	if (!s->backend) {
@@ -179,6 +174,10 @@ bool tp_server_start(struct tp_server *s) {
 		return false;
 	}
 	setenv("WAYLAND_DISPLAY", s->socket, 1);
+	if (!tp_ipc_start(s)) {
+		tam_log_error("cannot start the IPC socket");
+		return false;
+	}
 	/* Autostart: startup hooks run once, now that spawned programs can
 	 * reach this compositor. Reloads replace hooks but never re-send it. */
 	tp_events_emit(s, &(struct tp_event){.kind = TP_EVENT_STARTUP});
@@ -273,6 +272,7 @@ void tp_server_finish(struct tp_server *s) {
 		wl_event_source_remove(s->reload_idle);
 		s->reload_idle = NULL;
 	}
+	tp_ipc_finish(s);
 	tp_events_finish(s);
 	wl_display_destroy_clients(s->display);
 

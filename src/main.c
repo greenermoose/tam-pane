@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
+#include "tam-pane/ipc.h"
 #include "tam-pane/lua.h"
 #include "tam-pane/server.h"
 #include "tam-pane/spawn.h"
@@ -12,6 +13,7 @@
 
 static void usage(FILE *out) {
 	fprintf(out, "usage: tam-pane [-v] [-d] [-c config-file] [-s startup-command]\n"
+				 "       tam-pane msg [-S socket] <command> [args...]\n"
 				 "  -v  print the version and exit\n"
 				 "  -d  log debug messages\n"
 				 "  -c  load Lua configuration from config-file\n"
@@ -19,6 +21,9 @@ static void usage(FILE *out) {
 }
 
 int main(int argc, char *argv[]) {
+	if (argc >= 2 && strcmp(argv[1], "msg") == 0)
+		return tp_ipc_client_main(argc - 1, argv + 1);
+
 	const char *startup = NULL;
 	const char *config_path = NULL;
 	bool debug = false;

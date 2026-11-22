@@ -4,6 +4,7 @@
 #include "check.h"
 #include "tam-pane/client.h"
 #include "tam-pane/input.h"
+#include "tam-pane/ipc.h"
 #include "tam-pane/focus.h"
 #include "tam-pane/layer.h"
 #include "tam-pane/layout/arrange.h"
@@ -12,6 +13,7 @@
 #include "tam-pane/security.h"
 #include <errno.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/un.h>
 #include <wlr/backend/headless.h>
 #include <wlr/types/wlr_scene.h>
@@ -1279,6 +1281,66 @@ static bool pump(struct test_client *client, struct tp_server *server) {
 		return false;
 	}
 	return true;
+}
+
+static int ipc_test_connect(const char *path) {
+	int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+	if (fd < 0)
+		return -1;
+	struct sockaddr_un addr = {0};
+	addr.sun_family = AF_UNIX;
+	snprintf(addr.sun_path, sizeof(addr.sun_path), "%s", path);
+	if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0 &&
+		errno != EINPROGRESS) {
+		close(fd);
+		return -1;
+	}
+	return fd;
+}
+
+static bool ipc_test_exchange(struct test_client *tc, struct tp_server *s,
+							  const char *path, const char *req, char *out,
+							  size_t out_size) {
+	out[0] = '\0';
+	int fd = ipc_test_connect(path);
+	if (fd < 0)
+		return false;
+	size_t rlen = strlen(req);
+	size_t woff = 0, roff = 0;
+	for (unsigned int i = 0; i < 60; i++) {
+		while (woff < rlen) {
+			ssize_t n = write(fd, req + woff, rlen - woff);
+			if (n > 0)
+				woff += (size_t)n;
+			else
+				break;
+		}
+		if (!pump(tc, s)) {
+			close(fd);
+			return false;
+		}
+		for (;;) {
+			if (roff + 1 >= out_size)
+				break;
+			ssize_t n = read(fd, out + roff, out_size - 1 - roff);
+			if (n > 0) {
+				roff += (size_t)n;
+				out[roff] = '\0';
+			} else {
+				break;
+			}
+		}
+		if (strncmp(out, "ERR ", 4) == 0 && strchr(out, '\n') != NULL) {
+			close(fd);
+			return true;
+		}
+		if (strstr(out, "\nEND\n") != NULL || strcmp(out, "OK\nEND\n") == 0) {
+			close(fd);
+			return true;
+		}
+	}
+	close(fd);
+	return roff > 0;
 }
 
 static bool globals_ready(struct test_client *client) {
@@ -4207,6 +4269,160 @@ int main(void) {
 			if (!pump(&client, &server)) goto fail;
 	}
 
+	/* ---- 0.2.3: IPC socket, queries, dispatch, lock gate, reload, subscribe ---- */
+	char ipc_sock_path[256] = {0};
+	{
+		const char *env_ipc = getenv("TAM_PANE_SOCKET");
+		CHECK(env_ipc && *env_ipc);
+		CHECK(tp_ipc_socket_path(ipc_sock_path, sizeof(ipc_sock_path),
+								 getenv("XDG_RUNTIME_DIR"), server.socket));
+		CHECK(env_ipc && strcmp(env_ipc, ipc_sock_path) == 0);
+
+		struct stat st;
+		CHECK(stat(ipc_sock_path, &st) == 0);
+		CHECK(S_ISSOCK(st.st_mode));
+		CHECK((st.st_mode & 0777) == 0600);
+
+		char rep[8192];
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path, "version\n",
+								rep, sizeof(rep)));
+		CHECK(strstr(rep, "OK\nversion\tversion=" TP_VERSION "\tsocket=") !=
+			  NULL);
+		CHECK(strstr(rep, "\nEND\n") != NULL);
+
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path, "monitors\n",
+								rep, sizeof(rep)));
+		CHECK(strstr(rep, "monitor\tname=HEADLESS-1\t") != NULL);
+
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path, "windows\n",
+								rep, sizeof(rep)));
+		CHECK(strstr(rep, "window\tmonitor=") != NULL);
+
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path, "focused\n",
+								rep, sizeof(rep)));
+		CHECK(strstr(rep, "window\tmonitor=") != NULL);
+		CHECK(strstr(rep, "\tfocused=1\t") != NULL);
+
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path, "tags\n",
+								rep, sizeof(rep)));
+		CHECK(strstr(rep, "tag\tmonitor=HEADLESS-1\t") != NULL);
+
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path, "cursor\n",
+								rep, sizeof(rep)));
+		CHECK(strstr(rep, "cursor\tx=") != NULL);
+
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path, "binds\n",
+								rep, sizeof(rep)));
+		CHECK(strstr(rep, "bind\tmods=") != NULL);
+
+		/* Unknown command & bad dispatch return ERR */
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path, "bogus\n",
+								rep, sizeof(rep)));
+		CHECK(strncmp(rep, "ERR ", 4) == 0);
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+								"dispatch tag view 99\n", rep, sizeof(rep)));
+		CHECK(strncmp(rep, "ERR ", 4) == 0);
+
+		/* Subscribe without Lua hooks: must receive tag.change via IPC */
+		int sfd = ipc_test_connect(ipc_sock_path);
+		CHECK(sfd >= 0);
+		if (sfd >= 0) {
+			const char *sub_cmd = "subscribe tag.change window.focus\n";
+			CHECK(write(sfd, sub_cmd, strlen(sub_cmd)) ==
+				  (ssize_t)strlen(sub_cmd));
+			char sbuf[4096] = {0};
+			size_t slen = 0;
+			for (unsigned int i = 0; i < 20 && !strstr(sbuf, "OK\n"); i++) {
+				pump(&client, &server);
+				ssize_t n = read(sfd, sbuf + slen, sizeof(sbuf) - 1 - slen);
+				if (n > 0) {
+					slen += (size_t)n;
+					sbuf[slen] = '\0';
+				}
+			}
+			CHECK(strncmp(sbuf, "OK\n", 3) == 0);
+			CHECK(tp_ipc_has_subscribers(&server, TP_EVENT_TAG_CHANGE));
+
+			/* Focus HEADLESS-1 explicitly, switch to a different tag, and
+			 * verify subscriber receives tag.change for HEADLESS-1. */
+			CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+									"dispatch monitor focus HEADLESS-1\n", rep,
+									sizeof(rep)));
+			CHECK(strcmp(rep, "OK\nEND\n") == 0);
+			tp_tags_t cur_t = tp_tagview_current(&server.selmon->view);
+			unsigned int next_tag = (cur_t == tp_tag_mask(2)) ? 3 : 2;
+			char dcmd[64], want_ev[128];
+			snprintf(dcmd, sizeof(dcmd), "dispatch tag view %u\n", next_tag);
+			snprintf(want_ev, sizeof(want_ev),
+					 "event\ttag.change\tmonitor=HEADLESS-1\ttags=%u\t",
+					 tp_tag_mask(next_tag));
+			CHECK(ipc_test_exchange(&client, &server, ipc_sock_path, dcmd, rep,
+									sizeof(rep)));
+			CHECK(strcmp(rep, "OK\nEND\n") == 0);
+
+			for (unsigned int i = 0; i < 30 && !strstr(sbuf, want_ev); i++) {
+				pump(&client, &server);
+				ssize_t n = read(sfd, sbuf + slen, sizeof(sbuf) - 1 - slen);
+				if (n > 0) {
+					slen += (size_t)n;
+					sbuf[slen] = '\0';
+				}
+			}
+			CHECK(strstr(sbuf, want_ev) != NULL);
+
+			/* Switch back to tag 1 */
+			CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+									"dispatch tag view 1\n", rep, sizeof(rep)));
+			CHECK(strcmp(rep, "OK\nEND\n") == 0);
+			close(sfd);
+			for (unsigned int i = 0; i < 10; i++)
+				pump(&client, &server);
+			CHECK(!tp_ipc_has_subscribers(&server, TP_EVENT_TAG_CHANGE));
+		}
+
+		/* Lock gate: dispatch refused while locked; queries and reload allowed */
+		server.locked = true;
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+								"dispatch tag view 3\n", rep, sizeof(rep)));
+		CHECK(strstr(rep, "ERR session is locked") != NULL);
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path, "version\n",
+								rep, sizeof(rep)));
+		CHECK(strncmp(rep, "OK\n", 3) == 0);
+
+		/* Live reload over IPC (allowed while locked): valid then broken */
+		FILE *f = fopen(lua_cfg, "w");
+		CHECK(f != NULL);
+		if (f) {
+			fputs("tp.config{ gaps = 14 }\n", f);
+			fclose(f);
+		}
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path, "reload\n",
+								rep, sizeof(rep)));
+		CHECK(strcmp(rep, "OK\nEND\n") == 0);
+		CHECK(server.settings.gap_inner == 14);
+
+		f = fopen(lua_cfg, "w");
+		CHECK(f != NULL);
+		if (f) {
+			fputs("tp.config{ gaps = \n", f);
+			fclose(f);
+		}
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path, "reload\n",
+								rep, sizeof(rep)));
+		CHECK(strncmp(rep, "ERR ", 4) == 0);
+		CHECK(server.settings.gap_inner == 14);
+		server.locked = false;
+
+		/* Oversized request line rejected cleanly */
+		char big[TP_IPC_MAX_LINE + 32];
+		memset(big, 'x', sizeof(big) - 2);
+		big[sizeof(big) - 2] = '\n';
+		big[sizeof(big) - 1] = '\0';
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path, big, rep,
+								sizeof(rep)));
+		CHECK(strncmp(rep, "ERR ", 4) == 0);
+	}
+
 	unlink(lua_cfg);
 	rmdir(lua_dir);
 
@@ -4217,6 +4433,8 @@ int main(void) {
 	wlr_pointer_finish(&pointer);
 	wlr_keyboard_finish(&keyboard);
 	tp_server_finish(&server);
+	if (ipc_sock_path[0])
+		CHECK(access(ipc_sock_path, F_OK) != 0);
 	CHECK_DONE("test_input_headless");
 
 fail:

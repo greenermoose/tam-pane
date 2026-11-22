@@ -3,37 +3,34 @@ WHATNOW
 What tam-pane is doing now and what comes next. Read this first; revise
 it at the end of every session (work/README-work).
 
-Updated: 2026-11-22, with W27
+Updated: 2026-11-22, with W28
 
 
 STATE
 
-  Version 0.2.2 on branch dev, accepted by Fred on 2026-11-22 after his
-  nested sandbox/demo-0.2.2 check (W27). Phase P3: 0.2.2 adds text-input
-  v3 (zwp_text_input_manager_v3) and input-method v2
-  (zwp_input_method_manager_v2) with session-lock isolation for tam-hide
-  (deactivated and keyboard grabs bypassed while locked), xdg-activation
-  (xdg_activation_v1, ignored while locked), primary selection
-  (zwp_primary_selection_device_manager_v1), data control
-  (zwlr_data_control_manager_v1 and ext_data_control_manager_v1), and
-  xdg-decoration (zxdg_decoration_manager_v1, server-side enforced on
-  tiled windows). All new globals are explicitly classified in
-  src/security.c and arch/protocols.md. zwp_virtual_keyboard_manager_v1
-  was intentionally left out of 0.2.2; sandbox/demo-locker.c remains
-  intact.
-  0.2.2 binary SHA-256:
-  b0ee3057e4b355bca577dc9883812d35e6493478cb14bc93d2005f3fd2328b5e
+  Version 0.2.3 on branch dev, accepted by Fred on 2026-11-22 after his
+  nested sandbox/demo-0.2.3 check (W28). Phase P3: 0.2.3 adds a same-UID
+  Unix domain IPC socket ($XDG_RUNTIME_DIR/tam-pane/<socket>.sock,
+  exported as TAM_PANE_SOCKET) with a line-based request/reply and
+  event-stream format built with libtam's tam_str_* helpers (no cJSON),
+  a `tam-pane msg` client subcommand, and arch/ipc.md. Commands: version,
+  monitors, windows, focused, tags, cursor, binds, reload, dispatch,
+  subscribe. While locked, queries, subscribe, and reload stay allowed
+  and dispatch returns ERR session is locked. R1 finding 17's SIGHUP
+  point is resolved: SIGHUP now triggers clean shutdown like
+  SIGTERM/SIGINT, and live reloads use `tam-pane msg reload` or
+  tp.dsp.reload().
+  0.2.3 binary SHA-256:
+  f0eda31ffe3c7949ad6cd0f2f9507f6684c0547b466248801c98055ca8198888
 
-  Prior accepted baseline: 0.2.1 (325488c, accepted 2026-11-22, W26).
+  Prior accepted baseline: 0.2.2 (63442c5, accepted 2026-11-22, W27).
   Review R1 (reviews/R1-code-review-0.1.4.md) findings 1-14, 16, and
-  finding 17's binding gate are done; finding 15 waits for 0.2.4, finding
-  11 for P4, and finding 17's remaining smaller points land alongside the
-  P3 versions that need them.
+  finding 17's binding gate and SIGHUP point are done; finding 15 waits
+  for 0.2.4, finding 11 for P4, and finding 17's remaining smaller points
+  land alongside the P3 versions that need them.
 
-  Automated checks pass: 28 tag, 143 dwindle, 509 Lua, 630 headless
-  input, 4 smoke, nm -D symbol check, tests/test_nested_input.py, real
-  wl-copy/wl-paste headless verification, plus tam-hide's 2-output
-  headless integration test.
+  Automated checks pass: 28 tag, 143 dwindle, 509 Lua, 84 IPC, 5 smoke,
+  683 headless input, nm -D symbol check, and tests/test_nested_input.py.
 
   Dependencies today: wlroots 0.20, wayland-server, xkbcommon, libtam
   (static), and Lua 5.5.1 (vendored in third_party/lua/, one patch).
@@ -41,14 +38,12 @@ STATE
 
 NEXT
 
-  1. P3, 0.2.3 (plans/P3-daily-parity.md): IPC socket
-     ($XDG_RUNTIME_DIR/tam-pane/<socket>.sock) with a line-based request
-     and event format written with libtam's string helpers (no cJSON), a
-     `tam-pane msg` client, and `arch/ipc.md` with tests. Decide R1
-     finding 17's SIGHUP reload point alongside IPC reload. Each change
-     keeps the R1 rules: one bumped version, a failing-first test, a
-     sandbox demo where the nested window can show it, and every affected
-     doc updated.
+  1. P3, before 0.2.4 (plans/P3-daily-parity.md): R1 finding 15 (one
+     arrange per idle / per-monitor dirty flag), then 0.2.4 (master-stack,
+     scroller, and monocle layouts sharing dwindle's interface, plus a
+     scratchpad). Each change keeps the R1 rules: one bumped version, a
+     failing-first test, a sandbox demo where the nested window can show
+     it, and every affected doc updated.
 
 
 WAITING FOR FRED

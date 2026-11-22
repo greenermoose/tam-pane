@@ -1,4 +1,4 @@
-# Data structures (0.2.2)
+# Data structures (0.2.3)
 
 This file describes the structures as they are built today. Update it in
 the same commit as any change to them.
@@ -62,6 +62,15 @@ the same commit as any change to them.
     `src/input/input.c`), `data_control_mgr`, and `ext_data_control_mgr`;
     and `xdg_decoration_mgr` (`src/decoration.c`, server-side enforced on
     tiled windows, tracked per client in `tp_client.decoration`).
+  - P3 IPC server (0.2.3): `ipc` (`struct tp_ipc_server *`, `src/ipc.c`,
+    wire helpers and `tam-pane msg` client in `src/ipc_proto.c`, spec in
+    `arch/ipc.md`). Owns the non-blocking Unix socket at
+    `$XDG_RUNTIME_DIR/tam-pane/<socket>.sock` (`TAM_PANE_SOCKET`),
+    per-client read/write buffers (capped at `TP_IPC_MAX_OUTBUF` with
+    slow-subscriber eviction), `SO_PEERCRED` same-UID check, and
+    per-event-kind subscriber counts. `SIGHUP` shuts down cleanly like
+    `SIGTERM`/`SIGINT` (R1 finding 17); reloads use `tam-pane msg reload`
+    or `tp.dsp.reload()`.
 - **Compositor keys:** `change_vt` switches VT for Ctrl+Alt+F-keys. It is
   set only when `session` exists (DRM), and tests may substitute their
   own. `quit_requested` is set by `tp_server_quit`, which the emergency
@@ -93,7 +102,8 @@ the same commit as any change to them.
   `include/tam-pane/server_events.h`, `src/events.c`) holds a heap-backed
   ring buffer, capped at 256 entries, of `struct tp_queued_event`: a plain
   value snapshot (`struct tp_event`) plus its cascade `depth`. Events are
-  enqueued only when hooks exist for that event kind.
+  enqueued whenever Lua hooks or IPC subscribers exist for that event kind,
+  and drained to both (`src/events.c`, 0.2.3).
   - Events the compositor raises (depth 0) are drained by a one-shot
     `idle` source after the wlroots callbacks return.
   - Events raised while hooks run (`draining`) are one round deeper. They

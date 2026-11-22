@@ -1,6 +1,6 @@
 # P3: Daily-driver parity (0.2.x)
 
-**Status:** in progress (0.2.0, 0.2.1, and 0.2.2 accepted by Fred on 2026-11-22).
+**Status:** in progress (0.2.0, 0.2.1, 0.2.2, and 0.2.3 accepted by Fred on 2026-11-22).
 
 ## Goal
 
@@ -68,8 +68,9 @@ fails first.
   - The nested backend's scale setup makes a blocking roundtrip.
   - `tp_monitor_cycle` passes a NULL-typed pointer to `wl_container_of`.
   - SIGHUP means reload, so closing the launching terminal reloads
-    instead of exiting. Decide with the IPC socket (0.2.3), which can
-    carry a reload request instead.
+    instead of exiting — **done in 0.2.3** (`SIGHUP` now triggers clean
+    shutdown like `SIGTERM`/`SIGINT`; live reload uses `tam-pane msg
+    reload` or `tp.dsp.reload()`).
   - ON_DEMAND layer surfaces get no focus when they map.
 
 ## Acceptance

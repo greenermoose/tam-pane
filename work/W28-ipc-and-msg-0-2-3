@@ -1,0 +1,60 @@
+W28 IPC SOCKET, TAM-PANE MSG, AND SIGHUP SHUTDOWN (0.2.3)
+
+Date: 2026-11-22
+AI harness: agy 1.5.14
+AI model: Gemini 4 Neon (Medium)
+
+GUIDANCE
+
+  Fred: "/plan Do the next work slice for tam-pane."
+  Fred: "/plan Yes, go ahead with switching SIGHUP to clean shutdown."
+  Fred: "1  Approve plan. Proceed." (IPC while locked: allow queries,
+  subscribe, and reload; refuse dispatch with ERR session is locked.)
+  Fred: "pass. commit and finish"
+
+DONE
+
+  - 0.2.3 (Phase P3): implemented line-based Unix-socket IPC using libtam
+    tam_str_* helpers (no cJSON), the `tam-pane msg` CLI subcommand, and
+    R1 finding 17's SIGHUP clean-shutdown change:
+    - Pure protocol helpers and CLI client (include/tam-pane/ipc.h,
+      src/ipc_proto.c, src/main.c): socket path builder
+      ($XDG_RUNTIME_DIR/tam-pane/<socket>.sock), single-line record
+      escaping, event formatter, dispatch/subscribe parsers, and
+      `tam-pane msg [-S socket] <command> [args...]`.
+    - Server-side IPC (src/ipc.c, src/server.c, include/tam-pane/server.h):
+      non-blocking AF_UNIX listener with 0700 dir / 0600 socket,
+      SO_PEERCRED same-UID verification, TAM_PANE_SOCKET export on startup,
+      64-client cap, 4096-byte line cap, 64 KiB per-client outbound cap
+      with slow-subscriber eviction, and socket unlink on shutdown.
+    - Commands: version, monitors, windows, focused, tags, cursor, binds
+      (via tp_lua_for_each_bind in src/lua_bindings.c), reload, dispatch,
+      and subscribe (window.open, window.close, window.focus, tag.change,
+      monitor.add, monitor.remove).
+    - Event fan-out (src/events.c): events enqueue and drain whenever Lua
+      hooks or IPC subscribers are listening.
+    - Lock policy: queries, subscribe, and reload stay allowed while
+      locked; dispatch returns ERR session is locked.
+    - R1 finding 17 (src/server.c): SIGHUP now triggers clean shutdown
+      like SIGTERM/SIGINT; reloads use `tam-pane msg reload` or
+      tp.dsp.reload().
+  - Added arch/ipc.md, bumped VERSION to 0.2.3, updated README,
+    ROADMAP.md, arch/data-structures.md, plans/P3-daily-parity.md, and
+    added sandbox/demo-0.2.3 + sandbox/demo-0.2.3.lua.
+  - Failing-first check confirmed 3 new smoke-headless checks failed
+    against 0.2.2. Full automated suite passes: 28 tag, 143 dwindle,
+    509 Lua, 84 IPC, 5 smoke-headless, 683 headless input, nm -D symbol
+    check, and test_nested_input.py.
+    0.2.3 binary SHA-256:
+    f0eda31ffe3c7949ad6cd0f2f9507f6684c0547b466248801c98055ca8198888.
+  - Fred ran sandbox/demo-0.2.3 and accepted 0.2.3 ("pass. commit and
+    finish").
+
+FAILED
+
+  - Nothing.
+
+HANDOFF
+
+  - 0.2.3 is accepted. Next in P3: R1 finding 15 (one arrange per idle)
+    followed by 0.2.4 (master-stack, scroller, monocle, scratchpad).
