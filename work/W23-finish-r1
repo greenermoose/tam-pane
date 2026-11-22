@@ -15,6 +15,7 @@ GUIDANCE
   each (0.1.11 to 0.1.14), then 9, 11 and 15 to 17 written into the P3
   and P4 plans. Stop after each demo for Fred's check.
   Fred: "Pass. Next?" (after his sandbox/demo-0.1.11 check)
+  Fred: "pass. Next?" (after his sandbox/demo-0.1.12 check)
 
 
 DONE
@@ -61,6 +62,7 @@ DONE
     arch/data-structures.md (fullscreen across map), R1 finding 4.
   - 0.1.12 binary SHA-256:
     cdbf6d22e7a526999847ccdffa127b0bb49614c3b4ff2ad010f69b6332302037
+  - 0.1.12 accepted by Fred.
 
 
 FAILED
@@ -79,5 +81,4 @@ FAILED
 
 HANDOFF
 
-  - Waiting for Fred's sandbox/demo-0.1.12 check. Then R1 finding 5
-    (0.1.13) as work/WHATNOW NEXT says.
+  - R1 finding 5 (0.1.13) as work/WHATNOW NEXT says.
