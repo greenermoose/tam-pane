@@ -258,6 +258,8 @@ static void on_unmap(struct wl_listener *l, void *data) {
 
 	c->mapped = false;
 	c->fullscreen = false;
+	if (had_focus)
+		s->focused_client = NULL;
 	tp_pointer_cancel_grab(s, c);
 	tp_client_detach(c);
 	wl_list_remove(&c->link);
@@ -265,12 +267,17 @@ static void on_unmap(struct wl_listener *l, void *data) {
 	if (c->mon)
 		tp_arrange(c->mon);
 	tp_events_emit_window(s, TP_EVENT_WINDOW_CLOSE, c, false);
-	if (had_focus)
+	if (had_focus) {
 		tp_focus_refresh(s);
+		if (!s->focused_client)
+			tp_events_emit_window(s, TP_EVENT_WINDOW_FOCUS, NULL, false);
+	}
 }
 
 static void on_destroy(struct wl_listener *l, void *data) {
 	struct tp_client *c = wl_container_of(l, c, destroy);
+	if (c->server->focused_client == c)
+		c->server->focused_client = NULL;
 	wl_list_remove(&c->map.link);
 	wl_list_remove(&c->unmap.link);
 	wl_list_remove(&c->commit.link);
@@ -343,6 +350,7 @@ void tp_clients_finish(struct tp_server *s) {
 	if (s->new_popup.notify)
 		wl_list_remove(&s->new_popup.link);
 	s->new_toplevel.notify = s->new_popup.notify = NULL;
+	s->focused_client = NULL;
 }
 
 /* ---- operations ---- */

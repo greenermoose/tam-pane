@@ -1,0 +1,48 @@
+#!/bin/sh
+# Launch tam-pane 0.1.19 nested under Hyprland to show R1 finding 16 fixed:
+# tp_focused() tracks the focused window explicitly on tp_server instead of
+# inferring it from the seat's keyboard surface, so window bindings (Meta+V,
+# Meta+F, Meta+W) keep working even while a popup menu holds keyboard focus.
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+want=$(tr -d '[:space:]' < "$ROOT/VERSION")
+have=$("$ROOT/build/tam-pane" -v 2>/dev/null | awk '{print $2}') || true
+if [ "$have" != "$want" ]; then
+	echo "build/tam-pane is '${have:-missing}', VERSION is $want: run make first" >&2
+	exit 1
+fi
+
+TMPDIR_DEMO=$(mktemp -d "${TMPDIR:-/tmp}/tam-pane-demo-0.1.19.XXXXXX")
+trap 'rm -rf "$TMPDIR_DEMO"' EXIT INT TERM
+
+CFG="$TMPDIR_DEMO/init.lua"
+GUIDE="$TMPDIR_DEMO/guide"
+{
+	printf 'local GUIDE = "%s"\n' "$GUIDE"
+	cat "$ROOT/sandbox/demo-0.1.19.lua"
+} >"$CFG"
+
+cat >"$GUIDE" <<'GUIDE'
+=== tam-pane 0.1.19 demo: explicit focused window ===
+
+ 1. Press Meta+G to open a GTK 4 window (Files / nautilus) beside this guide,
+    or open any window with a popup menu.
+ 2. Open a menu in that window (for example, click the hamburger menu or
+    right-click inside the window so a popup menu stays open).
+ 3. While the menu is open, press Meta+V (toggle float).
+    The window should float immediately; in 0.1.18, bindings did nothing
+    whenever a popup held keyboard focus.
+ 4. Press Meta+Shift+E to quit, and answer the launcher's question.
+
+GUIDE
+
+"$ROOT/tools/nested-input" -c "$CFG" -s '' || true
+
+echo
+printf 'Did Meta+V still float the window while its popup menu was open? [y/n] '
+read -r answer
+case $answer in
+y | Y | yes) echo "PASS: explicit focused window keeps bindings working" ;;
+*) echo "FAIL: window binding ignored while popup was open"; exit 1 ;;
+esac

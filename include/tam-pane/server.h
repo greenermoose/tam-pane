@@ -92,6 +92,7 @@ struct tp_server {
 	struct wlr_xdg_shell *xdg_shell;
 	struct wl_list clients;		/* tp_client.link, stacking-independent */
 	struct wl_list focus_stack; /* tp_client.flink, most recent first */
+	struct tp_client *focused_client; /* explicitly focused window, or NULL */
 	struct wl_listener new_toplevel;
 	struct wl_listener new_popup;
 

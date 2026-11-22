@@ -2005,6 +2005,95 @@ int main(void) {
 		rmdir(sb_dir);
 	}
 
+	/* ---- 0.1.19: explicit focused window (R1 finding 16) ---- */
+	/* Restore default bindings via reload (emergency-quit test cleared them). */
+	lf = fopen(lua_cfg, "wb");
+	CHECK(lf != NULL);
+	if (lf) {
+		fputs("-- default bindings\n", lf);
+		fclose(lf);
+	}
+	CHECK(tp_lua_reload_file(&server.lua, lua_cfg, &server.settings, NULL, 0));
+
+	struct test_window fw1 = {0}, fw2 = {0};
+	configure_window_app(&client, &fw1, "fw1", "focus-win-1");
+	for (unsigned int i = 0; i < 200 && !fw1.configured; i++)
+		if (!pump(&client, &server)) goto fail;
+	for (unsigned int i = 0; i < 15; i++)
+		if (!pump(&client, &server)) goto fail;
+	struct tp_client *fc1 = tp_focused(&server);
+	CHECK(fc1 != NULL);
+
+	configure_window_app(&client, &fw2, "fw2", "focus-win-2");
+	for (unsigned int i = 0; i < 200 && !fw2.configured; i++)
+		if (!pump(&client, &server)) goto fail;
+	for (unsigned int i = 0; i < 15; i++)
+		if (!pump(&client, &server)) goto fail;
+	struct tp_client *fc2 = tp_focused(&server);
+	CHECK(fc2 != NULL && fc2 != fc1);
+
+	/* Focus fw1 explicitly so fpop belongs to the focused window. */
+	tp_focus(&server, fc1);
+	for (unsigned int i = 0; i < 10; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(tp_focused(&server) == fc1);
+
+	/* Open an xdg popup on fw1 and give the seat's keyboard focus to the
+	 * popup surface, simulating a popup grab. */
+	struct test_popup fpop = { .client = &client };
+	struct xdg_positioner *fpos = xdg_wm_base_create_positioner(client.wm_base);
+	xdg_positioner_set_size(fpos, 80, 60);
+	xdg_positioner_set_anchor_rect(fpos, 10, 10, 20, 20);
+	xdg_positioner_set_anchor(fpos, XDG_POSITIONER_ANCHOR_BOTTOM_LEFT);
+	xdg_positioner_set_gravity(fpos, XDG_POSITIONER_GRAVITY_BOTTOM_RIGHT);
+	fpop.surface = wl_compositor_create_surface(client.compositor);
+	fpop.xdg_surface = xdg_wm_base_get_xdg_surface(client.wm_base, fpop.surface);
+	xdg_surface_add_listener(fpop.xdg_surface, &popup_surface_listener, &fpop);
+	fpop.popup = xdg_surface_get_popup(fpop.xdg_surface, fw1.xdg_surface, fpos);
+	xdg_popup_add_listener(fpop.popup, &popup_listener, &fpop);
+	xdg_positioner_destroy(fpos);
+	wl_surface_commit(fpop.surface);
+	for (unsigned int i = 0; i < 200 && !fpop.configured; i++)
+		if (!pump(&client, &server)) goto fail;
+	for (unsigned int i = 0; i < 10; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(fpop.configured);
+	CHECK(!wl_list_empty(&fc1->toplevel->base->popups));
+	if (!wl_list_empty(&fc1->toplevel->base->popups)) {
+		struct wlr_xdg_popup *wpop =
+			wl_container_of(fc1->toplevel->base->popups.next, wpop, link);
+		wlr_seat_keyboard_notify_enter(server.seat, wpop->base->surface,
+									   NULL, 0, NULL);
+		for (unsigned int i = 0; i < 5; i++)
+			if (!pump(&client, &server)) goto fail;
+
+		/* Explicit focus must still report fc1, and Meta+V must still float it. */
+		CHECK(tp_focused(&server) == fc1);
+		bool was_floating = fc1->floating;
+		chord(&keyboard, KEY_V, false, false);
+		for (unsigned int i = 0; i < 10; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(fc1->floating == !was_floating);
+
+		/* Unmapping fc1 while the popup holds seat keyboard focus must still
+		 * recognize had_focus and restore focus to fc2. */
+		xdg_popup_destroy(fpop.popup);
+		xdg_surface_destroy(fpop.xdg_surface);
+		wl_surface_destroy(fpop.surface);
+		destroy_window(&fw1);
+		for (unsigned int i = 0; i < 20; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(tp_focused(&server) == fc2);
+	} else {
+		xdg_popup_destroy(fpop.popup);
+		xdg_surface_destroy(fpop.xdg_surface);
+		wl_surface_destroy(fpop.surface);
+		destroy_window(&fw1);
+	}
+	destroy_window(&fw2);
+	for (unsigned int i = 0; i < 20; i++)
+		if (!pump(&client, &server)) goto fail;
+
 	unlink(lua_cfg);
 	rmdir(lua_dir);
 

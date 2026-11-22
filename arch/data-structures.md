@@ -1,4 +1,4 @@
-# Data structures (0.1.18)
+# Data structures (0.1.19)
 
 This file describes the structures as they are built today. Update it in
 the same commit as any change to them.
@@ -14,8 +14,11 @@ the same commit as any change to them.
   - the scene, with seven layer trees (`enum tp_layer`) from background
     to overlay;
   - the output layout;
-  - lists of monitors, clients, the focus stack and keyboards, and
-    `selmon`, the monitor that receives new windows;
+  - lists of monitors, clients, the focus stack and keyboards,
+    `focused_client` (`struct tp_client *`, explicit focused window kept
+    separately from the seat's keyboard surface so popup grabs do not
+    lose window focus, 0.1.19), and `selmon`, the monitor that receives
+    new windows;
   - the listeners, grouped by the module that owns them;
   - `grab` (`struct tp_pointer_grab`), explicit state for an active
     `Meta+Left/Right` pointer move or resize drag (no globals). A tiled

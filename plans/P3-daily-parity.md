@@ -49,11 +49,12 @@ fails first.
   pointer re-enter. A per-monitor dirty flag and one arrange per idle or
   frame saves work and wakeups. The new layouts in 0.2.4 should be
   written against that.
-- **An explicit focused window (finding 16), with 0.2.0.** `tp_focused()`
-  infers focus from the seat, so while an xdg popup grab holds the
-  keyboard it returns NULL and window bindings do nothing. Session-lock
-  (0.2.0) and input methods (0.2.2) also take the keyboard. Keep the
-  focused window in the server and stop inferring it.
+- **An explicit focused window (finding 16), done in 0.1.19.**
+  `tp_server.focused_client` tracks the focused toplevel explicitly, and
+  `tp_focused()` returns it directly instead of inferring focus from
+  `s->seat->keyboard_state.focused_surface`. Window bindings and unmap
+  focus restoration keep working while an xdg popup grab (or later
+  session-lock / input-method) holds the seat's keyboard surface.
 - **Smaller points (finding 17).**
   - A gate on bindings, which session-lock needs (0.2.0).
   - Keyboard groups, so modifiers on one keyboard combine with keys on

@@ -1,0 +1,58 @@
+W24 PROTOCOL FILTER AND EXPLICIT FOCUS
+
+Date: 2026-11-22
+AI harness: Antigravity 1.5.14
+AI model: gemini-4-neon
+Commits: ab14afb
+
+GUIDANCE
+
+  Fred: "/plan Do the next work slice of tam-pane."
+  Fred: "Deny privileged globals to clients with a security context and
+  to connections with a different peer UID. Allow direct same-UID
+  clients, and skip the executable-path allowlist. Reserve exclusive
+  overlay keyboard focus for the configured shell connection while
+  leaving ordinary layer-shell use available. Extend the proposed test
+  to cover bind rejection and the cross-UID decision. In the protocol
+  table, require an explicit classification whenever a new global lands,
+  including any capture-source companion or replacement clipboard
+  protocol. For P3, grant session lock to the locker launched by
+  tam-pane, and grant raw capture to the portal backend plus any
+  explicitly launched screenshot tool. Plan approved. Proceed."
+
+DONE
+
+  - 0.1.18 (R1 finding 9): added include/tam-pane/security.h,
+    src/security.c, and arch/protocols.md. Installed
+    wl_display_set_global_filter with wp_security_context_manager_v1.
+    Every global requires an explicit classification (unclassified
+    globals fail closed as privileged), including capture-source
+    companions and replacement clipboard protocols. Privileged globals
+    are denied to security-context clients and cross-UID peers; direct
+    same-UID clients are allowed with no executable-path allowlist.
+    Exclusive OVERLAY keyboard focus is reserved for
+    tp_server.shell_client (cleared on disconnect); ordinary layer-shell
+    use remains available. Headless tests failed first, then passed
+    (422 checks) covering classification, cross-UID policy, sandboxed
+    hiding, active bind rejection (EPROTO), and shell overlay focus.
+  - 0.1.19 (R1 finding 16): added explicit tp_server.focused_client in
+    server.h, focus.c, and client.c so tp_focused() no longer infers
+    focus from the seat's keyboard surface. Headless tests failed first,
+    then passed (432 checks) verifying tp_focused(), Meta+V, and unmap
+    focus restoration while an xdg popup holds seat keyboard focus.
+    Added sandbox/demo-0.1.19 and sandbox/demo-0.1.19.lua.
+  - Full clean build and test suite passed (28 tag, 143 dwindle, 471
+    Lua, 4 smoke, 432 headless input, nm -D, test_nested_input.py).
+    0.1.19 binary SHA-256:
+    f774e4b1c63a160d495d12c6dbc0833986a159db1c26c4052afef33927506dda.
+
+FAILED
+
+  - Nothing.
+
+HANDOFF
+
+  - Fred can run sandbox/demo-0.1.19 to check 0.1.19 nested. Next in P3
+    is 0.2.0 (foreign-toplevel, ext-workspace, session-lock, idle notify
+    and inhibit, output power), with a binding gate for session-lock
+    (R1 finding 17) and per-role grants per arch/protocols.md.

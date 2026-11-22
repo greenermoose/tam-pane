@@ -5,8 +5,8 @@ of versions. Versions follow semantic versioning: during 0.x, the minor
 number marks a phase's big step and the patch number marks each
 milestone inside it.
 
-**Current version:** 0.1.18 (Phase P2 complete at 0.1.4, hardened
-from 0.1.5 to 0.1.17 for review R1, now landing pre-0.2.0 R1 design work
+**Current version:** 0.1.19 (Phase P2 complete at 0.1.4, hardened
+from 0.1.5 to 0.1.17 for review R1, pre-0.2.0 R1 design work 0.1.18–0.1.19
 on branch `dev`).
 
 ## Tamlinux timing
@@ -97,6 +97,9 @@ are fixed before P3, one version each:
   sandboxed and cross-UID clients, explicit classification in
   `arch/protocols.md`, and exclusive OVERLAY keyboard focus reserved for
   the configured shell connection (R1 finding 9).
+- **0.1.19** Explicit focused window (`tp_server.focused_client`) instead
+  of inferring focus from the seat's keyboard surface, so window bindings
+  and unmap focus restoration work across popup grabs (R1 finding 16).
 - R1's fixes are done. Its design points (findings 9, 11 and 15 to 17)
   are scheduled in the P3 and P4 plans, under "Design work from review
   R1".

@@ -66,19 +66,16 @@ static struct tp_layer_surface *exclusive_layer(struct tp_server *s) {
 }
 
 struct tp_client *tp_focused(struct tp_server *s) {
-	struct wlr_surface *surface = s->seat->keyboard_state.focused_surface;
-	if (!surface || wl_list_empty(&s->focus_stack))
-		return NULL;
-	struct tp_client *top = wl_container_of(s->focus_stack.next, top, flink);
-	return top->toplevel->base->surface == surface ? top : NULL;
+	return s ? s->focused_client : NULL;
 }
 
 void tp_focus_layer(struct tp_server *s, struct tp_layer_surface *ls) {
 	if (!ls || !ls->mapped)
 		return;
-	struct tp_client *old = tp_focused(s);
+	struct tp_client *old = s->focused_client;
 	if (old)
 		wlr_xdg_toplevel_set_activated(old->toplevel, false);
+	s->focused_client = NULL;
 	s->focused_layer = ls;
 	if (ls->mon)
 		s->selmon = ls->mon;
@@ -95,16 +92,15 @@ void tp_focus(struct tp_server *s, struct tp_client *c) {
 		return;
 	}
 
-	struct tp_client *old = tp_focused(s);
-	bool had_surface = s->seat->keyboard_state.focused_surface != NULL;
-	bool had_layer = s->focused_layer != NULL;
+	struct tp_client *old = s->focused_client;
 	if (old && old != c)
 		wlr_xdg_toplevel_set_activated(old->toplevel, false);
 	s->focused_layer = NULL;
+	s->focused_client = c;
 
 	if (!c) {
 		wlr_seat_keyboard_notify_clear_focus(s->seat);
-		if (old || (had_surface && !had_layer))
+		if (old)
 			tp_events_emit_window(s, TP_EVENT_WINDOW_FOCUS, NULL, false);
 		return;
 	}
