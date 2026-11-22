@@ -5,9 +5,10 @@ of versions. Versions follow semantic versioning: during 0.x, the minor
 number marks a phase's big step and the patch number marks each
 milestone inside it.
 
-**Current version:** 0.1.12 (Phase P2 complete at 0.1.4, then hardened
-from 0.1.5 to fix review R1's findings; 0.1.5–0.1.9, 0.1.11 and 0.1.12
-accepted by Fred on 2026-11-21, and his check of 0.1.10 deferred to P4;
+**Current version:** 0.1.13, a candidate (Phase P2 complete at 0.1.4,
+then hardened from 0.1.5 to fix review R1's findings; 0.1.5–0.1.9,
+0.1.11 and 0.1.12 accepted by Fred on 2026-11-21, and his check of
+0.1.10 deferred to P4;
 development continues on branch `dev`).
 
 ## Tamlinux timing
@@ -80,6 +81,8 @@ are fixed before P3, one version each:
 - **0.1.12** A program that starts fullscreen opens fullscreen, and a
   window that unmaps and maps again is no longer left marked fullscreen
   (R1 finding 4).
+- **0.1.13** Menus and other popups near a screen edge flip or slide
+  back onto the monitor instead of opening off-screen (R1 finding 5).
 - Next: R1's remaining fixes (`work/WHATNOW`).
 
 ### Phase P3: daily-driver parity (0.2.x), `plans/P3-daily-parity.md`

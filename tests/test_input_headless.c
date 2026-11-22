@@ -23,8 +23,10 @@
 #include <wayland-client.h>
 #include <wlr/interfaces/wlr_keyboard.h>
 #include <wlr/interfaces/wlr_pointer.h>
+#include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_seat.h>
+#include <wlr/types/wlr_xdg_shell.h>
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 
@@ -323,6 +325,7 @@ struct test_popup {
 	struct xdg_surface *xdg_surface;
 	struct xdg_popup *popup;
 	bool configured;
+	int32_t x, y, w, h; /* the last xdg_popup.configure */
 };
 
 static void popup_xdg_configure(void *data, struct xdg_surface *surface,
@@ -342,7 +345,13 @@ static const struct xdg_surface_listener popup_surface_listener = {
 };
 
 static void popup_configure(void *data, struct xdg_popup *popup,
-		int32_t x, int32_t y, int32_t w, int32_t h) {}
+		int32_t x, int32_t y, int32_t w, int32_t h) {
+	struct test_popup *p = data;
+	p->x = x;
+	p->y = y;
+	p->w = w;
+	p->h = h;
+}
 static void popup_done(void *data, struct xdg_popup *popup) {}
 
 static const struct xdg_popup_listener popup_listener = {
@@ -934,6 +943,55 @@ int main(void) {
 	for (unsigned int i = 0; i < 100 && wl_list_length(&server.clients) == 3; i++)
 		if (!pump(&client, &server)) goto fail;
 	CHECK(wl_list_length(&server.clients) == 2);
+
+	/* A menu near the screen edge stays on the monitor (R1 finding 5). On
+	 * the right-hand window c1, open a popup that the positioner would put
+	 * past the monitor's right edge, with slide and flip allowed as GTK
+	 * and Qt do. Before 0.1.13 the compositor never unconstrained it. */
+	struct test_window *w1 = NULL;
+	for (unsigned int i = 0; i < 3; i++) {
+		struct test_window *w = &client.windows[i];
+		if (w->surface && wl_proxy_get_id((struct wl_proxy *)w->surface) ==
+				wl_resource_get_id(c1->toplevel->base->surface->resource))
+			w1 = w;
+	}
+	CHECK(w1 != NULL && c1->mon && c1->geom.x > c0->geom.x);
+	if (!w1 || !c1->mon) goto fail;
+	struct tp_rect u1 = c1->mon->usable;
+	/* The popup's surface-local origin in layout coordinates. */
+	int32_t ox = c1->geom.x - c1->toplevel->base->geometry.x;
+	int32_t oy = c1->geom.y - c1->toplevel->base->geometry.y;
+	int32_t pw = u1.x + u1.w - ox + 100;
+	CHECK(pw < u1.w);
+	struct test_popup edge = { .client = &client };
+	struct xdg_positioner *epos = xdg_wm_base_create_positioner(client.wm_base);
+	xdg_positioner_set_size(epos, pw, 60);
+	xdg_positioner_set_anchor_rect(epos, 0, 0, 1, 1);
+	xdg_positioner_set_anchor(epos, XDG_POSITIONER_ANCHOR_BOTTOM_RIGHT);
+	xdg_positioner_set_gravity(epos, XDG_POSITIONER_GRAVITY_BOTTOM_RIGHT);
+	xdg_positioner_set_constraint_adjustment(epos,
+		XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_SLIDE_X |
+		XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_FLIP_X |
+		XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_SLIDE_Y |
+		XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_FLIP_Y);
+	edge.surface = wl_compositor_create_surface(client.compositor);
+	edge.xdg_surface = xdg_wm_base_get_xdg_surface(client.wm_base, edge.surface);
+	xdg_surface_add_listener(edge.xdg_surface, &popup_surface_listener, &edge);
+	edge.popup = xdg_surface_get_popup(edge.xdg_surface, w1->xdg_surface, epos);
+	xdg_popup_add_listener(edge.popup, &popup_listener, &edge);
+	xdg_positioner_destroy(epos);
+	wl_surface_commit(edge.surface);
+	for (unsigned int i = 0; i < 200 && !edge.configured; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(edge.configured);
+	CHECK(edge.w == pw && edge.h == 60);
+	CHECK(ox + edge.x >= u1.x && ox + edge.x + edge.w <= u1.x + u1.w);
+	CHECK(oy + edge.y >= u1.y && oy + edge.y + edge.h <= u1.y + u1.h);
+	xdg_popup_destroy(edge.popup);
+	xdg_surface_destroy(edge.xdg_surface);
+	wl_surface_destroy(edge.surface);
+	for (unsigned int i = 0; i < 20; i++)
+		if (!pump(&client, &server)) goto fail;
 
 	/* ---- 0.0.5: layer-shell exclusive zone, popups, keyboard focus ---- */
 	struct tp_monitor *m1 = server.selmon;

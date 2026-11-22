@@ -109,6 +109,11 @@ the same commit as any change to them.
   request made before the window mapped, and `on_unmap` clears the flag,
   so a remapped window follows the client's current request and is never
   left marked fullscreen in the tile or float layer.
+- **Popups (0.1.13):** an xdg popup rides on its parent's scene tree. On
+  its first commit it is unconstrained against its window's monitor
+  (`usable`, or `area` when the window is fullscreen), in the root
+  toplevel's surface coordinates, so menus near an edge flip or slide
+  onto the screen. Layer-surface popups do the same in `src/layer.c`.
 - **Monitor membership (0.1.10):** every change of `mon` goes through
   `tp_client_attach` (`src/client.c`). It first calls `tp_client_detach`,
   which drops the window from its monitor's `focus` slots and layout

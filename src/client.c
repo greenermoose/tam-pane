@@ -22,10 +22,48 @@ struct tp_popup {
 	struct wl_listener destroy;
 };
 
+/* The window a popup belongs to: follow parent popups up to the root.
+ * NULL when the root is not one of our toplevels (a layer surface). */
+static struct tp_client *popup_client(struct wlr_xdg_popup *popup) {
+	struct wlr_xdg_surface *xs = NULL;
+	while (popup && popup->parent) {
+		xs = wlr_xdg_surface_try_from_wlr_surface(popup->parent);
+		if (!xs || xs->role != WLR_XDG_SURFACE_ROLE_POPUP)
+			break;
+		popup = xs->popup;
+	}
+	if (!xs || xs->role != WLR_XDG_SURFACE_ROLE_TOPLEVEL || !xs->data)
+		return NULL;
+	struct wlr_scene_tree *tree = xs->data;
+	return tree->node.data;
+}
+
+/* Keep a new popup on its window's monitor. The box is in the root
+ * toplevel's surface coordinates: the scene places the window's
+ * geometry at c->geom, so its surface origin is c->geom minus the
+ * geometry offset. A fullscreen window covers the bars, so it gets the
+ * whole monitor. */
+static void popup_unconstrain(struct wlr_xdg_popup *popup) {
+	struct tp_client *c = popup_client(popup);
+	if (!c || !c->mon)
+		return;
+	struct tp_rect r = c->fullscreen ? c->mon->area : c->mon->usable;
+	struct wlr_box g = c->toplevel->base->geometry;
+	struct wlr_box box = {
+		.x = r.x - (c->geom.x - g.x),
+		.y = r.y - (c->geom.y - g.y),
+		.width = r.w,
+		.height = r.h,
+	};
+	wlr_xdg_popup_unconstrain_from_box(popup, &box);
+}
+
 static void popup_commit(struct wl_listener *l, void *data) {
 	struct tp_popup *p = wl_container_of(l, p, commit);
-	if (p->popup->base->initial_commit)
+	if (p->popup->base->initial_commit) {
+		popup_unconstrain(p->popup);
 		wlr_xdg_surface_schedule_configure(p->popup->base);
+	}
 }
 
 static void popup_destroy(struct wl_listener *l, void *data) {

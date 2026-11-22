@@ -1,10 +1,11 @@
-W23 FINISH REVIEW R1: FOCUSED SPLIT (0.1.11), FULLSCREEN AT MAP (0.1.12)
+W23 FINISH REVIEW R1: SPLIT, FULLSCREEN AND POPUPS (0.1.11 TO 0.1.13)
 
 Date: 2026-11-21
 AI harness: Claude Code 2.1.330
 AI model: claude-opus-5-5
-Commits: 9c0bf49 (0.1.11), b4a8570 (accept 0.1.11), the 0.1.12
-         commit, and the commit that last updates this record
+Commits: 9c0bf49 (0.1.11), b4a8570 (accept), ff5dc75 (0.1.12),
+         91f1fff (accept), the 0.1.13 commit, and the commit that last
+         updates this record
 Continues: W21
 
 
@@ -62,7 +63,31 @@ DONE
     arch/data-structures.md (fullscreen across map), R1 finding 4.
   - 0.1.12 binary SHA-256:
     cdbf6d22e7a526999847ccdffa127b0bb49614c3b4ff2ad010f69b6332302037
-  - 0.1.12 accepted by Fred.
+  - 0.1.12 accepted by Fred in 91f1fff.
+  - R1 finding 5 fixed in 0.1.13. src/client.c: popup_client follows
+    parent popups up to the root toplevel's tp_client (NULL for a
+    layer-surface root). popup_unconstrain passes its monitor's usable
+    box (area when fullscreen) in the root's surface coordinates,
+    r - (c->geom - xdg geometry offset), as MangoWM's layer.c does and
+    as the wlroots header asks. popup_commit calls it on the initial
+    commit.
+  - Test first: test_popup now records xdg_popup.configure. On the
+    right-hand window c1, a popup wider than the space to the right
+    edge, with slide and flip allowed, must end up inside the monitor.
+    It failed on 0.1.12 (off the right edge); 366 checks pass on 0.1.13.
+    make test passes; ASan finds no memory errors. The test window has
+    no xdg geometry offset, so that term of the box is not exercised.
+  - sandbox/demo-0.1.13 and .lua: Meta+O opens nautilus on its own
+    session bus (dbus-run-session, DBUS_SESSION_BUS_ADDRESS and DISPLAY
+    removed), so it cannot open on the host's Files. Fred right-clicks
+    near the bottom-right corner. The verdict is visual, so the
+    launcher asks him y/n. Checked headless: nautilus maps in tam-pane
+    this way and leaves no process behind. No other installed program
+    has a menu (no gtk demos, no other GTK or Qt apps).
+  - Docs: ROADMAP.md (0.1.13 entry, current version),
+    arch/data-structures.md (popups), R1 finding 5.
+  - 0.1.13 binary SHA-256:
+    9eef79d040417a45db8a4789354cad4317dbe7d5f881a75a051cb8282c3c6470
 
 
 FAILED
@@ -81,4 +106,5 @@ FAILED
 
 HANDOFF
 
-  - R1 finding 5 (0.1.13) as work/WHATNOW NEXT says.
+  - Waiting for Fred's sandbox/demo-0.1.13 check. Then R1 finding 14
+    (0.1.14) as work/WHATNOW NEXT says.
