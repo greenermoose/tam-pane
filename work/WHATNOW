@@ -8,8 +8,8 @@ Updated: 2026-11-22, with W25
 
 STATE
 
-  Version 0.2.0 on branch dev, awaiting Fred's nested sandbox/demo-0.2.0
-  check (W25). Phase P3 started: 0.2.0 adds foreign-toplevel
+  Version 0.2.0 on branch dev (6c65d57), accepted by Fred on 2026-11-22
+  after his nested sandbox/demo-0.2.0 check (W25). Phase P3 started: 0.2.0 adds foreign-toplevel
   (zwlr_foreign_toplevel_manager_v1 and ext_foreign_toplevel_list_v1),
   ext-workspace (per-monitor 9-tag groups), session-lock
   (ext_session_lock_manager_v1 granted exclusively to the locker launched
@@ -38,22 +38,19 @@ STATE
 
 NEXT
 
-  1. After Fred accepts 0.2.0 (sandbox/demo-0.2.0), move to P3, 0.2.1
-     (plans/P3-daily-parity.md): screencopy and ext-image-copy-capture
-     (with capture-source companions, granted to the portal backend plus
-     any explicitly launched screenshot tool per arch/protocols.md),
-     wlr-output-management, gamma control, cursor-shape (viewporter and
-     fractional-scale are already active). Classify every new global
-     explicitly in src/security.c and arch/protocols.md. Each change
-     keeps the R1 rules: one bumped version, a failing-first test, a
-     sandbox demo where the nested window can show it, and every
-     affected doc updated.
+  1. P3, 0.2.1 (plans/P3-daily-parity.md): screencopy and
+     ext-image-copy-capture (with capture-source companions, granted to
+     the portal backend plus any explicitly launched screenshot tool per
+     arch/protocols.md), wlr-output-management, gamma control,
+     cursor-shape (viewporter and fractional-scale are already active).
+     Classify every new global explicitly in src/security.c and
+     arch/protocols.md. Each change keeps the R1 rules: one bumped
+     version, a failing-first test, a sandbox demo where the nested
+     window can show it, and every affected doc updated.
 
 
 WAITING FOR FRED
 
-  - Nested check of 0.2.0 via sandbox/demo-0.2.0 (build/tam-pane SHA-256:
-    e8e011812196e348948d9a7f31dbebd7ced2754f7ba9049fc3378b2e91a63f36).
   - Whether to report GTK 4.24.1's divide by a zero refresh upstream
     (B6).
   - At the first run on real hardware (P4): the VT half of B5, and the

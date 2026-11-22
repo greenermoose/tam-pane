@@ -3,6 +3,7 @@ W25 SHELL PROTOCOLS AND BINDING GATE (0.2.0)
 Date: 2026-11-22
 AI harness: Antigravity 1.5.14
 AI model: gemini-4-neon
+Commits: 6c65d57, 5ccb21e, 011c751
 
 GUIDANCE
 
@@ -54,14 +55,18 @@ DONE
     Removed hyprlock from plans/P3-daily-parity.md and arch/lua-api.md
     per Fred's decision to use tam-hide for locking and tam-pane for
     screen blanking.
+  - Fred ran sandbox/demo-0.2.0 and accepted 0.2.0 ("passed. commit").
 
 FAILED
 
-  - Nothing.
+  - Initial sandbox/demo-0.2.0 tried hyprlock (crashed nested; Fred
+    rejected hyprlock). First demo-locker.c closed its Wayland socket
+    immediately after unlock_and_destroy without wl_display_roundtrip,
+    causing an EPOLLHUP race that triggered fail-locked; fixed in
+    011c751.
 
 HANDOFF
 
-  - 0.2.0 is ready for Fred's nested sandbox/demo-0.2.0 check. Next in P3
-    after acceptance is 0.2.1 (screencopy, ext-image-copy-capture with
-    capture-source companions, wlr-output-management, gamma control,
-    cursor-shape).
+  - 0.2.0 is accepted. Next in P3 is 0.2.1 (screencopy,
+    ext-image-copy-capture with capture-source companions,
+    wlr-output-management, gamma control, cursor-shape).

@@ -1,6 +1,6 @@
 # P3: Daily-driver parity (0.2.x)
 
-**Status:** in progress (0.2.0 implemented, awaiting Fred's nested check).
+**Status:** in progress (0.2.0 accepted by Fred on 2026-11-22).
 
 ## Goal
 
