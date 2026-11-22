@@ -1,6 +1,6 @@
 # B9: Meta+V floats a window at the layout's top-left, at its first size
 
-- **Status:** Fix available
+- **Status:** Verified (one monitor; the multi-monitor part waits for P4)
 - **Severity:** medium
 - **Affected versions:** 0.0.4 to 0.1.16
 - **Fixed in:** 0.1.17
@@ -57,5 +57,9 @@ between monitors.
   the first monitor, and an off-monitor place. Its first two checks
   fail on 0.1.16. With only the `on_map` change, the move check fails,
   which shows the carry change is needed.
-- Fred's check: `sandbox/demo-0.1.17` (one monitor; the multi-monitor
-  part is the headless test, and the P4 hardware checks).
+- Fred's check: he passed `sandbox/demo-0.1.17` on 2026-11-21 (commit
+  3425435, binary SHA-256
+  `e6690cd33e9bddd9d847dbd7930180096e50231ad16237a1bcd6e4e9547be785`).
+  The demo asks whether the first float was centred at half size and a
+  later float came back where he had dragged it. The multi-monitor part
+  is the headless test and the P4 hardware checks.
