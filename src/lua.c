@@ -389,35 +389,41 @@ static int l_tp_config(lua_State *L) {
 	return 0;
 }
 
-/* tp.spawn{prog, arg, ...}: no shell, so strings from events (window
- * titles, app ids) reach the program as single arguments, never as shell
- * syntax. The argument strings stay on the Lua stack while they are used. */
-static int spawn_argv(lua_State *L, struct tp_lua *lua) {
+static int collect_argv_and_call(lua_State *L, const char *ctx,
+								 void (*fn)(const char *const argv[],
+											void *userdata),
+								 void *userdata) {
 	lua_Integer n = luaL_len(L, 1);
 	if (n < 1)
-		return luaL_error(L, "tp.spawn: argument list must not be empty");
+		return luaL_error(L, "%s: argument list must not be empty", ctx);
 	if (n > TP_LUA_SPAWN_ARGV_MAX)
-		return luaL_error(L, "tp.spawn: more than %d arguments",
+		return luaL_error(L, "%s: more than %d arguments", ctx,
 						  TP_LUA_SPAWN_ARGV_MAX);
-	luaL_checkstack(L, (int)n, "tp.spawn");
+	luaL_checkstack(L, (int)n, ctx);
 	const char *argv[TP_LUA_SPAWN_ARGV_MAX + 1];
 	for (lua_Integer i = 1; i <= n; i++) {
 		if (lua_geti(L, 1, i) != LUA_TSTRING)
-			return luaL_error(L, "tp.spawn: argument %d must be a string",
+			return luaL_error(L, "%s: argument %d must be a string", ctx,
 							  (int)i);
 		size_t len = 0;
 		const char *arg = lua_tolstring(L, -1, &len);
 		if (strlen(arg) != len)
-			return luaL_error(L, "tp.spawn: argument %d contains a NUL byte",
+			return luaL_error(L, "%s: argument %d contains a NUL byte", ctx,
 							  (int)i);
 		if (i == 1 && len == 0)
-			return luaL_error(L, "tp.spawn: program name must not be empty");
+			return luaL_error(L, "%s: program name must not be empty", ctx);
 		argv[i - 1] = arg;
 	}
 	argv[n] = NULL;
+	if (fn)
+		fn(argv, userdata);
+	return 0;
+}
+
+static void call_spawn_argv(const char *const argv[], void *userdata) {
+	struct tp_lua *lua = userdata;
 	if (lua && lua->spawn_argv_fn)
 		lua->spawn_argv_fn(argv);
-	return 0;
 }
 
 static int l_tp_spawn(lua_State *L) {
@@ -430,13 +436,34 @@ static int l_tp_spawn(lua_State *L) {
 			L, "tp.spawn cannot run while the config loads; put autostart "
 			   "in tp.on('startup', function() tp.spawn(...) end)");
 	if (lua_type(L, 1) == LUA_TTABLE)
-		return spawn_argv(L, lua);
+		return collect_argv_and_call(L, "tp.spawn", call_spawn_argv, lua);
 	size_t len = 0;
 	const char *cmd = luaL_checklstring(L, 1, &len);
 	if (len == 0)
 		return luaL_error(L, "tp.spawn: command must not be empty");
 	if (lua && lua->spawn_fn)
 		lua->spawn_fn(cmd);
+	return 0;
+}
+
+static void call_lock_argv(const char *const argv[], void *userdata) {
+	struct tp_lua *lua = userdata;
+	if (lua && lua->lock_argv_fn)
+		lua->lock_argv_fn(argv, lua->lock_argv_userdata);
+}
+
+static int l_tp_lock(lua_State *L) {
+	struct tp_lua *lua = tp_lua_from_state(L);
+	if (lua && lua->staging)
+		return luaL_error(L, "tp.lock cannot run while the config loads");
+	if (lua_type(L, 1) == LUA_TTABLE)
+		return collect_argv_and_call(L, "tp.lock", call_lock_argv, lua);
+	size_t len = 0;
+	const char *cmd = luaL_checklstring(L, 1, &len);
+	if (len == 0)
+		return luaL_error(L, "tp.lock: command must not be empty");
+	if (lua && lua->lock_fn)
+		lua->lock_fn(cmd, lua->lock_userdata);
 	return 0;
 }
 
@@ -483,6 +510,7 @@ static const luaL_Reg safe_libs[] = {
 static const luaL_Reg tp_funcs[] = {
 	{"config", l_tp_config},
 	{"spawn", l_tp_spawn},
+	{"lock", l_tp_lock},
 	{"read_file", l_tp_read_file},
 	{NULL, NULL},
 };
@@ -557,6 +585,21 @@ void tp_lua_set_spawn_argv_fn(struct tp_lua *lua,
 							  void (*fn)(const char *const argv[])) {
 	if (lua)
 		lua->spawn_argv_fn = fn;
+}
+
+void tp_lua_set_lock_fn(struct tp_lua *lua, tp_lua_lock_fn fn, void *userdata) {
+	if (!lua)
+		return;
+	lua->lock_fn = fn;
+	lua->lock_userdata = userdata;
+}
+
+void tp_lua_set_lock_argv_fn(struct tp_lua *lua, tp_lua_lock_argv_fn fn,
+							 void *userdata) {
+	if (!lua)
+		return;
+	lua->lock_argv_fn = fn;
+	lua->lock_argv_userdata = userdata;
 }
 
 bool tp_lua_default_config_path(char *out, size_t out_size) {
@@ -731,6 +774,10 @@ bool tp_lua_reload_file(struct tp_lua **lua_slot, const char *path,
 	if (*lua_slot) {
 		next->spawn_fn = (*lua_slot)->spawn_fn;
 		next->spawn_argv_fn = (*lua_slot)->spawn_argv_fn;
+		next->lock_fn = (*lua_slot)->lock_fn;
+		next->lock_userdata = (*lua_slot)->lock_userdata;
+		next->lock_argv_fn = (*lua_slot)->lock_argv_fn;
+		next->lock_argv_userdata = (*lua_slot)->lock_argv_userdata;
 		next->action_fn = (*lua_slot)->action_fn;
 		next->action_userdata = (*lua_slot)->action_userdata;
 	}

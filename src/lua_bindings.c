@@ -516,6 +516,25 @@ static int l_tp_bind(lua_State *L) {
 		.lua_ref = LUA_NOREF,
 	};
 
+	if (!lua_isnoneornil(L, 3)) {
+		if (lua_type(L, 3) != LUA_TTABLE)
+			return luaL_error(L, "tp.bind: options (argument 3) must be a table");
+		lua_pushnil(L);
+		while (lua_next(L, 3) != 0) {
+			if (lua_type(L, -2) != LUA_TSTRING)
+				return luaL_error(L, "tp.bind: option keys must be strings");
+			const char *k = lua_tostring(L, -2);
+			if (strcmp(k, "locked") == 0) {
+				if (lua_type(L, -1) != LUA_TBOOLEAN)
+					return luaL_error(L, "tp.bind: locked must be a boolean");
+				entry.allow_locked = lua_toboolean(L, -1) != 0;
+			} else {
+				tam_log_warn("tp.bind: unknown option '%s' ignored", k);
+			}
+			lua_pop(L, 1);
+		}
+	}
+
 	struct tp_action *dsp = luaL_testudata(L, 2, TP_DSP_MT);
 	if (dsp) {
 		entry.is_lua = false;
@@ -663,7 +682,8 @@ void tp_lua_set_action_fn(struct tp_lua *lua, tp_lua_action_fn fn,
 	lua->action_userdata = userdata;
 }
 
-bool tp_lua_handle_key(struct tp_lua *lua, uint32_t mods, xkb_keysym_t sym) {
+bool tp_lua_handle_key(struct tp_lua *lua, uint32_t mods, xkb_keysym_t sym,
+					   bool locked) {
 	if (!lua || !lua->L)
 		return false;
 
@@ -676,7 +696,7 @@ bool tp_lua_handle_key(struct tp_lua *lua, uint32_t mods, xkb_keysym_t sym) {
 			break;
 		}
 	}
-	if (!found)
+	if (!found || (locked && !found->allow_locked))
 		return false;
 
 	if (!found->is_lua) {

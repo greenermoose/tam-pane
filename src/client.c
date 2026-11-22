@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "tam-pane/client.h"
 #include "tam-pane/focus.h"
+#include "tam-pane/foreign_toplevel.h"
+#include "tam-pane/idle.h"
 #include "tam-pane/input.h"
 #include "tam-pane/layout/arrange.h"
 #include "tam-pane/lua.h"
@@ -156,6 +158,7 @@ static void apply_floating(struct tp_client *c) {
 static void apply_fullscreen(struct tp_client *c, bool fullscreen) {
 	c->fullscreen = fullscreen;
 	wlr_xdg_toplevel_set_fullscreen(c->toplevel, fullscreen);
+	tp_foreign_toplevel_set_fullscreen(c, fullscreen);
 	enum tp_layer layer = fullscreen	? TP_LAYER_FULLSCREEN
 						  : c->floating ? TP_LAYER_FLOAT
 										: TP_LAYER_TILE;
@@ -243,9 +246,11 @@ static void on_map(struct wl_listener *l, void *data) {
 		wl_list_insert(s->focus_stack.prev, &c->flink);
 	if (c->mon)
 		tp_arrange(c->mon);
+	tp_foreign_toplevel_map(c);
 	tp_events_emit_window(s, TP_EVENT_WINDOW_OPEN, c, false);
 	if (focus_now)
 		tp_focus(s, c);
+	tp_idle_update_inhibit(s);
 	tam_log_debug("window mapped: %s, tags 0x%x, %s",
 				  c->toplevel->app_id ? c->toplevel->app_id : "(no app id)",
 				  c->tags, c->floating ? "floating" : "tiled");
@@ -258,6 +263,7 @@ static void on_unmap(struct wl_listener *l, void *data) {
 
 	c->mapped = false;
 	c->fullscreen = false;
+	tp_foreign_toplevel_unmap(c);
 	if (had_focus)
 		s->focused_client = NULL;
 	tp_pointer_cancel_grab(s, c);
@@ -266,6 +272,7 @@ static void on_unmap(struct wl_listener *l, void *data) {
 	wl_list_remove(&c->flink);
 	if (c->mon)
 		tp_arrange(c->mon);
+	tp_idle_update_inhibit(s);
 	tp_events_emit_window(s, TP_EVENT_WINDOW_CLOSE, c, false);
 	if (had_focus) {
 		tp_focus_refresh(s);
@@ -276,6 +283,7 @@ static void on_unmap(struct wl_listener *l, void *data) {
 
 static void on_destroy(struct wl_listener *l, void *data) {
 	struct tp_client *c = wl_container_of(l, c, destroy);
+	tp_foreign_toplevel_unmap(c);
 	if (c->server->focused_client == c)
 		c->server->focused_client = NULL;
 	wl_list_remove(&c->map.link);
@@ -284,8 +292,20 @@ static void on_destroy(struct wl_listener *l, void *data) {
 	wl_list_remove(&c->destroy.link);
 	wl_list_remove(&c->request_fullscreen.link);
 	wl_list_remove(&c->request_maximize.link);
+	wl_list_remove(&c->set_title.link);
+	wl_list_remove(&c->set_app_id.link);
 	free(c->home_output);
 	free(c);
+}
+
+static void on_set_title(struct wl_listener *l, void *data) {
+	struct tp_client *c = wl_container_of(l, c, set_title);
+	tp_foreign_toplevel_update_info(c);
+}
+
+static void on_set_app_id(struct wl_listener *l, void *data) {
+	struct tp_client *c = wl_container_of(l, c, set_app_id);
+	tp_foreign_toplevel_update_info(c);
 }
 
 static void on_request_fullscreen(struct wl_listener *l, void *data) {
@@ -335,6 +355,10 @@ static void on_new_toplevel(struct wl_listener *l, void *data) {
 	wl_signal_add(&toplevel->events.request_fullscreen, &c->request_fullscreen);
 	c->request_maximize.notify = on_request_maximize;
 	wl_signal_add(&toplevel->events.request_maximize, &c->request_maximize);
+	c->set_title.notify = on_set_title;
+	wl_signal_add(&toplevel->events.set_title, &c->set_title);
+	c->set_app_id.notify = on_set_app_id;
+	wl_signal_add(&toplevel->events.set_app_id, &c->set_app_id);
 }
 
 void tp_clients_init(struct tp_server *s) {
@@ -488,6 +512,7 @@ void tp_client_attach(struct tp_client *c, struct tp_monitor *m,
 	c->mon = m;
 	if (tags & TP_TAG_ALL)
 		c->tags = tags & TP_TAG_ALL;
+	tp_foreign_toplevel_set_output(c, m ? m->output : NULL);
 }
 
 void tp_client_carry_float(struct tp_client *c, struct tp_rect from,

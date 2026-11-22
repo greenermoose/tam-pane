@@ -12,6 +12,7 @@ struct tp_lua_binding {
 	uint32_t mods;
 	xkb_keysym_t sym;
 	bool is_lua;
+	bool allow_locked;
 	struct tp_action action;
 	int lua_ref; /* LUA_NOREF when !is_lua */
 };
@@ -79,6 +80,10 @@ struct tp_lua {
 	struct tp_settings *staging;
 	void (*spawn_fn)(const char *cmd);
 	void (*spawn_argv_fn)(const char *const argv[]);
+	tp_lua_lock_fn lock_fn;
+	void *lock_userdata;
+	tp_lua_lock_argv_fn lock_argv_fn;
+	void *lock_argv_userdata;
 
 	tp_lua_action_fn action_fn;
 	void *action_userdata;

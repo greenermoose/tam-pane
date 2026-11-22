@@ -49,4 +49,13 @@ void tp_security_set_shell_client(struct tp_server *s,
 bool tp_security_allow_exclusive_overlay(const struct tp_server *s,
 										 const struct wl_client *client);
 
+/* Designate (or clear, with NULL) the locker connection allowed to see and
+ * bind ext_session_lock_manager_v1. Automatically cleared on disconnect. */
+void tp_security_set_locker_client(struct tp_server *s,
+								   struct wl_client *client);
+
+/* Whether `client` is the authorized locker connection. */
+bool tp_security_allow_session_lock(const struct tp_server *s,
+									const struct wl_client *client);
+
 #endif

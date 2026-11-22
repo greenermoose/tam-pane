@@ -3,11 +3,13 @@
  * focus follows clicks; focus-follows-mouse becomes a Lua setting. */
 #include "tam-pane/client.h"
 #include "tam-pane/focus.h"
+#include "tam-pane/idle.h"
 #include "tam-pane/input.h"
 #include "tam-pane/layer.h"
 #include "tam-pane/layout/arrange.h"
 #include "tam-pane/monitor.h"
 #include "tam-pane/server.h"
+#include "tam-pane/session_lock.h"
 #include <linux/input-event-codes.h>
 #include <stdlib.h>
 #include <tam.h>
@@ -163,6 +165,7 @@ static void after_motion(struct tp_server *s, uint32_t time_msec) {
 static void on_motion(struct wl_listener *l, void *data) {
 	struct tp_server *s = wl_container_of(l, s, cursor_motion);
 	struct wlr_pointer_motion_event *ev = data;
+	tp_idle_notify_activity(s);
 	wlr_cursor_move(s->cursor, &ev->pointer->base, ev->delta_x, ev->delta_y);
 	after_motion(s, ev->time_msec);
 }
@@ -170,6 +173,7 @@ static void on_motion(struct wl_listener *l, void *data) {
 static void on_motion_absolute(struct wl_listener *l, void *data) {
 	struct tp_server *s = wl_container_of(l, s, cursor_motion_absolute);
 	struct wlr_pointer_motion_absolute_event *ev = data;
+	tp_idle_notify_activity(s);
 	wlr_cursor_warp_absolute(s->cursor, &ev->pointer->base, ev->x, ev->y);
 	after_motion(s, ev->time_msec);
 }
@@ -239,6 +243,19 @@ static bool try_begin_grab(struct tp_server *s, struct tp_client *c,
 static void on_button(struct wl_listener *l, void *data) {
 	struct tp_server *s = wl_container_of(l, s, cursor_button);
 	struct wlr_pointer_button_event *ev = data;
+	tp_idle_notify_activity(s);
+
+	if (s->locked) {
+		if (ev->state == WL_POINTER_BUTTON_STATE_PRESSED) {
+			struct wlr_surface *surface = NULL;
+			tp_client_at(s, s->cursor->x, s->cursor->y, &surface, NULL, NULL);
+			if (surface)
+				tp_session_lock_focus_surface(s, surface);
+		}
+		wlr_seat_pointer_notify_button(s->seat, ev->time_msec, ev->button,
+									   ev->state);
+		return;
+	}
 
 	if (s->grab.mode != TP_GRAB_NONE) {
 		if (ev->state == WL_POINTER_BUTTON_STATE_RELEASED &&
@@ -276,6 +293,7 @@ static void on_button(struct wl_listener *l, void *data) {
 static void on_axis(struct wl_listener *l, void *data) {
 	struct tp_server *s = wl_container_of(l, s, cursor_axis);
 	struct wlr_pointer_axis_event *ev = data;
+	tp_idle_notify_activity(s);
 	wlr_seat_pointer_notify_axis(s->seat, ev->time_msec, ev->orientation,
 								 ev->delta, ev->delta_discrete, ev->source,
 								 ev->relative_direction);

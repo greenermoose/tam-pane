@@ -35,6 +35,8 @@ enum {
 };
 
 typedef void (*tp_lua_action_fn)(const struct tp_action *act, void *userdata);
+typedef void (*tp_lua_lock_fn)(const char *cmd, void *userdata);
+typedef void (*tp_lua_lock_argv_fn)(const char *const argv[], void *userdata);
 
 struct tp_lua *tp_lua_create(void);
 void tp_lua_destroy(struct tp_lua *lua);
@@ -94,12 +96,20 @@ void tp_lua_set_spawn_argv_fn(struct tp_lua *lua,
 void tp_lua_set_action_fn(struct tp_lua *lua, tp_lua_action_fn fn,
 						  void *userdata);
 
+/* Attach the locker launch handlers used by tp.lock(cmd) and tp.lock{...}. */
+void tp_lua_set_lock_fn(struct tp_lua *lua, tp_lua_lock_fn fn, void *userdata);
+void tp_lua_set_lock_argv_fn(struct tp_lua *lua, tp_lua_lock_argv_fn fn,
+							 void *userdata);
+
 /*
  * Match and execute the active binding for (mods, sym) using TP_MOD_* bits.
- * Dispatcher bindings invoke action_fn directly; Lua callbacks run under the
- * runtime watchdog. Returns true when a binding matched.
+ * When `locked` is true, only bindings registered with `{ locked = true }`
+ * match (R1 finding 17 binding gate). Dispatcher bindings invoke action_fn
+ * directly; Lua callbacks run under the runtime watchdog. Returns true when
+ * a binding matched.
  */
-bool tp_lua_handle_key(struct tp_lua *lua, uint32_t mods, xkb_keysym_t sym);
+bool tp_lua_handle_key(struct tp_lua *lua, uint32_t mods, xkb_keysym_t sym,
+					   bool locked);
 
 /* Number of currently active key bindings. */
 size_t tp_lua_binding_count(const struct tp_lua *lua);

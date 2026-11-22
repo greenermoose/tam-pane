@@ -17,13 +17,16 @@
 #include "tam-pane/server.h"
 #include "tam-pane/server_events.h"
 #include "tam-pane/spawn.h"
+#include "tam-pane/workspace.h"
 
 static void view_changed(struct tp_server *s, tp_tags_t prev_tags) {
 	tp_pointer_cancel_grab(s, NULL);
 	tp_arrange(s->selmon);
-	if (s->selmon)
+	if (s->selmon) {
 		tp_events_emit_tag(s, s->selmon, prev_tags,
 						   tp_tagview_current(&s->selmon->view));
+		tp_workspace_sync_monitor(s->selmon);
+	}
 	tp_focus_refresh(s);
 }
 
@@ -150,5 +153,5 @@ void tp_action_run(struct tp_server *s, const struct tp_action *act) {
 bool tp_bindings_handle(struct tp_server *s, uint32_t mods, xkb_keysym_t sym) {
 	if (!s || !s->lua)
 		return false;
-	return tp_lua_handle_key(s->lua, mods, sym);
+	return tp_lua_handle_key(s->lua, mods, sym, s->locked);
 }

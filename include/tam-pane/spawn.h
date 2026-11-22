@@ -10,4 +10,10 @@ void tp_spawn(const char *cmd);
  * tp_spawn does, with no shell: arguments reach the program unchanged. */
 void tp_spawn_argv(const char *const argv[]);
 
+/* Same as tp_spawn / tp_spawn_argv, but pass `wayland_fd` (if >= 0) to the
+ * spawned child via WAYLAND_SOCKET (clearing FD_CLOEXEC in the child and
+ * closing `wayland_fd` in the parent). */
+void tp_spawn_with_fd(const char *cmd, int wayland_fd);
+void tp_spawn_with_fd_argv(const char *const argv[], int wayland_fd);
+
 #endif

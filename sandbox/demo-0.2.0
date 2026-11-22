@@ -1,0 +1,46 @@
+#!/bin/sh
+# Launch tam-pane 0.2.0 nested under Hyprland to check P3 shell protocols:
+#   - ext-session-lock-v1 granted exclusively to the locker launched via tp.lock
+#   - R1 #17 binding gate (normal bindings blocked while locked)
+#   - unlock restores windows and bindings
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+want=$(tr -d '[:space:]' < "$ROOT/VERSION")
+have=$("$ROOT/build/tam-pane" -v 2>/dev/null | awk '{print $2}') || true
+if [ "$have" != "$want" ]; then
+	echo "build/tam-pane is '${have:-missing}', VERSION is $want: run make first" >&2
+	exit 1
+fi
+
+TMPDIR_DEMO=$(mktemp -d "${TMPDIR:-/tmp}/tam-pane-demo-0.2.0.XXXXXX")
+trap 'rm -rf "$TMPDIR_DEMO"' EXIT INT TERM
+
+CFG="$TMPDIR_DEMO/init.lua"
+GUIDE="$TMPDIR_DEMO/guide"
+{
+	printf 'local GUIDE = "%s"\n' "$GUIDE"
+	cat "$ROOT/sandbox/demo-0.2.0.lua"
+} >"$CFG"
+
+cat >"$GUIDE" <<'GUIDE'
+=== tam-pane 0.2.0 demo: shell protocols and session-lock ===
+
+ 1. Press Meta+L to lock the nested session (launches hyprlock via tp.lock,
+    which grants ext_session_lock_manager_v1 exclusively to that connection).
+ 2. While locked, press Meta+Return: no terminal should open (binding gate).
+ 3. Unlock hyprlock with your password.
+    This guide window and normal bindings should return cleanly.
+ 4. Press Meta+Shift+E to quit, and answer the launcher's question.
+
+GUIDE
+
+"$ROOT/tools/nested-input" -c "$CFG" -s '' || true
+
+echo
+printf 'Did Meta+L lock with hyprlock, gate Meta+Return while locked, and unlock cleanly? [y/n] '
+read -r answer
+case $answer in
+y | Y | yes) echo "PASS: 0.2.0 session-lock and binding gate verified" ;;
+*) echo "FAIL: 0.2.0 session-lock check failed"; exit 1 ;;
+esac

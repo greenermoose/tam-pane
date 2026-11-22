@@ -97,7 +97,8 @@ KEYS NO CONFIG CAN REMOVE
   Ctrl+Alt+F1 .. F12        switch to that virtual terminal (only when
                             tam-pane runs on the hardware, not nested)
   Ctrl+Alt+Shift+Backspace  emergency quit, even if init.lua removed
-                            every binding
+                            every binding (gated while session is locked,
+                            0.2.0)
 
 
 WHERE THINGS ARE

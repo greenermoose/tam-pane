@@ -68,14 +68,17 @@ updated with `tools/pull-references` (see `ideas/sources`):
 - **Why:** Tags are a core tam-pane feature, and this model has held up
   since dwm.
 
-### Layer-shell protocol file
+### wlroots protocol files
 
-- **tam-pane file:** `protocols/wlr-layer-shell-unstable-v1.xml`
-- **Source:** MangoWM `protocols/` (a wlroots protocol file), commit
-  `5ba74a95`. Copyright 2017 Drew DeVault, under a permissive notice kept
-  in the file.
+- **tam-pane files:** `protocols/wlr-layer-shell-unstable-v1.xml`,
+  `protocols/wlr-foreign-toplevel-management-unstable-v1.xml`,
+  `protocols/wlr-output-power-management-unstable-v1.xml`
+- **Source:** MangoWM `protocols/` (wlroots protocol files), commit
+  `5ba74a95`. Permissive notices kept in each file.
 - **How:** Copied unchanged.
-- **Why:** Panels, bars and launchers need it (used from 0.0.5).
+- **Why:** Panels/bars/launchers (`layer-shell`, 0.0.5), window lists
+  (`foreign-toplevel`, 0.2.0), and DPMS output power (`output-power`,
+  0.2.0) need them.
 
 ### Lua 5.5.1 interpreter
 

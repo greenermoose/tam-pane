@@ -1,0 +1,60 @@
+W25 SHELL PROTOCOLS AND BINDING GATE (0.2.0)
+
+Date: 2026-11-22
+AI harness: Antigravity 1.5.14
+AI model: gemini-4-neon
+
+GUIDANCE
+
+  Fred: "/plan Do the next work slice for tam-pane."
+  Fred: "Approved. Proceed."
+
+DONE
+
+  - 0.2.0 (Phase P3): implemented the desktop shell protocols and the R1
+    finding 17 binding gate:
+    - Foreign toplevel (src/foreign_toplevel.c):
+      zwlr_foreign_toplevel_manager_v1 and ext_foreign_toplevel_list_v1
+      with live title/app_id listeners, output enter/leave, activated and
+      fullscreen state sync, and activate/fullscreen/close requests
+      (ignored while locked).
+    - Workspaces (src/workspace.c): ext_workspace_manager_v1 exposing each
+      monitor's 9 tags in a per-monitor group with activate and deactivate
+      requests and active-state sync.
+    - Session lock (src/session_lock.c) and binding gate (R1 #17):
+      ext_session_lock_manager_v1 granted exclusively to the locker
+      launched by tam-pane via tp.lock (pre-created socketpair +
+      wl_client_create + WAYLAND_SOCKET, tracked on s->locker_client).
+      Added TP_LAYER_LOCK above TP_LAYER_OVERLAY with black cover rects,
+      non-lock layers disabled while locked, fail-locked on locker crash
+      until a newly launched locker takes over, tp.bind(..., { locked =
+      true }) opt-in gate, and Ctrl+Alt+Shift+Backspace gated while locked
+      (Ctrl+Alt+F1..F12 VT switch remains available on DRM).
+    - Idle notify and inhibit (src/idle.c): ext_idle_notifier_v1
+      (privileged) fed by keyboard and pointer activity, plus
+      zwp_idle_inhibit_manager_v1 (unprivileged) gated on surface
+      visibility and ignored while locked unless on a lock surface.
+    - Output power (src/output_power.c): zwlr_output_power_manager_v1
+      committing output enabled state.
+  - Added protocols/wlr-foreign-toplevel-management-unstable-v1.xml and
+    protocols/wlr-output-power-management-unstable-v1.xml (from MangoWM,
+    recorded in UPSTREAM.md), updated arch/protocols.md, arch/lua-api.md,
+    arch/data-structures.md, ROADMAP.md, plans/P3-daily-parity.md, README.
+  - Added failing-first tests (7 checks failed before implementation),
+    then full unit and protocol integration tests: 28 tag, 143 dwindle,
+    495 Lua, 4 smoke, 529 headless input, nm -D, test_nested_input.py.
+    0.2.0 binary SHA-256:
+    e8e011812196e348948d9a7f31dbebd7ced2754f7ba9049fc3378b2e91a63f36.
+  - Added sandbox/demo-0.2.0 and sandbox/demo-0.2.0.lua for Fred's nested
+    hyprlock check.
+
+FAILED
+
+  - Nothing.
+
+HANDOFF
+
+  - 0.2.0 is ready for Fred's nested sandbox/demo-0.2.0 check. Next in P3
+    after acceptance is 0.2.1 (screencopy, ext-image-copy-capture with
+    capture-source companions, wlr-output-management, gamma control,
+    cursor-shape).

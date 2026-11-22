@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "tam-pane/layout/arrange.h"
 #include "tam-pane/client.h"
+#include "tam-pane/idle.h"
 #include "tam-pane/input.h"
 #include "tam-pane/layout/dwindle.h"
 #include "tam-pane/monitor.h"
@@ -90,6 +91,7 @@ void tp_arrange(struct tp_monitor *m) {
 	sync_tree(m, tree);
 	tp_dwindle_layout(tree, tp_rect_inset(m->usable, s->settings.gap_outer),
 					  s->settings.gap_inner, place_tile, NULL);
+	tp_idle_update_inhibit(s);
 	tp_pointer_refocus_now(s);
 }
 

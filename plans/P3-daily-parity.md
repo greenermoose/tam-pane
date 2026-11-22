@@ -1,6 +1,6 @@
 # P3: Daily-driver parity (0.2.x)
 
-**Status:** not started.
+**Status:** in progress (0.2.0 implemented, awaiting Fred's nested check).
 
 ## Goal
 
@@ -56,7 +56,9 @@ fails first.
   focus restoration keep working while an xdg popup grab (or later
   session-lock / input-method) holds the seat's keyboard surface.
 - **Smaller points (finding 17).**
-  - A gate on bindings, which session-lock needs (0.2.0).
+  - A gate on bindings, which session-lock needs — **done in 0.2.0**
+    (`tp.bind(chord, action, { locked = true })`, default gated while
+    locked, and `Ctrl+Alt+Shift+Backspace` gated while locked).
   - Keyboard groups, so modifiers on one keyboard combine with keys on
     another.
   - NULL checks on the scene and output-layout helpers.

@@ -1,6 +1,6 @@
 # tam-pane Lua API (`arch/lua-api.md`)
 
-**Status:** 0.1.0–0.1.4 shipped and accepted (Phase P2 complete); 0.1.5–0.1.9 review fixes accepted.
+**Status:** 0.1.0–0.1.19 shipped and accepted (Phase P2 + R1 hardening); 0.2.0 adds `tp.lock(...)` and the `tp.bind(..., { locked = true })` binding gate.
 
 tam-pane embeds **Lua 5.5.1** statically from `third_party/lua/` with no
 dynamic symbol exports (`lua_*` symbols stay internal to `tam-pane`).
@@ -134,13 +134,17 @@ runs. `init.lua` may override individual bindings, remove defaults with
 `tp.unbind`, or start from scratch with `tp.clear_binds()`. Binding changes
 stage alongside `tp.config` and roll back atomically if `init.lua` fails.
 
-### `tp.bind(chord, action)`
+### `tp.bind(chord, action[, opts])`
 
 Binds a key chord string to either a `tp.dispatcher` value or a plain Lua
 callback function, replacing any existing binding for the same `(mods, key)`.
 Raises a Lua error on invalid chord syntax, unknown modifier/key, or invalid
 action type.
 
+- **Options (`opts`, optional table, 0.2.0):** `{ locked = true }` allows the
+  binding to run while the session is locked (`ext-session-lock-v1`). By
+  default (`locked = false`), bindings are gated while locked so keystrokes
+  reach the lock screen instead of invoking compositor actions.
 - **Modifiers (case-insensitive):** `Meta` (`Super`, `Logo`, `Mod4`),
   `Shift`, `Ctrl` (`Control`), `Alt` (`Mod1`). Unmodified keys (e.g.
   `"XF86AudioRaiseVolume"`) are allowed.
@@ -151,13 +155,22 @@ action type.
   (1,000,000 instructions / 100 ms `CLOCK_MONOTONIC` deadline); errors or
   timeouts are logged and the compositor keeps running.
 
-**Reserved chords (0.1.9).** Two chords are handled in C before any
-binding is looked up, so `tp.bind` cannot take them and `tp.clear_binds()`
+**Reserved chords (0.1.9, updated 0.2.0).** Two chords are handled in C before
+any binding is looked up, so `tp.bind` cannot take them and `tp.clear_binds()`
 cannot remove them:
 
 - `Ctrl+Alt+F1`..`F12` switch VT when tam-pane owns a session (it runs
   on the hardware). Nested or headless, they are ordinary keys.
-- `Ctrl+Alt+Shift+Backspace` is the emergency quit.
+- `Ctrl+Alt+Shift+Backspace` is the emergency quit (gated while the session is
+  locked in 0.2.0 so it cannot drop a locked session to an unlocked VT shell).
+
+### `tp.lock(cmd)` and `tp.lock{prog, arg, ...}` (0.2.0)
+
+Launches a screen locker (e.g. `tp.lock{"hyprlock"}`) over a pre-created
+Wayland `WAYLAND_SOCKET` and grants that exact client connection access to
+`ext_session_lock_manager_v1` (which is hidden from all other clients). Accepts
+the same string or argv-table forms as `tp.spawn`, and is refused while the
+config loads.
 
 ### `tp.unbind(chord)`
 

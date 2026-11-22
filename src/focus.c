@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "tam-pane/focus.h"
 #include "tam-pane/client.h"
+#include "tam-pane/foreign_toplevel.h"
 #include "tam-pane/layer.h"
 #include "tam-pane/monitor.h"
 #include "tam-pane/security.h"
@@ -70,11 +71,13 @@ struct tp_client *tp_focused(struct tp_server *s) {
 }
 
 void tp_focus_layer(struct tp_server *s, struct tp_layer_surface *ls) {
-	if (!ls || !ls->mapped)
+	if (!ls || !ls->mapped || s->locked)
 		return;
 	struct tp_client *old = s->focused_client;
-	if (old)
+	if (old) {
 		wlr_xdg_toplevel_set_activated(old->toplevel, false);
+		tp_foreign_toplevel_set_activated(old, false);
+	}
 	s->focused_client = NULL;
 	s->focused_layer = ls;
 	if (ls->mon)
@@ -85,6 +88,8 @@ void tp_focus_layer(struct tp_server *s, struct tp_layer_surface *ls) {
 }
 
 void tp_focus(struct tp_server *s, struct tp_client *c) {
+	if (s->locked)
+		return;
 	struct tp_layer_surface *excl = exclusive_layer(s);
 	if (excl) {
 		if (s->focused_layer != excl)
@@ -93,8 +98,10 @@ void tp_focus(struct tp_server *s, struct tp_client *c) {
 	}
 
 	struct tp_client *old = s->focused_client;
-	if (old && old != c)
+	if (old && old != c) {
 		wlr_xdg_toplevel_set_activated(old->toplevel, false);
+		tp_foreign_toplevel_set_activated(old, false);
+	}
 	s->focused_layer = NULL;
 	s->focused_client = c;
 
@@ -109,6 +116,7 @@ void tp_focus(struct tp_server *s, struct tp_client *c) {
 	wl_list_insert(&s->focus_stack, &c->flink);
 	wlr_scene_node_raise_to_top(&c->tree->node);
 	wlr_xdg_toplevel_set_activated(c->toplevel, true);
+	tp_foreign_toplevel_set_activated(c, true);
 	if (c->mon)
 		s->selmon = c->mon;
 	if (c->mon && tp_client_visible(c))
@@ -129,6 +137,8 @@ struct tp_client *tp_focus_top(struct tp_server *s, struct tp_monitor *m) {
 }
 
 void tp_focus_refresh(struct tp_server *s) {
+	if (s->locked)
+		return;
 	struct tp_layer_surface *excl = exclusive_layer(s);
 	if (excl) {
 		tp_focus_layer(s, excl);

@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "tam-pane/bindings.h"
+#include "tam-pane/idle.h"
 #include "tam-pane/input.h"
 #include "tam-pane/lua.h"
 #include "tam-pane/server.h"
@@ -12,6 +13,7 @@
 
 static void on_modifiers(struct wl_listener *l, void *data) {
 	struct tp_keyboard *k = wl_container_of(l, k, modifiers);
+	tp_idle_notify_activity(k->server);
 	wlr_seat_set_keyboard(k->server->seat, k->wlr);
 	wlr_seat_keyboard_notify_modifiers(k->server->seat, &k->wlr->modifiers);
 }
@@ -64,6 +66,9 @@ static bool run_compositor_key(struct tp_keyboard *k, uint32_t keycode) {
 		}
 	}
 
+	if (s->locked)
+		return false; /* gate emergency quit while session is locked */
+
 	uint32_t mods = wlr_mods_to_tp(wlr_keyboard_get_modifiers(k->wlr));
 	if (mods != (TP_MOD_CTRL | TP_MOD_ALT | TP_MOD_SHIFT))
 		return false;
@@ -93,6 +98,7 @@ static bool run_binding(struct tp_keyboard *k, uint32_t keycode) {
 static void on_key(struct wl_listener *l, void *data) {
 	struct tp_keyboard *k = wl_container_of(l, k, key);
 	struct wlr_keyboard_key_event *ev = data;
+	tp_idle_notify_activity(k->server);
 	uint32_t word = ev->keycode / 64;
 	uint64_t mask = UINT64_C(1) << (ev->keycode % 64);
 

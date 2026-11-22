@@ -1,4 +1,4 @@
-# Data structures (0.1.19)
+# Data structures (0.2.0)
 
 This file describes the structures as they are built today. Update it in
 the same commit as any change to them.
@@ -11,8 +11,8 @@ the same commit as any change to them.
 - **It holds:**
   - the wlroots core: display, event loop, backend, renderer, allocator
     and compositor;
-  - the scene, with seven layer trees (`enum tp_layer`) from background
-    to overlay;
+  - the scene, with eight layer trees (`enum tp_layer`) from background
+    to `TP_LAYER_LOCK` (above `TP_LAYER_OVERLAY`, 0.2.0);
   - the output layout;
   - lists of monitors, clients, the focus stack and keyboards,
     `focused_client` (`struct tp_client *`, explicit focused window kept
@@ -29,12 +29,22 @@ the same commit as any change to them.
   - `layer_shell` (`struct wlr_layer_shell_v1`) and `focused_layer`
     (`struct tp_layer_surface *`) for exclusive or on-demand layer keyboard
     focus.
-  - `security_context_mgr` (`struct wlr_security_context_manager_v1`) and
+  - `security_context_mgr` (`struct wlr_security_context_manager_v1`),
     `shell_client` (`struct wl_client *`, cleared on disconnect via
-    `shell_client_destroy`) for the global filter and shell-connection
-    policy (`src/security.c`, `arch/protocols.md`, 0.1.18). Privileged
-    globals are denied to sandboxed clients and cross-UID connections,
-    and exclusive OVERLAY keyboard focus is reserved for `shell_client`.
+    `shell_client_destroy`), and `locker_client` (`struct wl_client *`,
+    cleared on disconnect via `locker_client_destroy`, 0.2.0) for the
+    global filter and per-role policies (`src/security.c`,
+    `arch/protocols.md`). Privileged globals are denied to sandboxed
+    clients and cross-UID connections, exclusive OVERLAY keyboard focus is
+    reserved for `shell_client`, and `ext_session_lock_manager_v1` is
+    granted exclusively to `locker_client`.
+  - P3 shell protocol managers (0.2.0): `foreign_toplevel_mgr` and
+    `ext_foreign_toplevel_list` (`src/foreign_toplevel.c`),
+    `workspace_mgr` (`src/workspace.c`), `session_lock_mgr` +
+    `active_lock` + `lock_surfaces` + `lock_bg_tree` + `locked`
+    (`src/session_lock.c`), `idle_notifier` + `idle_inhibit_mgr` +
+    `idle_inhibitors` (`src/idle.c`), and `output_power_mgr`
+    (`src/output_power.c`).
 - **Compositor keys:** `change_vt` switches VT for Ctrl+Alt+F-keys. It is
   set only when `session` exists (DRM), and tests may substitute their
   own. `quit_requested` is set by `tp_server_quit`, which the emergency
@@ -87,6 +97,9 @@ the same commit as any change to them.
 - **`trees`:** `TP_TAG_SLOTS` dwindle trees, one per single tag plus slot
   0, which is shared by every multi-tag view. `tp_monitor_tree()` returns
   the tree for the current view, so each tag keeps its own layout.
+- **`workspaces`:** opaque `struct tp_monitor_workspaces *`
+  (`src/workspace.c`, 0.2.0) holding this monitor's
+  `ext_workspace_group_handle_v1` and 9 `ext_workspace_handle_v1` entries.
 
 ## tp_layer_surface (`include/tam-pane/layer.h`)
 

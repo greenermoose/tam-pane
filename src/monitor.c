@@ -8,6 +8,8 @@
 #include "tam-pane/layout/arrange.h"
 #include "tam-pane/server.h"
 #include "tam-pane/server_events.h"
+#include "tam-pane/session_lock.h"
+#include "tam-pane/workspace.h"
 #include "viewporter-client-protocol.h"
 #include <math.h>
 #include <stdio.h>
@@ -188,6 +190,7 @@ static void on_destroy(struct wl_listener *l, void *data) {
 
 	if (s->grab.client && s->grab.client->mon == m)
 		tp_pointer_cancel_grab(s, NULL);
+	tp_workspace_monitor_finish(m);
 	tp_layers_monitor_destroy(m);
 
 	finish_nested_scale(m);
@@ -223,6 +226,7 @@ static void on_destroy(struct wl_listener *l, void *data) {
 		return;
 	if (heir)
 		tp_arrange(heir);
+	tp_session_lock_arrange(s);
 	tp_events_emit_monitor(s, TP_EVENT_MONITOR_REMOVE, mon_name, area, scale);
 	tp_focus_refresh(s);
 }
@@ -294,8 +298,10 @@ static void on_new_output(struct wl_listener *l, void *data) {
 	wlr_scene_output_layout_add_output(s->scene_layout, lo, m->scene_output);
 	update_area(m);
 	setup_nested_scale(m);
+	tp_workspace_monitor_init(m);
 	if (!s->selmon)
 		s->selmon = m;
+	tp_session_lock_arrange(s);
 
 	/* Reclaim windows displaced when this output was unplugged, and adopt
 	 * any orphaned windows that had no monitor left. */
@@ -330,6 +336,7 @@ static void on_layout_change(struct wl_listener *l, void *data) {
 	struct tp_monitor *m;
 	wl_list_for_each(m, &s->monitors, link) update_area(m);
 	tp_arrange_all(s);
+	tp_session_lock_arrange(s);
 }
 
 void tp_monitors_init(struct tp_server *s) {

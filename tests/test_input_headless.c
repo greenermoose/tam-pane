@@ -33,6 +33,13 @@
 #include <wlr/types/wlr_xdg_shell.h>
 #include "security-context-v1-client-protocol.h"
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
+#include "wlr-foreign-toplevel-management-unstable-v1-client-protocol.h"
+#include "ext-foreign-toplevel-list-v1-client-protocol.h"
+#include "ext-workspace-v1-client-protocol.h"
+#include "ext-session-lock-v1-client-protocol.h"
+#include "ext-idle-notify-v1-client-protocol.h"
+#include "idle-inhibit-unstable-v1-client-protocol.h"
+#include "wlr-output-power-management-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 
 static const struct wlr_keyboard_impl keyboard_impl = { .name = "test" };
@@ -48,20 +55,63 @@ struct test_window {
 	bool configured, closed;
 };
 
+struct test_ft_wlr {
+	struct zwlr_foreign_toplevel_handle_v1 *handle;
+	char title[64];
+	char app_id[64];
+	bool activated, fullscreen, output_entered, closed;
+};
+
+struct test_ft_ext {
+	struct ext_foreign_toplevel_handle_v1 *handle;
+	char title[64];
+	char app_id[64];
+	bool closed;
+};
+
+struct test_ws_item {
+	struct ext_workspace_handle_v1 *handle;
+	char id[64];
+	char name[32];
+	uint32_t state;
+	bool removed;
+};
+
 struct test_client {
 	struct wl_display *display;
 	struct wl_registry *registry;
 	struct wl_compositor *compositor;
 	struct wl_shm *shm;
 	struct wl_seat *seat;
+	struct wl_output *output;
+	struct wl_output *outputs[8];
+	size_t output_count;
 	struct wl_keyboard *keyboard;
 	struct wl_pointer *pointer;
 	struct xdg_wm_base *wm_base;
 	struct zwlr_layer_shell_v1 *layer_shell;
 	struct wp_security_context_manager_v1 *security_context_mgr;
+	struct zwlr_foreign_toplevel_manager_v1 *wlr_ft_mgr;
+	struct ext_foreign_toplevel_list_v1 *ext_ft_list;
+	struct ext_workspace_manager_v1 *ws_mgr;
+	struct ext_session_lock_manager_v1 *lock_mgr;
+	struct ext_idle_notifier_v1 *idle_notifier;
+	struct zwp_idle_inhibit_manager_v1 *idle_inhibit_mgr;
+	struct zwlr_output_power_manager_v1 *output_power_mgr;
 	uint32_t layer_shell_name;
+	uint32_t lock_mgr_name;
 	unsigned int unclassified_globals;
 	bool has_viewporter, has_fractional_scale, has_presentation;
+	bool has_wlr_foreign_toplevel, has_ext_foreign_toplevel;
+	bool has_ext_workspace, has_ext_session_lock;
+	bool has_idle_notify, has_idle_inhibit, has_output_power;
+	struct test_ft_wlr ft_wlr[8];
+	size_t ft_wlr_count;
+	struct test_ft_ext ft_ext[8];
+	size_t ft_ext_count;
+	struct test_ws_item ws_items[32];
+	size_t ws_count;
+	size_t ws_group_count;
 	struct test_window windows[3];
 	struct wl_surface *keyboard_focus;
 	unsigned int key_events, pointer_enters, pointer_motions, pointer_buttons;
@@ -219,6 +269,269 @@ static const struct wl_seat_listener seat_listener = {
 	.name = seat_name,
 };
 
+/* ---- 0.2.0 protocol client listeners ---- */
+
+static void ft_wlr_title(void *data, struct zwlr_foreign_toplevel_handle_v1 *h,
+		const char *title) {
+	struct test_ft_wlr *ft = data;
+	snprintf(ft->title, sizeof(ft->title), "%s", title ? title : "");
+}
+static void ft_wlr_app_id(void *data, struct zwlr_foreign_toplevel_handle_v1 *h,
+		const char *app_id) {
+	struct test_ft_wlr *ft = data;
+	snprintf(ft->app_id, sizeof(ft->app_id), "%s", app_id ? app_id : "");
+}
+static void ft_wlr_output_enter(void *data,
+		struct zwlr_foreign_toplevel_handle_v1 *h, struct wl_output *o) {
+	((struct test_ft_wlr *)data)->output_entered = true;
+}
+static void ft_wlr_output_leave(void *data,
+		struct zwlr_foreign_toplevel_handle_v1 *h, struct wl_output *o) {
+	((struct test_ft_wlr *)data)->output_entered = false;
+}
+static void ft_wlr_state(void *data, struct zwlr_foreign_toplevel_handle_v1 *h,
+		struct wl_array *state) {
+	struct test_ft_wlr *ft = data;
+	ft->activated = false;
+	ft->fullscreen = false;
+	uint32_t *p;
+	wl_array_for_each(p, state) {
+		if (*p == ZWLR_FOREIGN_TOPLEVEL_HANDLE_V1_STATE_ACTIVATED)
+			ft->activated = true;
+		if (*p == ZWLR_FOREIGN_TOPLEVEL_HANDLE_V1_STATE_FULLSCREEN)
+			ft->fullscreen = true;
+	}
+}
+static void ft_wlr_done(void *data, struct zwlr_foreign_toplevel_handle_v1 *h) {}
+static void ft_wlr_closed(void *data, struct zwlr_foreign_toplevel_handle_v1 *h) {
+	((struct test_ft_wlr *)data)->closed = true;
+}
+static void ft_wlr_parent(void *data, struct zwlr_foreign_toplevel_handle_v1 *h,
+		struct zwlr_foreign_toplevel_handle_v1 *parent) {}
+
+static const struct zwlr_foreign_toplevel_handle_v1_listener ft_wlr_handle_listener = {
+	.title = ft_wlr_title,
+	.app_id = ft_wlr_app_id,
+	.output_enter = ft_wlr_output_enter,
+	.output_leave = ft_wlr_output_leave,
+	.state = ft_wlr_state,
+	.done = ft_wlr_done,
+	.closed = ft_wlr_closed,
+	.parent = ft_wlr_parent,
+};
+
+static void ft_wlr_mgr_toplevel(void *data,
+		struct zwlr_foreign_toplevel_manager_v1 *mgr,
+		struct zwlr_foreign_toplevel_handle_v1 *handle) {
+	struct test_client *c = data;
+	if (c->ft_wlr_count < 8) {
+		struct test_ft_wlr *ft = &c->ft_wlr[c->ft_wlr_count++];
+		memset(ft, 0, sizeof(*ft));
+		ft->handle = handle;
+		zwlr_foreign_toplevel_handle_v1_add_listener(
+			handle, &ft_wlr_handle_listener, ft);
+	}
+}
+static void ft_wlr_mgr_finished(void *data,
+		struct zwlr_foreign_toplevel_manager_v1 *mgr) {}
+static const struct zwlr_foreign_toplevel_manager_v1_listener ft_wlr_mgr_listener = {
+	.toplevel = ft_wlr_mgr_toplevel,
+	.finished = ft_wlr_mgr_finished,
+};
+
+static void ft_ext_closed(void *data, struct ext_foreign_toplevel_handle_v1 *h) {
+	((struct test_ft_ext *)data)->closed = true;
+}
+static void ft_ext_done(void *data, struct ext_foreign_toplevel_handle_v1 *h) {}
+static void ft_ext_title(void *data, struct ext_foreign_toplevel_handle_v1 *h,
+		const char *title) {
+	struct test_ft_ext *ft = data;
+	snprintf(ft->title, sizeof(ft->title), "%s", title ? title : "");
+}
+static void ft_ext_app_id(void *data, struct ext_foreign_toplevel_handle_v1 *h,
+		const char *app_id) {
+	struct test_ft_ext *ft = data;
+	snprintf(ft->app_id, sizeof(ft->app_id), "%s", app_id ? app_id : "");
+}
+static void ft_ext_identifier(void *data, struct ext_foreign_toplevel_handle_v1 *h,
+		const char *id) {}
+static const struct ext_foreign_toplevel_handle_v1_listener ft_ext_handle_listener = {
+	.closed = ft_ext_closed,
+	.done = ft_ext_done,
+	.title = ft_ext_title,
+	.app_id = ft_ext_app_id,
+	.identifier = ft_ext_identifier,
+};
+
+static void ft_ext_list_toplevel(void *data,
+		struct ext_foreign_toplevel_list_v1 *list,
+		struct ext_foreign_toplevel_handle_v1 *handle) {
+	struct test_client *c = data;
+	if (c->ft_ext_count < 8) {
+		struct test_ft_ext *ft = &c->ft_ext[c->ft_ext_count++];
+		memset(ft, 0, sizeof(*ft));
+		ft->handle = handle;
+		ext_foreign_toplevel_handle_v1_add_listener(
+			handle, &ft_ext_handle_listener, ft);
+	}
+}
+static void ft_ext_list_finished(void *data,
+		struct ext_foreign_toplevel_list_v1 *list) {}
+static const struct ext_foreign_toplevel_list_v1_listener ft_ext_list_listener = {
+	.toplevel = ft_ext_list_toplevel,
+	.finished = ft_ext_list_finished,
+};
+
+static void ws_id(void *data, struct ext_workspace_handle_v1 *h, const char *id) {
+	struct test_ws_item *w = data;
+	snprintf(w->id, sizeof(w->id), "%s", id ? id : "");
+}
+static void ws_name(void *data, struct ext_workspace_handle_v1 *h, const char *name) {
+	struct test_ws_item *w = data;
+	snprintf(w->name, sizeof(w->name), "%s", name ? name : "");
+}
+static void ws_coords(void *data, struct ext_workspace_handle_v1 *h,
+		struct wl_array *coords) {}
+static void ws_state(void *data, struct ext_workspace_handle_v1 *h, uint32_t state) {
+	((struct test_ws_item *)data)->state = state;
+}
+static void ws_caps(void *data, struct ext_workspace_handle_v1 *h, uint32_t caps) {}
+static void ws_removed(void *data, struct ext_workspace_handle_v1 *h) {
+	((struct test_ws_item *)data)->removed = true;
+}
+static const struct ext_workspace_handle_v1_listener ws_handle_listener = {
+	.id = ws_id,
+	.name = ws_name,
+	.coordinates = ws_coords,
+	.state = ws_state,
+	.capabilities = ws_caps,
+	.removed = ws_removed,
+};
+
+static void ws_grp_caps(void *data, struct ext_workspace_group_handle_v1 *g,
+		uint32_t caps) {}
+static void ws_grp_out_enter(void *data, struct ext_workspace_group_handle_v1 *g,
+		struct wl_output *o) {}
+static void ws_grp_out_leave(void *data, struct ext_workspace_group_handle_v1 *g,
+		struct wl_output *o) {}
+static void ws_grp_ws_enter(void *data, struct ext_workspace_group_handle_v1 *g,
+		struct ext_workspace_handle_v1 *w) {}
+static void ws_grp_ws_leave(void *data, struct ext_workspace_group_handle_v1 *g,
+		struct ext_workspace_handle_v1 *w) {}
+static void ws_grp_removed(void *data, struct ext_workspace_group_handle_v1 *g) {}
+static const struct ext_workspace_group_handle_v1_listener ws_group_listener = {
+	.capabilities = ws_grp_caps,
+	.output_enter = ws_grp_out_enter,
+	.output_leave = ws_grp_out_leave,
+	.workspace_enter = ws_grp_ws_enter,
+	.workspace_leave = ws_grp_ws_leave,
+	.removed = ws_grp_removed,
+};
+
+static void ws_mgr_group(void *data, struct ext_workspace_manager_v1 *mgr,
+		struct ext_workspace_group_handle_v1 *grp) {
+	struct test_client *c = data;
+	c->ws_group_count++;
+	ext_workspace_group_handle_v1_add_listener(grp, &ws_group_listener, c);
+}
+static void ws_mgr_workspace(void *data, struct ext_workspace_manager_v1 *mgr,
+		struct ext_workspace_handle_v1 *ws) {
+	struct test_client *c = data;
+	if (c->ws_count < 32) {
+		struct test_ws_item *item = &c->ws_items[c->ws_count++];
+		memset(item, 0, sizeof(*item));
+		item->handle = ws;
+		ext_workspace_handle_v1_add_listener(ws, &ws_handle_listener, item);
+	}
+}
+static void ws_mgr_done(void *data, struct ext_workspace_manager_v1 *mgr) {}
+static void ws_mgr_finished(void *data, struct ext_workspace_manager_v1 *mgr) {}
+static const struct ext_workspace_manager_v1_listener ws_mgr_listener = {
+	.workspace_group = ws_mgr_group,
+	.workspace = ws_mgr_workspace,
+	.done = ws_mgr_done,
+	.finished = ws_mgr_finished,
+};
+
+struct test_lock_state {
+	bool locked;
+	bool finished;
+};
+static void lock_locked(void *data, struct ext_session_lock_v1 *lock) {
+	((struct test_lock_state *)data)->locked = true;
+}
+static void lock_finished(void *data, struct ext_session_lock_v1 *lock) {
+	((struct test_lock_state *)data)->finished = true;
+}
+static const struct ext_session_lock_v1_listener lock_listener = {
+	.locked = lock_locked,
+	.finished = lock_finished,
+};
+
+struct test_lock_surf_state {
+	struct test_client *client;
+	struct wl_surface *surface;
+	bool configured;
+	uint32_t width, height;
+};
+static struct wl_buffer *create_sized_buffer(struct test_client *client,
+		int32_t w, int32_t h);
+
+static void lock_surf_configure(void *data,
+		struct ext_session_lock_surface_v1 *ls, uint32_t serial,
+		uint32_t width, uint32_t height) {
+	struct test_lock_surf_state *st = data;
+	st->width = width;
+	st->height = height;
+	ext_session_lock_surface_v1_ack_configure(ls, serial);
+	if (!st->configured && st->client->shm && st->width > 0 && st->height > 0) {
+		st->configured = true;
+		struct wl_buffer *buf = create_sized_buffer(
+			st->client, (int32_t)st->width, (int32_t)st->height);
+		wl_surface_attach(st->surface, buf, 0, 0);
+		wl_surface_damage(st->surface, 0, 0, (int32_t)st->width,
+						  (int32_t)st->height);
+		wl_surface_commit(st->surface);
+	}
+}
+static const struct ext_session_lock_surface_v1_listener lock_surf_listener = {
+	.configure = lock_surf_configure,
+};
+
+struct test_idle_state {
+	bool idled;
+	bool resumed;
+};
+static void idle_idled(void *data, struct ext_idle_notification_v1 *n) {
+	((struct test_idle_state *)data)->idled = true;
+}
+static void idle_resumed(void *data, struct ext_idle_notification_v1 *n) {
+	((struct test_idle_state *)data)->resumed = true;
+}
+static const struct ext_idle_notification_v1_listener idle_notif_listener = {
+	.idled = idle_idled,
+	.resumed = idle_resumed,
+};
+
+struct test_power_state {
+	bool got_mode;
+	uint32_t mode;
+	bool failed;
+};
+static void power_mode(void *data, struct zwlr_output_power_v1 *p,
+		uint32_t mode) {
+	struct test_power_state *st = data;
+	st->got_mode = true;
+	st->mode = mode;
+}
+static void power_failed(void *data, struct zwlr_output_power_v1 *p) {
+	((struct test_power_state *)data)->failed = true;
+}
+static const struct zwlr_output_power_v1_listener power_listener = {
+	.mode = power_mode,
+	.failed = power_failed,
+};
+
 static void registry_global(void *data, struct wl_registry *registry,
 		uint32_t name, const char *interface, uint32_t version) {
 	struct test_client *client = data;
@@ -231,6 +544,14 @@ static void registry_global(void *data, struct wl_registry *registry,
 			&wl_compositor_interface, version < 4 ? version : 4);
 	else if (!strcmp(interface, wl_shm_interface.name))
 		client->shm = wl_registry_bind(registry, name, &wl_shm_interface, 1);
+	else if (!strcmp(interface, wl_output_interface.name)) {
+		struct wl_output *out = wl_registry_bind(registry, name,
+			&wl_output_interface, version < 3 ? version : 3);
+		if (!client->output)
+			client->output = out;
+		if (client->output_count < 8)
+			client->outputs[client->output_count++] = out;
+	}
 	else if (!strcmp(interface, wl_seat_interface.name)) {
 		client->seat = wl_registry_bind(registry, name, &wl_seat_interface,
 			version < 5 ? version : 5);
@@ -254,6 +575,42 @@ static void registry_global(void *data, struct wl_registry *registry,
 		client->has_fractional_scale = true;
 	} else if (!strcmp(interface, "wp_presentation")) {
 		client->has_presentation = true;
+	} else if (!strcmp(interface, zwlr_foreign_toplevel_manager_v1_interface.name)) {
+		client->has_wlr_foreign_toplevel = true;
+		client->wlr_ft_mgr = wl_registry_bind(registry, name,
+			&zwlr_foreign_toplevel_manager_v1_interface,
+			version < 3 ? version : 3);
+		zwlr_foreign_toplevel_manager_v1_add_listener(
+			client->wlr_ft_mgr, &ft_wlr_mgr_listener, client);
+	} else if (!strcmp(interface, ext_foreign_toplevel_list_v1_interface.name)) {
+		client->has_ext_foreign_toplevel = true;
+		client->ext_ft_list = wl_registry_bind(registry, name,
+			&ext_foreign_toplevel_list_v1_interface, 1);
+		ext_foreign_toplevel_list_v1_add_listener(
+			client->ext_ft_list, &ft_ext_list_listener, client);
+	} else if (!strcmp(interface, ext_workspace_manager_v1_interface.name)) {
+		client->has_ext_workspace = true;
+		client->ws_mgr = wl_registry_bind(registry, name,
+			&ext_workspace_manager_v1_interface, 1);
+		ext_workspace_manager_v1_add_listener(
+			client->ws_mgr, &ws_mgr_listener, client);
+	} else if (!strcmp(interface, ext_session_lock_manager_v1_interface.name)) {
+		client->has_ext_session_lock = true;
+		client->lock_mgr_name = name;
+		client->lock_mgr = wl_registry_bind(registry, name,
+			&ext_session_lock_manager_v1_interface, 1);
+	} else if (!strcmp(interface, ext_idle_notifier_v1_interface.name)) {
+		client->has_idle_notify = true;
+		client->idle_notifier = wl_registry_bind(registry, name,
+			&ext_idle_notifier_v1_interface, 1);
+	} else if (!strcmp(interface, zwp_idle_inhibit_manager_v1_interface.name)) {
+		client->has_idle_inhibit = true;
+		client->idle_inhibit_mgr = wl_registry_bind(registry, name,
+			&zwp_idle_inhibit_manager_v1_interface, 1);
+	} else if (!strcmp(interface, zwlr_output_power_manager_v1_interface.name)) {
+		client->has_output_power = true;
+		client->output_power_mgr = wl_registry_bind(registry, name,
+			&zwlr_output_power_manager_v1_interface, 1);
 	}
 }
 
@@ -1982,8 +2339,15 @@ int main(void) {
 			CHECK(sb.shm != NULL);
 			CHECK(sb.wm_base != NULL);
 			CHECK(sb.seat != NULL);
+			CHECK(sb.has_idle_inhibit);
 			CHECK(sb.layer_shell == NULL);
 			CHECK(sb.security_context_mgr == NULL);
+			CHECK(!sb.has_wlr_foreign_toplevel);
+			CHECK(!sb.has_ext_foreign_toplevel);
+			CHECK(!sb.has_ext_workspace);
+			CHECK(!sb.has_ext_session_lock);
+			CHECK(!sb.has_idle_notify);
+			CHECK(!sb.has_output_power);
 
 			/* Active bind rejection: attempting to bind the hidden
 			 * zwlr_layer_shell_v1 global by its numeric name must fail
@@ -2093,6 +2457,426 @@ int main(void) {
 	destroy_window(&fw2);
 	for (unsigned int i = 0; i < 20; i++)
 		if (!pump(&client, &server)) goto fail;
+
+	/* ---- 0.2.0: P3 shell protocols and binding gate ---- */
+	CHECK(client.unclassified_globals == 0);
+	CHECK(tp_security_classify_global("zwp_idle_inhibit_manager_v1") ==
+		  TP_GLOBAL_UNPRIVILEGED);
+	CHECK(client.has_wlr_foreign_toplevel);
+	CHECK(client.has_ext_foreign_toplevel);
+	CHECK(client.has_ext_workspace);
+	CHECK(!client.has_ext_session_lock); /* hidden from non-locker */
+	CHECK(client.has_idle_notify);
+	CHECK(client.has_idle_inhibit);
+	CHECK(client.has_output_power);
+
+	/* 1) Foreign toplevel (zwlr_foreign_toplevel_manager_v1 + ext_foreign_toplevel_list_v1). */
+	tp_monitor_focus(&server, mon_primary);
+	for (unsigned int i = 0; i < 10; i++)
+		if (!pump(&client, &server)) goto fail;
+	client.ft_wlr_count = 0;
+	client.ft_ext_count = 0;
+	struct test_window ft1 = {0};
+	configure_window_app(&client, &ft1, "ft-app", "ft-title-1");
+	for (unsigned int i = 0; i < 200 && !ft1.configured; i++)
+		if (!pump(&client, &server)) goto fail;
+	for (unsigned int i = 0; i < 20; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(client.ft_wlr_count == 1 && client.ft_ext_count == 1);
+	if (client.ft_wlr_count == 1 && client.ft_ext_count == 1) {
+		struct test_ft_wlr *fw = &client.ft_wlr[0];
+		struct test_ft_ext *fe = &client.ft_ext[0];
+		CHECK(strcmp(fw->app_id, "ft-app") == 0);
+		CHECK(strcmp(fw->title, "ft-title-1") == 0);
+		CHECK(fw->output_entered);
+		CHECK(fw->activated);
+		CHECK(!fw->fullscreen);
+		CHECK(strcmp(fe->app_id, "ft-app") == 0);
+		CHECK(strcmp(fe->title, "ft-title-1") == 0);
+
+		/* Live title and app_id updates propagate to both protocols. */
+		xdg_toplevel_set_title(ft1.toplevel, "ft-title-2");
+		xdg_toplevel_set_app_id(ft1.toplevel, "ft-app-2");
+		wl_surface_commit(ft1.surface);
+		for (unsigned int i = 0; i < 15; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(strcmp(fw->title, "ft-title-2") == 0);
+		CHECK(strcmp(fw->app_id, "ft-app-2") == 0);
+		CHECK(strcmp(fe->title, "ft-title-2") == 0);
+		CHECK(strcmp(fe->app_id, "ft-app-2") == 0);
+
+		/* Fullscreen request via zwlr foreign toplevel. */
+		struct tp_client *c_ft = tp_focused(&server);
+		CHECK(c_ft != NULL && !c_ft->fullscreen);
+		zwlr_foreign_toplevel_handle_v1_set_fullscreen(fw->handle, NULL);
+		for (unsigned int i = 0; i < 15; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(c_ft && c_ft->fullscreen && fw->fullscreen);
+		zwlr_foreign_toplevel_handle_v1_unset_fullscreen(fw->handle);
+		for (unsigned int i = 0; i < 15; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(c_ft && !c_ft->fullscreen && !fw->fullscreen);
+
+		/* Switch to tag 2, then activate ft1 via foreign toplevel: must switch
+		 * back to tag 1 and focus ft1. */
+		chord(&keyboard, KEY_2, false, false);
+		for (unsigned int i = 0; i < 15; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(tp_tagview_current(&mon_primary->view) == tp_tag_mask(2));
+		zwlr_foreign_toplevel_handle_v1_activate(fw->handle, client.seat);
+		for (unsigned int i = 0; i < 15; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(tp_tagview_current(&mon_primary->view) == tp_tag_mask(1));
+		CHECK(tp_focused(&server) == c_ft);
+
+		/* Close request via foreign toplevel. */
+		zwlr_foreign_toplevel_handle_v1_close(fw->handle);
+		for (unsigned int i = 0; i < 15; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(ft1.closed);
+	}
+	destroy_window(&ft1);
+	for (unsigned int i = 0; i < 20; i++)
+		if (!pump(&client, &server)) goto fail;
+	if (client.ft_wlr_count == 1 && client.ft_ext_count == 1) {
+		CHECK(client.ft_wlr[0].closed);
+		CHECK(client.ft_ext[0].closed);
+	}
+
+	/* 2) ext-workspace: 9 tags per monitor, activate and deactivate. */
+	struct test_ws_item *ws1 = NULL, *ws2 = NULL;
+	unsigned int live_ws = 0;
+	char mon_ws1[96], mon_ws2[96];
+	snprintf(mon_ws1, sizeof(mon_ws1), "%s:1", mon_primary->output->name);
+	snprintf(mon_ws2, sizeof(mon_ws2), "%s:2", mon_primary->output->name);
+	for (size_t i = 0; i < client.ws_count; i++) {
+		if (client.ws_items[i].removed)
+			continue;
+		live_ws++;
+		if (strcmp(client.ws_items[i].id, mon_ws1) == 0)
+			ws1 = &client.ws_items[i];
+		else if (strcmp(client.ws_items[i].id, mon_ws2) == 0)
+			ws2 = &client.ws_items[i];
+	}
+	unsigned int mon_count = (unsigned int)wl_list_length(&server.monitors);
+	CHECK(client.ws_group_count >= mon_count);
+	CHECK(live_ws == mon_count * TP_TAG_COUNT);
+	CHECK(ws1 != NULL && ws2 != NULL);
+	if (ws1 && ws2) {
+		CHECK((ws1->state & EXT_WORKSPACE_HANDLE_V1_STATE_ACTIVE) != 0);
+		CHECK((ws2->state & EXT_WORKSPACE_HANDLE_V1_STATE_ACTIVE) == 0);
+
+		ext_workspace_handle_v1_activate(ws2->handle);
+		ext_workspace_manager_v1_commit(client.ws_mgr);
+		for (unsigned int i = 0; i < 15; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(tp_tagview_current(&mon_primary->view) == tp_tag_mask(2));
+		CHECK((ws2->state & EXT_WORKSPACE_HANDLE_V1_STATE_ACTIVE) != 0);
+		CHECK((ws1->state & EXT_WORKSPACE_HANDLE_V1_STATE_ACTIVE) == 0);
+
+		/* Combined view 1+2, then deactivate 2 -> returns to tag 1. */
+		chord(&keyboard, KEY_1, false, true);
+		for (unsigned int i = 0; i < 15; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK((ws1->state & EXT_WORKSPACE_HANDLE_V1_STATE_ACTIVE) != 0);
+		CHECK((ws2->state & EXT_WORKSPACE_HANDLE_V1_STATE_ACTIVE) != 0);
+
+		ext_workspace_handle_v1_deactivate(ws2->handle);
+		ext_workspace_manager_v1_commit(client.ws_mgr);
+		for (unsigned int i = 0; i < 15; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(tp_tagview_current(&mon_primary->view) == tp_tag_mask(1));
+		CHECK((ws1->state & EXT_WORKSPACE_HANDLE_V1_STATE_ACTIVE) != 0);
+		CHECK((ws2->state & EXT_WORKSPACE_HANDLE_V1_STATE_ACTIVE) == 0);
+
+		/* Deactivating the last active tag is refused. */
+		ext_workspace_handle_v1_deactivate(ws1->handle);
+		ext_workspace_manager_v1_commit(client.ws_mgr);
+		for (unsigned int i = 0; i < 15; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(tp_tagview_current(&mon_primary->view) == tp_tag_mask(1));
+		CHECK((ws1->state & EXT_WORKSPACE_HANDLE_V1_STATE_ACTIVE) != 0);
+	}
+
+	/* 3) Session lock, per-role grant, binding gate, and fail-locked crash. */
+	lf = fopen(lua_cfg, "wb");
+	CHECK(lf != NULL);
+	if (lf) {
+		fputs("tp.bind('Meta+n', function() tp.spawn('unlocked-only') end)\n"
+			  "tp.bind('Meta+k', function() tp.spawn('locked-ok') end, { locked = true })\n",
+			  lf);
+		fclose(lf);
+	}
+	CHECK(tp_lua_reload_file(&server.lua, lua_cfg, &server.settings, NULL, 0));
+
+	/* Create an authorized locker client via socketpair + wl_client_create. */
+	int lsv[2] = {-1, -1};
+	CHECK(socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, lsv) == 0);
+	struct wl_client *srv_locker = wl_client_create(server.display, lsv[0]);
+	CHECK(srv_locker != NULL);
+	tp_security_set_locker_client(&server, srv_locker);
+
+	struct test_client lk1 = { .shm_fd = -1 };
+	lk1.display = wl_display_connect_to_fd(lsv[1]);
+	CHECK(lk1.display != NULL);
+	if (lk1.display) {
+		lk1.registry = wl_display_get_registry(lk1.display);
+		wl_registry_add_listener(lk1.registry, &registry_listener, &lk1);
+		for (unsigned int i = 0; i < 20; i++)
+			if (!pump(&lk1, &server)) break;
+		CHECK(lk1.has_ext_session_lock && lk1.lock_mgr != NULL);
+		CHECK(lk1.lock_mgr_name != 0 && lk1.output != NULL);
+		CHECK(create_shm_buffer(&lk1) == 0);
+
+		/* Direct same-UID non-locker client attempting to bind
+		 * ext_session_lock_manager_v1 by numeric name gets EPROTO. */
+		struct test_client rogue = { .shm_fd = -1 };
+		rogue.display = wl_display_connect(server.socket);
+		CHECK(rogue.display != NULL);
+		if (rogue.display) {
+			rogue.registry = wl_display_get_registry(rogue.display);
+			wl_registry_add_listener(rogue.registry, &registry_listener, &rogue);
+			for (unsigned int i = 0; i < 15; i++)
+				if (!pump(&rogue, &server)) break;
+			CHECK(!rogue.has_ext_session_lock);
+			struct ext_session_lock_manager_v1 *bad_lock = wl_registry_bind(
+				rogue.registry, lk1.lock_mgr_name,
+				&ext_session_lock_manager_v1_interface, 1);
+			(void)bad_lock;
+			for (unsigned int i = 0; i < 10; i++)
+				if (!pump(&rogue, &server)) break;
+			CHECK(wl_display_get_error(rogue.display) == EPROTO);
+			wl_display_disconnect(rogue.display);
+		}
+
+		/* Lock the session and map a lock surface. */
+		struct test_lock_state ls1 = {0};
+		struct ext_session_lock_v1 *lock1 =
+			ext_session_lock_manager_v1_lock(lk1.lock_mgr);
+		ext_session_lock_v1_add_listener(lock1, &lock_listener, &ls1);
+		for (unsigned int i = 0; i < 20 && !ls1.locked; i++)
+			if (!pump(&lk1, &server)) break;
+		CHECK(ls1.locked && !ls1.finished);
+		CHECK(server.locked);
+		CHECK(!server.layer[TP_LAYER_TILE]->node.enabled);
+
+		struct wl_surface *ls_wl = wl_compositor_create_surface(lk1.compositor);
+		struct test_lock_surf_state lss = { .client = &lk1, .surface = ls_wl };
+		struct ext_session_lock_surface_v1 *lsurf =
+			ext_session_lock_v1_get_lock_surface(lock1, ls_wl, lk1.output);
+		ext_session_lock_surface_v1_add_listener(lsurf, &lock_surf_listener, &lss);
+		for (unsigned int i = 0; i < 30 && !lss.configured; i++)
+			if (!pump(&lk1, &server)) break;
+		for (unsigned int i = 0; i < 15; i++)
+			if (!pump(&lk1, &server)) break;
+		CHECK(lss.configured && lss.width == 1280 && lss.height == 720);
+		CHECK(lk1.keyboard_focus == ls_wl);
+
+		/* While locked: normal Meta+n is gated and passes to locker;
+		 * Meta+k ({ locked = true }) runs; emergency quit is gated;
+		 * VT switch still works. */
+		hook_event_count = 0;
+		lk1.key_events = 0;
+		chord(&keyboard, KEY_N, false, false);
+		for (unsigned int i = 0; i < 10; i++)
+			if (!pump(&lk1, &server)) break;
+		CHECK(!has_hook_event("unlocked-only"));
+		CHECK(lk1.key_events > 0);
+
+		hook_event_count = 0;
+		chord(&keyboard, KEY_K, false, false);
+		for (unsigned int i = 0; i < 10; i++)
+			if (!pump(&lk1, &server)) break;
+		CHECK(has_hook_event("locked-ok"));
+
+		server.quit_requested = false;
+		send_key(&keyboard, KEY_LEFTCTRL, WL_KEYBOARD_KEY_STATE_PRESSED, 400);
+		send_key(&keyboard, KEY_LEFTALT, WL_KEYBOARD_KEY_STATE_PRESSED, 401);
+		send_key(&keyboard, KEY_LEFTSHIFT, WL_KEYBOARD_KEY_STATE_PRESSED, 402);
+		send_key(&keyboard, KEY_BACKSPACE, WL_KEYBOARD_KEY_STATE_PRESSED, 403);
+		CHECK(!server.quit_requested);
+		send_key(&keyboard, KEY_BACKSPACE, WL_KEYBOARD_KEY_STATE_RELEASED, 404);
+		send_key(&keyboard, KEY_LEFTSHIFT, WL_KEYBOARD_KEY_STATE_RELEASED, 405);
+		last_vt = 0;
+		server.change_vt = mock_change_vt;
+		send_key(&keyboard, KEY_F2, WL_KEYBOARD_KEY_STATE_PRESSED, 406);
+		CHECK(last_vt == 2);
+		send_key(&keyboard, KEY_F2, WL_KEYBOARD_KEY_STATE_RELEASED, 407);
+		send_key(&keyboard, KEY_LEFTALT, WL_KEYBOARD_KEY_STATE_RELEASED, 408);
+		send_key(&keyboard, KEY_LEFTCTRL, WL_KEYBOARD_KEY_STATE_RELEASED, 409);
+
+		/* Unlock restores layers and normal bindings. */
+		ext_session_lock_surface_v1_destroy(lsurf);
+		wl_surface_destroy(ls_wl);
+		ext_session_lock_v1_unlock_and_destroy(lock1);
+		for (unsigned int i = 0; i < 20; i++)
+			if (!pump(&lk1, &server)) break;
+		CHECK(!server.locked);
+		CHECK(server.layer[TP_LAYER_TILE]->node.enabled);
+
+		hook_event_count = 0;
+		chord(&keyboard, KEY_N, false, false);
+		for (unsigned int i = 0; i < 10; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(has_hook_event("unlocked-only"));
+
+		/* Fail-locked on locker crash: lock again, then disconnect without
+		 * unlock_and_destroy. Session must stay locked until a new locker
+		 * takes over and unlocks. */
+		struct test_lock_state ls2 = {0};
+		struct ext_session_lock_v1 *lock2 =
+			ext_session_lock_manager_v1_lock(lk1.lock_mgr);
+		ext_session_lock_v1_add_listener(lock2, &lock_listener, &ls2);
+		for (unsigned int i = 0; i < 20 && !ls2.locked; i++)
+			if (!pump(&lk1, &server)) break;
+		CHECK(ls2.locked && server.locked);
+
+		if (lk1.shm_data && lk1.shm_data != MAP_FAILED)
+			munmap(lk1.shm_data, 16);
+		if (lk1.shm_fd >= 0) close(lk1.shm_fd);
+		wl_display_disconnect(lk1.display);
+		for (unsigned int i = 0; i < 20; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(server.locked);
+		CHECK(server.active_lock == NULL);
+		CHECK(!server.layer[TP_LAYER_TILE]->node.enabled);
+
+		/* Normal binding is still gated while in crash-locked state. */
+		hook_event_count = 0;
+		chord(&keyboard, KEY_N, false, false);
+		for (unsigned int i = 0; i < 10; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(!has_hook_event("unlocked-only"));
+
+		/* Recovery locker connects, locks, and unlocks cleanly. */
+		int lsv2[2] = {-1, -1};
+		CHECK(socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, lsv2) == 0);
+		struct wl_client *srv_locker2 = wl_client_create(server.display, lsv2[0]);
+		CHECK(srv_locker2 != NULL);
+		tp_security_set_locker_client(&server, srv_locker2);
+		struct test_client lk2 = { .shm_fd = -1 };
+		lk2.display = wl_display_connect_to_fd(lsv2[1]);
+		CHECK(lk2.display != NULL);
+		if (lk2.display) {
+			lk2.registry = wl_display_get_registry(lk2.display);
+			wl_registry_add_listener(lk2.registry, &registry_listener, &lk2);
+			for (unsigned int i = 0; i < 20; i++)
+				if (!pump(&lk2, &server)) break;
+			CHECK(lk2.lock_mgr != NULL);
+			struct test_lock_state ls3 = {0};
+			struct ext_session_lock_v1 *lock3 =
+				ext_session_lock_manager_v1_lock(lk2.lock_mgr);
+			ext_session_lock_v1_add_listener(lock3, &lock_listener, &ls3);
+			for (unsigned int i = 0; i < 20 && !ls3.locked; i++)
+				if (!pump(&lk2, &server)) break;
+			CHECK(ls3.locked && server.locked);
+			ext_session_lock_v1_unlock_and_destroy(lock3);
+			for (unsigned int i = 0; i < 20; i++)
+				if (!pump(&lk2, &server)) break;
+			CHECK(!server.locked);
+			CHECK(server.layer[TP_LAYER_TILE]->node.enabled);
+			wl_display_disconnect(lk2.display);
+		}
+	}
+
+	/* 4) Idle notify & visibility-gated idle inhibit. */
+	if (client.idle_notifier && client.idle_inhibit_mgr && client.seat) {
+		struct test_idle_state idst = {0};
+		struct ext_idle_notification_v1 *notif =
+			ext_idle_notifier_v1_get_idle_notification(
+				client.idle_notifier, 40, client.seat);
+		ext_idle_notification_v1_add_listener(notif, &idle_notif_listener, &idst);
+		for (unsigned int i = 0; i < 40 && !idst.idled; i++) {
+			usleep(10000);
+			if (!pump(&client, &server)) goto fail;
+		}
+		CHECK(idst.idled);
+
+		/* Keyboard activity resumes idle. */
+		send_key(&keyboard, KEY_A, WL_KEYBOARD_KEY_STATE_PRESSED, 450);
+		send_key(&keyboard, KEY_A, WL_KEYBOARD_KEY_STATE_RELEASED, 451);
+		for (unsigned int i = 0; i < 15 && !idst.resumed; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(idst.resumed);
+
+		/* Visible window with idle inhibitor prevents idled. */
+		struct test_window iw = {0};
+		configure_window_app(&client, &iw, "idle-app", "IdleApp");
+		for (unsigned int i = 0; i < 200 && !iw.configured; i++)
+			if (!pump(&client, &server)) goto fail;
+		for (unsigned int i = 0; i < 15; i++)
+			if (!pump(&client, &server)) goto fail;
+
+		struct zwp_idle_inhibitor_v1 *inh =
+			zwp_idle_inhibit_manager_v1_create_inhibitor(
+				client.idle_inhibit_mgr, iw.surface);
+		for (unsigned int i = 0; i < 10; i++)
+			if (!pump(&client, &server)) goto fail;
+		send_key(&keyboard, KEY_B, WL_KEYBOARD_KEY_STATE_PRESSED, 452);
+		send_key(&keyboard, KEY_B, WL_KEYBOARD_KEY_STATE_RELEASED, 453);
+		for (unsigned int i = 0; i < 10; i++)
+			if (!pump(&client, &server)) goto fail;
+		idst.idled = false;
+		for (unsigned int i = 0; i < 10; i++) {
+			usleep(10000);
+			if (!pump(&client, &server)) goto fail;
+		}
+		CHECK(!idst.idled);
+
+		/* Switching to tag 2 hides iw, so idle inhibition lifts and idled fires. */
+		chord(&keyboard, KEY_2, false, false);
+		for (unsigned int i = 0; i < 40 && !idst.idled; i++) {
+			usleep(10000);
+			if (!pump(&client, &server)) goto fail;
+		}
+		CHECK(idst.idled);
+
+		zwp_idle_inhibitor_v1_destroy(inh);
+		ext_idle_notification_v1_destroy(notif);
+		destroy_window(&iw);
+		chord(&keyboard, KEY_1, false, false);
+		for (unsigned int i = 0; i < 15; i++)
+			if (!pump(&client, &server)) goto fail;
+	}
+
+	/* 5) Output power management (DPMS off/on). */
+	if (client.output_power_mgr && client.output) {
+		struct test_power_state pst = {0};
+		struct zwlr_output_power_v1 *op =
+			zwlr_output_power_manager_v1_get_output_power(
+				client.output_power_mgr, client.output);
+		zwlr_output_power_v1_add_listener(op, &power_listener, &pst);
+		for (unsigned int i = 0; i < 15; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(pst.got_mode && pst.mode == ZWLR_OUTPUT_POWER_V1_MODE_ON);
+
+		zwlr_output_power_v1_set_mode(op, ZWLR_OUTPUT_POWER_V1_MODE_OFF);
+		for (unsigned int i = 0; i < 15; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(pst.mode == ZWLR_OUTPUT_POWER_V1_MODE_OFF);
+		struct tp_monitor *pm;
+		bool any_disabled = false;
+		wl_list_for_each(pm, &server.monitors, link) {
+			if (!pm->output->enabled)
+				any_disabled = true;
+		}
+		CHECK(any_disabled);
+
+		zwlr_output_power_v1_set_mode(op, ZWLR_OUTPUT_POWER_V1_MODE_ON);
+		for (unsigned int i = 0; i < 15; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(pst.mode == ZWLR_OUTPUT_POWER_V1_MODE_ON);
+		bool all_enabled = true;
+		wl_list_for_each(pm, &server.monitors, link) {
+			if (!pm->output->enabled)
+				all_enabled = false;
+		}
+		CHECK(all_enabled);
+
+		zwlr_output_power_v1_destroy(op);
+		for (unsigned int i = 0; i < 10; i++)
+			if (!pump(&client, &server)) goto fail;
+	}
 
 	unlink(lua_cfg);
 	rmdir(lua_dir);

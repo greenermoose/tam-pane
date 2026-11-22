@@ -9,6 +9,7 @@
 
 struct tp_server;
 struct tp_client;
+struct tp_monitor_workspaces;
 struct wlr_output;
 struct wlr_scene_output;
 struct wp_viewporter;
@@ -37,6 +38,7 @@ struct tp_monitor {
 	struct wp_fractional_scale_v1 *host_fscale;
 	float host_scale;
 	int32_t host_w, host_h;
+	struct tp_monitor_workspaces *workspaces;
 };
 
 void tp_monitors_init(struct tp_server *s);

@@ -14,6 +14,7 @@
 
 struct tp_server;
 struct tp_monitor;
+struct tp_foreign_toplevel;
 struct wlr_scene_tree;
 struct wlr_surface;
 struct wlr_xdg_toplevel;
@@ -38,6 +39,9 @@ struct tp_client {
 	struct wl_listener destroy;
 	struct wl_listener request_fullscreen;
 	struct wl_listener request_maximize;
+	struct wl_listener set_title;
+	struct wl_listener set_app_id;
+	struct tp_foreign_toplevel *foreign;
 };
 
 void tp_clients_init(struct tp_server *s);

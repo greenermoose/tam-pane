@@ -27,6 +27,14 @@ struct wlr_scene_tree;
 struct wlr_seat;
 struct wlr_security_context_manager_v1;
 struct wlr_session;
+struct wlr_session_lock_manager_v1;
+struct wlr_session_lock_v1;
+struct wlr_foreign_toplevel_manager_v1;
+struct wlr_ext_foreign_toplevel_list_v1;
+struct wlr_ext_workspace_manager_v1;
+struct wlr_idle_notifier_v1;
+struct wlr_idle_inhibit_manager_v1;
+struct wlr_output_power_manager_v1;
 struct wlr_xcursor_manager;
 struct wlr_xdg_shell;
 struct wlr_layer_shell_v1;
@@ -62,6 +70,7 @@ enum tp_layer {
 	TP_LAYER_TOP,
 	TP_LAYER_FULLSCREEN,
 	TP_LAYER_OVERLAY,
+	TP_LAYER_LOCK,
 	TP_LAYER_COUNT
 };
 
@@ -103,6 +112,32 @@ struct tp_server {
 	struct wlr_security_context_manager_v1 *security_context_mgr;
 	struct wl_client *shell_client; /* allowed exclusive OVERLAY focus */
 	struct wl_listener shell_client_destroy;
+	struct wl_client *locker_client; /* granted ext_session_lock_manager_v1 */
+	struct wl_listener locker_client_destroy;
+
+	struct wlr_foreign_toplevel_manager_v1 *foreign_toplevel_mgr;
+	struct wlr_ext_foreign_toplevel_list_v1 *ext_foreign_toplevel_list;
+
+	struct wlr_ext_workspace_manager_v1 *workspace_mgr;
+	struct wl_listener workspace_commit;
+
+	struct wlr_session_lock_manager_v1 *session_lock_mgr;
+	struct wl_listener new_session_lock;
+	struct wlr_session_lock_v1 *active_lock;
+	struct wl_listener lock_new_surface;
+	struct wl_listener lock_unlock;
+	struct wl_listener lock_destroy;
+	struct wl_list lock_surfaces; /* tp_lock_surface.link */
+	struct wlr_scene_tree *lock_bg_tree;
+	bool locked;
+
+	struct wlr_idle_notifier_v1 *idle_notifier;
+	struct wlr_idle_inhibit_manager_v1 *idle_inhibit_mgr;
+	struct wl_listener new_idle_inhibitor;
+	struct wl_list idle_inhibitors; /* tp_idle_inhibitor.link */
+
+	struct wlr_output_power_manager_v1 *output_power_mgr;
+	struct wl_listener output_power_set_mode;
 
 	struct wlr_seat *seat;
 	struct wl_list keyboards; /* tp_keyboard.link */

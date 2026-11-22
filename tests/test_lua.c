@@ -437,56 +437,55 @@ static void test_default_bindings(void) {
 	CHECK(!tp_lua_has_unmodified_bindings(lua));
 
 	action_count = 0;
-	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_Return));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_Return, false));
 	CHECK(action_count == 1 && last_action.kind == TP_ACT_TERMINAL);
 
-	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT, XKB_KEY_r));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT, XKB_KEY_r, false));
 	CHECK(action_count == 2 && last_action.kind == TP_ACT_RELOAD);
 
-	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_w));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_w, false));
 	CHECK(last_action.kind == TP_ACT_CLOSE);
 
-	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT, XKB_KEY_e));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT, XKB_KEY_e, false));
 	CHECK(last_action.kind == TP_ACT_QUIT);
 
-	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_j));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_j, false));
 	CHECK(last_action.kind == TP_ACT_FOCUS && last_action.dir == +1);
-	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_k));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_k, false));
 	CHECK(last_action.kind == TP_ACT_FOCUS && last_action.dir == -1);
 
-	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_v));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_v, false));
 	CHECK(last_action.kind == TP_ACT_TOGGLE_FLOAT);
-	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_f));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_f, false));
 	CHECK(last_action.kind == TP_ACT_TOGGLE_FULLSCREEN);
-	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_Tab));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_Tab, false));
 	CHECK(last_action.kind == TP_ACT_TAG_BACK);
 
-	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_comma));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_comma, false));
 	CHECK(last_action.kind == TP_ACT_MONITOR_FOCUS && last_action.dir == -1);
-	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT, XKB_KEY_period));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT, XKB_KEY_period, false));
 	CHECK(last_action.kind == TP_ACT_MONITOR_MOVE && last_action.dir == +1);
 
-	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT, XKB_KEY_Left));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT, XKB_KEY_Left, false));
 	CHECK(last_action.kind == TP_ACT_SWAP && last_action.dir == TP_DIR_LEFT);
-	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_CTRL, XKB_KEY_Right));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_CTRL, XKB_KEY_Right, false));
 	CHECK(last_action.kind == TP_ACT_MOVE && last_action.dir == TP_DIR_RIGHT);
-	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_ALT, XKB_KEY_Up));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_ALT, XKB_KEY_Up, false));
 	CHECK(last_action.kind == TP_ACT_RESIZE && last_action.dir == TP_DIR_UP &&
 		  last_action.step == 0);
 
-	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_3));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_3, false));
 	CHECK(last_action.kind == TP_ACT_TAG_VIEW && last_action.tag == 3);
-	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT, XKB_KEY_5));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT, XKB_KEY_5, false));
 	CHECK(last_action.kind == TP_ACT_TAG_MOVE && last_action.tag == 5);
-	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_CTRL, XKB_KEY_7));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_CTRL, XKB_KEY_7, false));
 	CHECK(last_action.kind == TP_ACT_TAG_TOGGLE_VIEW && last_action.tag == 7);
-	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT | TP_MOD_CTRL,
-							XKB_KEY_9));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT | TP_MOD_CTRL, XKB_KEY_9, false));
 	CHECK(last_action.kind == TP_ACT_TAG_TOGGLE_CLIENT &&
 		  last_action.tag == 9);
 
 	/* Unbound key returns false. */
-	CHECK(!tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_z));
+	CHECK(!tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_z, false));
 
 	tp_lua_destroy(lua);
 }
@@ -530,22 +529,22 @@ static void test_custom_bindings_and_callbacks(void) {
 	CHECK(tp_lua_has_unmodified_bindings(lua));
 
 	/* Overridden dispatcher + explicit resize step + unmodified key. */
-	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_Return));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_Return, false));
 	CHECK(last_action.kind == TP_ACT_SPAWN &&
 		  strcmp(last_action.cmd, "kitty") == 0);
-	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_ALT, XKB_KEY_Down));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_ALT, XKB_KEY_Down, false));
 	CHECK(last_action.kind == TP_ACT_RESIZE &&
 		  last_action.dir == TP_DIR_DOWN && last_action.step == 80);
-	CHECK(tp_lua_handle_key(lua, 0, XKB_KEY_XF86AudioRaiseVolume));
+	CHECK(tp_lua_handle_key(lua, 0, XKB_KEY_XF86AudioRaiseVolume, false));
 	CHECK(last_action.kind == TP_ACT_SPAWN &&
 		  strcmp(last_action.cmd, "vol-up") == 0);
-	CHECK(!tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_v));
+	CHECK(!tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_v, false));
 
 	/* Plain Lua callback invoking a dispatcher and tp.spawn. */
 	spawn_count = 0;
 	last_spawned[0] = '\0';
 	action_count = 0;
-	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_x));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_x, false));
 	CHECK(action_count == 1 && last_action.kind == TP_ACT_TAG_VIEW &&
 		  last_action.tag == 2);
 	CHECK(spawn_count == 1 && strcmp(last_spawned, "from-callback") == 0);
@@ -554,7 +553,7 @@ static void test_custom_bindings_and_callbacks(void) {
 	 * shell, and rejects malformed argument lists. */
 	reset_spawn_log();
 	argv_spawn_count = 0;
-	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_a));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_a, false));
 	CHECK(argv_spawn_count == 1);
 	CHECK(strcmp(last_argv, "printf|%s\n|it's; rm -rf ~ #") == 0);
 	CHECK(spawn_log_count == 5);
@@ -562,14 +561,14 @@ static void test_custom_bindings_and_callbacks(void) {
 		CHECK(strcmp(spawn_log[i], "bad-rejected") == 0);
 
 	/* Callback runtime error and runaway loop are contained cleanly. */
-	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_y));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_y, false));
 	uint64_t t0 = now_ms();
-	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_z));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_z, false));
 	CHECK(now_ms() - t0 < 500);
 
 	/* Interpreter and bindings still work after callback aborts. */
 	action_count = 0;
-	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_x));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_x, false));
 	CHECK(action_count == 1);
 
 	/* Atomic rollback: clear_binds + error keeps previous bindings & refs. */
@@ -583,9 +582,9 @@ static void test_custom_bindings_and_callbacks(void) {
 							  TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
 							  sizeof(err)));
 	CHECK(tp_lua_binding_count(lua) == before_count);
-	CHECK(!tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_q));
+	CHECK(!tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_q, false));
 	action_count = 0;
-	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_x));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_x, false));
 	CHECK(action_count == 1);
 
 	/* Invalid dispatcher / bind calls fail cleanly. */
@@ -618,7 +617,7 @@ static void test_custom_bindings_and_callbacks(void) {
 							 sizeof(err)));
 	CHECK(tp_lua_binding_count(lua) == 1);
 	CHECK(!tp_lua_has_unmodified_bindings(lua));
-	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_q));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_q, false));
 	CHECK(last_action.kind == TP_ACT_CLOSE);
 
 	tp_lua_destroy(lua);
@@ -926,12 +925,12 @@ static void test_memory_and_pattern_limits(void) {
 	/* A runaway pattern in a callback stops at the 100 ms deadline. */
 	reset_spawn_log();
 	uint64_t t0 = now_ms();
-	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_p));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_p, false));
 	CHECK(now_ms() - t0 < 1000);
 	CHECK(spawn_count == 0);
 
 	/* Long legitimate matching within the deadline still runs. */
-	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_g));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_g, false));
 	CHECK(spawn_count == 1 && strcmp(last_spawned, "gsub:100000") == 0);
 
 	/* Rules: the runaway rule is cut off and does not match. Subjects are
@@ -1169,10 +1168,10 @@ static void test_live_reload(void) {
 
 	/* Spawn and action handlers survived the swap. */
 	reset_spawn_log();
-	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_x));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_x, false));
 	CHECK(spawn_log_count == 1 && strcmp(spawn_log[0], "v1:from_v1") == 0);
 	action_count = 0;
-	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT, XKB_KEY_y));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT, XKB_KEY_y, false));
 	CHECK(action_count == 1 && last_action.kind == TP_ACT_RELOAD);
 
 	/* 2) Second reload replaces config cleanly from fresh defaults:
@@ -1193,9 +1192,9 @@ static void test_live_reload(void) {
 	CHECK(cur.gap_outer == defs.gap_outer);
 	CHECK(cur.repeat_rate == defs.repeat_rate);
 	CHECK(tp_lua_binding_count(lua) == 62);
-	CHECK(!tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_x));
+	CHECK(!tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_x, false));
 	reset_spawn_log();
-	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_z));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_z, false));
 	CHECK(spawn_log_count == 1 && strcmp(spawn_log[0], "v2:nil") == 0);
 	struct tp_rule_result rr;
 	CHECK(!tp_lua_eval_rules(lua, "alpha", "", &rr));
@@ -1242,12 +1241,110 @@ static void test_live_reload(void) {
 
 	/* v2 binding and hook still work after all failed reloads. */
 	reset_spawn_log();
-	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_z));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_z, false));
 	CHECK(spawn_log_count == 1 && strcmp(spawn_log[0], "v2:nil") == 0);
 
 	unlink(cfg_path);
 	unlink(fifo_path);
 	rmdir(dir);
+	tp_lua_destroy(lua);
+}
+
+static char lock_log[8][128];
+static size_t lock_log_count;
+
+static void reset_lock_log(void) { lock_log_count = 0; }
+
+static void mock_lock(const char *cmd, void *userdata) {
+	(void)userdata;
+	if (lock_log_count < 8)
+		snprintf(lock_log[lock_log_count++], 128, "sh:%s", cmd);
+}
+
+static void mock_lock_argv(const char *const argv[], void *userdata) {
+	(void)userdata;
+	if (lock_log_count >= 8)
+		return;
+	char *dst = lock_log[lock_log_count++];
+	size_t pos = (size_t)snprintf(dst, 128, "argv:");
+	for (size_t i = 0; argv[i] && pos + 2 < 128; i++)
+		pos += (size_t)snprintf(dst + pos, 128 - pos, "%s%s", i ? "|" : "",
+								argv[i]);
+}
+
+static void test_lock_and_binding_gate(void) {
+	struct tp_lua *lua = tp_lua_create();
+	CHECK(lua != NULL);
+	tp_lua_set_spawn_fn(lua, mock_spawn);
+	tp_lua_set_action_fn(lua, mock_action, NULL);
+	tp_lua_set_lock_fn(lua, mock_lock, NULL);
+	tp_lua_set_lock_argv_fn(lua, mock_lock_argv, NULL);
+
+	struct tp_settings base, out;
+	tp_settings_defaults(&base);
+	char err[256] = {0};
+
+	const char *cfg =
+		"tp.bind('Meta+a', function() tp.spawn('normal-a') end)\n"
+		"tp.bind('Meta+b', function() tp.spawn('locked-b') end, { locked = true })\n"
+		"tp.bind('Meta+c', function() tp.spawn('explicit-unlocked-c') end, { locked = false })\n"
+		"tp.bind('Meta+l', function() tp.lock{'hyprlock', '--immediate'} end)\n"
+		"tp.bind('Meta+Shift+l', function() tp.lock('swaylock -f') end)\n";
+	CHECK(tp_lua_exec_string(lua, cfg, strlen(cfg), "lock_gate",
+							 TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+							 TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+							 sizeof(err)));
+
+	/* Unlocked: all three bindings fire. */
+	reset_spawn_log();
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_a, false));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_b, false));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_c, false));
+	CHECK(spawn_log_count == 3);
+
+	/* Locked: only { locked = true } fires; normal and explicit-false are gated. */
+	reset_spawn_log();
+	CHECK(!tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_a, true));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_b, true));
+	CHECK(!tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_c, true));
+	CHECK(spawn_log_count == 1 && strcmp(spawn_log[0], "locked-b") == 0);
+
+	/* tp.lock argv and string forms invoke the lock handlers. */
+	reset_lock_log();
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_l, false));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT, XKB_KEY_l, false));
+	CHECK(lock_log_count == 2);
+	CHECK(strcmp(lock_log[0], "argv:hyprlock|--immediate") == 0);
+	CHECK(strcmp(lock_log[1], "sh:swaylock -f") == 0);
+
+	/* Validation errors: bad options table, non-boolean locked, tp.lock at load. */
+	const char *bad[] = {
+		"tp.bind('Meta+q', function() end, 'not-a-table')",
+		"tp.bind('Meta+q', function() end, { locked = 'yes' })",
+		"tp.lock('hyprlock')",
+		"tp.lock{'hyprlock'}",
+	};
+	for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++) {
+		CHECK(!tp_lua_exec_string(lua, bad[i], strlen(bad[i]), "bad_lock",
+								  TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+								  TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+								  sizeof(err)));
+	}
+
+	/* Lock handlers survive tp_lua_reload_file. */
+	char dir[] = "/tmp/tam-pane-lock-reload.XXXXXX";
+	CHECK(mkdtemp(dir) != NULL);
+	char cfg_path[256];
+	snprintf(cfg_path, sizeof(cfg_path), "%s/init.lua", dir);
+	CHECK(write_text(cfg_path,
+					 "tp.bind('Meta+l', function() tp.lock{'locker'} end)\n"));
+	CHECK(tp_lua_reload_file(&lua, cfg_path, &out, err, sizeof(err)));
+	reset_lock_log();
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_l, false));
+	CHECK(lock_log_count == 1 && strcmp(lock_log[0], "argv:locker") == 0);
+	unlink(cfg_path);
+	rmdir(dir);
+
 	tp_lua_destroy(lua);
 }
 
@@ -1265,5 +1362,6 @@ int main(void) {
 	test_memory_and_pattern_limits();
 	test_window_rules();
 	test_live_reload();
+	test_lock_and_binding_gate();
 	CHECK_DONE("test_lua");
 }
