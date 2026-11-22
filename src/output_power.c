@@ -3,6 +3,7 @@
 #include "tam-pane/output_mgmt.h"
 #include "tam-pane/server.h"
 #include <tam.h>
+#include <wlr/backend/wayland.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_power_management_v1.h>
 
@@ -13,6 +14,17 @@ static void on_set_mode(struct wl_listener *l, void *data) {
 		return;
 
 	bool enable = ev->mode == ZWLR_OUTPUT_POWER_V1_MODE_ON;
+	if (!enable && wlr_output_is_wl(ev->output)) {
+		/*
+		 * On wlroots's Wayland backend, committing enabled=false unmaps and
+		 * tears down the nested host window, leaving the nested session
+		 * unreachable. Leave the nested output enabled so the locker's
+		 * software black frame blanks the window instead.
+		 */
+		tam_log_info("output-power: ignoring OFF on nested Wayland output %s",
+					 ev->output->name ? ev->output->name : "(unnamed)");
+		return;
+	}
 	struct wlr_output_state state;
 	wlr_output_state_init(&state);
 	wlr_output_state_set_enabled(&state, enable);
