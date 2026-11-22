@@ -81,8 +81,10 @@ schedules are not findings here.
   call `wlr_xdg_popup_unconstrain_from_box`.
 - **Status:** fixed in 41ef9ad (0.1.13): `popup_commit` finds the root
   toplevel and unconstrains against its monitor in that toplevel's
-  surface coordinates. No bug record. Fred's check of 0.1.13 found B6
-  instead (Files crashed nested); the menu is checked with 0.1.14.
+  surface coordinates. Fred's check of 0.1.13 found B6 instead (Files
+  crashed nested). His check of 0.1.14 found the menu still off-screen:
+  the fix missed `xdg_popup.reposition`, so the finding became B7,
+  fixed in 0.1.15.
 
 ### 6. A floating move across monitors skips the bookkeeping (low)
 

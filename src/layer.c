@@ -36,6 +36,7 @@ struct tp_layer_popup {
 	struct wlr_xdg_popup *popup;
 	struct wlr_box constrain_box;
 	struct wl_listener commit;
+	struct wl_listener reposition;
 	struct wl_listener destroy;
 };
 
@@ -47,9 +48,17 @@ static void popup_commit(struct wl_listener *l, void *data) {
 	}
 }
 
+/* New rules from xdg_popup.reposition are configured on the next idle;
+ * unconstrain them first, as on the first commit (B7). */
+static void popup_reposition(struct wl_listener *l, void *data) {
+	struct tp_layer_popup *p = wl_container_of(l, p, reposition);
+	wlr_xdg_popup_unconstrain_from_box(p->popup, &p->constrain_box);
+}
+
 static void popup_destroy(struct wl_listener *l, void *data) {
 	struct tp_layer_popup *p = wl_container_of(l, p, destroy);
 	wl_list_remove(&p->commit.link);
+	wl_list_remove(&p->reposition.link);
 	wl_list_remove(&p->destroy.link);
 	free(p);
 }
@@ -74,6 +83,8 @@ static void on_new_popup(struct wl_listener *l, void *data) {
 
 	p->commit.notify = popup_commit;
 	wl_signal_add(&popup->base->surface->events.commit, &p->commit);
+	p->reposition.notify = popup_reposition;
+	wl_signal_add(&popup->events.reposition, &p->reposition);
 	p->destroy.notify = popup_destroy;
 	wl_signal_add(&popup->events.destroy, &p->destroy);
 }

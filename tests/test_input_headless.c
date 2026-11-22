@@ -222,8 +222,10 @@ static void registry_global(void *data, struct wl_registry *registry,
 			version < 5 ? version : 5);
 		wl_seat_add_listener(client->seat, &seat_listener, client);
 	} else if (!strcmp(interface, xdg_wm_base_interface.name)) {
+		/* Version 3 for xdg_popup.reposition. Version 4 would add
+		 * toplevel events these listeners do not handle. */
 		client->wm_base = wl_registry_bind(registry, name,
-			&xdg_wm_base_interface, 1);
+			&xdg_wm_base_interface, version < 3 ? version : 3);
 		xdg_wm_base_add_listener(client->wm_base, &wm_listener, client);
 	} else if (!strcmp(interface, zwlr_layer_shell_v1_interface.name)) {
 		client->layer_shell = wl_registry_bind(registry, name,
@@ -328,6 +330,7 @@ struct test_popup {
 	struct xdg_popup *popup;
 	bool configured;
 	int32_t x, y, w, h; /* the last xdg_popup.configure */
+	uint32_t repositioned; /* token of the last xdg_popup.repositioned */
 };
 
 static void popup_xdg_configure(void *data, struct xdg_surface *surface,
@@ -356,9 +359,15 @@ static void popup_configure(void *data, struct xdg_popup *popup,
 }
 static void popup_done(void *data, struct xdg_popup *popup) {}
 
+static void popup_repositioned(void *data, struct xdg_popup *popup,
+		uint32_t token) {
+	((struct test_popup *)data)->repositioned = token;
+}
+
 static const struct xdg_popup_listener popup_listener = {
 	.configure = popup_configure,
 	.popup_done = popup_done,
+	.repositioned = popup_repositioned,
 };
 
 static int create_shm_buffer(struct test_client *client) {
@@ -993,6 +1002,37 @@ int main(void) {
 	CHECK(edge.w == pw && edge.h == 60);
 	CHECK(ox + edge.x >= u1.x && ox + edge.x + edge.w <= u1.x + u1.w);
 	CHECK(oy + edge.y >= u1.y && oy + edge.y + edge.h <= u1.y + u1.h);
+
+	/* A popup moved after it is mapped stays on the monitor too (B7).
+	 * GTK 4 repositions popovers once it knows their size. Shrink the
+	 * popup to one that fits, then reposition it to the too-wide one.
+	 * Before 0.1.15 the reposition was configured unconstrained. */
+	epos = xdg_wm_base_create_positioner(client.wm_base);
+	xdg_positioner_set_size(epos, 40, 60);
+	xdg_positioner_set_anchor_rect(epos, 0, 0, 1, 1);
+	xdg_positioner_set_anchor(epos, XDG_POSITIONER_ANCHOR_BOTTOM_RIGHT);
+	xdg_positioner_set_gravity(epos, XDG_POSITIONER_GRAVITY_BOTTOM_RIGHT);
+	xdg_popup_reposition(edge.popup, epos, 1);
+	xdg_positioner_destroy(epos);
+	for (unsigned int i = 0; i < 200 && edge.repositioned != 1; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(edge.repositioned == 1 && edge.w == 40);
+	epos = xdg_wm_base_create_positioner(client.wm_base);
+	xdg_positioner_set_size(epos, pw, 60);
+	xdg_positioner_set_anchor_rect(epos, 0, 0, 1, 1);
+	xdg_positioner_set_anchor(epos, XDG_POSITIONER_ANCHOR_BOTTOM_RIGHT);
+	xdg_positioner_set_gravity(epos, XDG_POSITIONER_GRAVITY_BOTTOM_RIGHT);
+	xdg_positioner_set_constraint_adjustment(epos,
+		XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_SLIDE_X |
+		XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_FLIP_X |
+		XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_SLIDE_Y |
+		XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_FLIP_Y);
+	xdg_popup_reposition(edge.popup, epos, 2);
+	xdg_positioner_destroy(epos);
+	for (unsigned int i = 0; i < 200 && edge.repositioned != 2; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(edge.repositioned == 2 && edge.w == pw);
+	CHECK(ox + edge.x >= u1.x && ox + edge.x + edge.w <= u1.x + u1.w);
 	xdg_popup_destroy(edge.popup);
 	xdg_surface_destroy(edge.xdg_surface);
 	wl_surface_destroy(edge.surface);

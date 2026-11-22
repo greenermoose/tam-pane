@@ -104,3 +104,6 @@ IN THIS REPOSITORY
     B6-gtk4-crashes-without-presentation-time.md
                                       GTK 4 programs crash on a nested
                                       output (no presentation-time)
+    B7-popups-off-screen-after-reposition.md
+                                      menus open off-screen after the
+                                      program repositions them

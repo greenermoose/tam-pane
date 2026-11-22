@@ -1,11 +1,11 @@
-W23 FINISH REVIEW R1: SPLIT, FULLSCREEN, POPUPS, B6 (0.1.11 TO 0.1.14)
+W23 FINISH REVIEW R1: SPLIT, FULLSCREEN, POPUPS, B6, B7 (0.1.11-0.1.15)
 
 Date: 2026-11-21
 AI harness: Claude Code 2.1.330
 AI model: claude-opus-5-5
 Commits: 9c0bf49 (0.1.11), b4a8570 (accept), ff5dc75 (0.1.12),
-         91f1fff (accept), 41ef9ad (0.1.13), the 0.1.14 commit, and the
-         commit that last updates this record
+         91f1fff (accept), 41ef9ad (0.1.13), 4ca7976 (0.1.14), the
+         0.1.15 commit, and the commit that last updates this record
 Continues: W21
 
 
@@ -19,6 +19,8 @@ GUIDANCE
   Fred: "pass. Next?" (after his sandbox/demo-0.1.12 check)
   Fred: "The demo didn't work. I pressed Meta + O, saw files briefly,
   then it closed." (his sandbox/demo-0.1.13 check)
+  Fred: "Files opened to the left of the terminal window and the menu
+  was off the screen." (his sandbox/demo-0.1.14 check)
 
 
 DONE
@@ -114,6 +116,25 @@ DONE
     bug index, R1 finding 5 status.
   - 0.1.14 binary SHA-256:
     f15496cf7f5549f4838768e7670266b7596d551f89fb651c4eadb27c86c34fb1
+  - Fred's demo-0.1.14 check: Files stayed open (B6 fixed), but opened
+    on the left, and its menu ran off the screen.
+      - Left: expected since 0.1.11; the pointer's half of the focused
+        window decides the side (tp_dwindle_auto_split). The guide was
+        wrong. demo-0.1.15 asks for the pointer on the right half.
+      - Menu: recorded as B7. MangoWM and Hyprland unconstrain again on
+        xdg_popup.reposition; tam-pane did not, for window or layer
+        popups. GTK 4 repositions popovers once sized. Inferred, not
+        seen: 0.1.14 logged no placements.
+  - B7 fixed in 0.1.15: src/client.c and src/layer.c listen to each
+    popup's reposition signal. popup_unconstrain logs a debug line per
+    placement (box and result), and demo-0.1.15 tees the log and
+    prints them after quitting, so a failure comes with numbers.
+  - Test first: the test client binds xdg_wm_base version 3 and
+    handles xdg_popup.repositioned. The edge popup is repositioned to
+    one that fits, then to the too-wide one; the second failed on
+    0.1.14. 370 checks pass on 0.1.15; ASan finds no memory errors.
+  - 0.1.15 binary SHA-256:
+    8f1a2fec892aeedab09cc2d9030de8e82782a59a604fe415844faf937a94f163
 
 
 FAILED
@@ -143,8 +164,10 @@ FAILED
 
 HANDOFF
 
-  - Waiting for Fred's sandbox/demo-0.1.14 check. Then R1 finding 14
-    (now 0.1.15) as work/WHATNOW NEXT says.
+  - Waiting for Fred's sandbox/demo-0.1.15 check. If the menu is still
+    off-screen, read the "popup on" lines it prints: they show the box
+    tam-pane passed and where wlroots placed the popup. Then R1 finding
+    14 (now 0.1.16) as work/WHATNOW NEXT says.
   - GTK 4.24.1 divides by a refresh the protocol allows to be 0. Filing
     it upstream is Fred's decision, by the upstream engagement guide in
     config-fred-tamlinux (agent/docs/agent-guides/).

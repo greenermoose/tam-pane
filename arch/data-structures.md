@@ -113,7 +113,9 @@ the same commit as any change to them.
   its first commit it is unconstrained against its window's monitor
   (`usable`, or `area` when the window is fullscreen), in the root
   toplevel's surface coordinates, so menus near an edge flip or slide
-  onto the screen. Layer-surface popups do the same in `src/layer.c`.
+  onto the screen. It is unconstrained again on each
+  `xdg_popup.reposition`, which GTK 4 uses to move a popover (0.1.15,
+  B7). Layer-surface popups do the same in `src/layer.c`.
 - **Monitor membership (0.1.10):** every change of `mon` goes through
   `tp_client_attach` (`src/client.c`). It first calls `tp_client_detach`,
   which drops the window from its monitor's `focus` slots and layout

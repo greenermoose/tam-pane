@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <tam.h>
 #include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/edges.h>
@@ -19,6 +20,7 @@
 struct tp_popup {
 	struct wlr_xdg_popup *popup;
 	struct wl_listener commit;
+	struct wl_listener reposition;
 	struct wl_listener destroy;
 };
 
@@ -56,6 +58,10 @@ static void popup_unconstrain(struct wlr_xdg_popup *popup) {
 		.height = r.h,
 	};
 	wlr_xdg_popup_unconstrain_from_box(popup, &box);
+	struct wlr_box got = popup->scheduled.geometry;
+	tam_log_debug("popup on %s: box %d,%d %dx%d, placed %d,%d %dx%d",
+				  c->mon->output->name, box.x, box.y, box.width, box.height,
+				  got.x, got.y, got.width, got.height);
 }
 
 static void popup_commit(struct wl_listener *l, void *data) {
@@ -66,9 +72,18 @@ static void popup_commit(struct wl_listener *l, void *data) {
 	}
 }
 
+/* xdg_popup.reposition gives new rules; wlroots configures them on the
+ * next idle, so unconstrain them first. GTK 4 repositions a popover once
+ * it knows its size (B7). */
+static void popup_reposition(struct wl_listener *l, void *data) {
+	struct tp_popup *p = wl_container_of(l, p, reposition);
+	popup_unconstrain(p->popup);
+}
+
 static void popup_destroy(struct wl_listener *l, void *data) {
 	struct tp_popup *p = wl_container_of(l, p, destroy);
 	wl_list_remove(&p->commit.link);
+	wl_list_remove(&p->reposition.link);
 	wl_list_remove(&p->destroy.link);
 	free(p);
 }
@@ -89,6 +104,8 @@ static void on_new_popup(struct wl_listener *l, void *data) {
 	popup->base->data = wlr_scene_xdg_surface_create(parent->data, popup->base);
 	p->commit.notify = popup_commit;
 	wl_signal_add(&popup->base->surface->events.commit, &p->commit);
+	p->reposition.notify = popup_reposition;
+	wl_signal_add(&popup->events.reposition, &p->reposition);
 	p->destroy.notify = popup_destroy;
 	wl_signal_add(&popup->events.destroy, &p->destroy);
 }
