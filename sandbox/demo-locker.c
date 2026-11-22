@@ -79,11 +79,6 @@ static void kb_key(void *data, struct wl_keyboard *k, uint32_t serial,
 	struct demo_locker *dl = data;
 	if (state == WL_KEYBOARD_KEY_STATE_PRESSED &&
 		(key == KEY_ESC || key == KEY_ENTER)) {
-		if (dl->lock && dl->locked) {
-			ext_session_lock_v1_unlock_and_destroy(dl->lock);
-			dl->lock = NULL;
-			wl_display_flush(dl->display);
-		}
 		dl->done = true;
 	}
 }
@@ -205,6 +200,13 @@ int main(void) {
 		wl_surface_destroy(dl.surface);
 	if (dl.buffer)
 		wl_buffer_destroy(dl.buffer);
+	if (dl.lock && dl.locked) {
+		ext_session_lock_v1_unlock_and_destroy(dl.lock);
+		dl.lock = NULL;
+		/* Wait for the compositor to process unlock_and_destroy before
+		 * closing the socket, avoiding an EPOLLHUP race. */
+		wl_display_roundtrip(dl.display);
+	}
 	wl_display_disconnect(dl.display);
 	return 0;
 }
