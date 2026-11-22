@@ -1,0 +1,63 @@
+W27 TEXT, ACTIVATION, CLIPBOARD AND DECORATIONS (0.2.2)
+
+Date: 2026-11-22
+AI harness: agy 1.5.14
+AI model: Gemini 4 Neon (Medium)
+
+GUIDANCE
+
+  Fred: "/plan Do the next work slice for tam-pane. tam-hide is now
+  available."
+  Fred: "/plan 1 Keep virtual-keyoard-v1 out of 0.2.2.
+  2 Keep demo-locker.c around just in case"
+  Fred: "Approved. Proceed."
+  Fred: "pass. commit"
+
+DONE
+
+  - 0.2.2 (Phase P3): implemented text-input v3, input-method v2,
+    xdg-activation, primary selection, wlr/ext data-control, and
+    xdg-decoration with explicit global classification and session-lock
+    isolation for tam-hide:
+    - Text input and input method (src/text_input.c, src/focus.c,
+      src/input/keyboard.c, src/session_lock.c): zwp_text_input_manager_v3
+      (unprivileged) and zwp_input_method_manager_v2 (privileged) relay
+      with popup positioning in TP_LAYER_OVERLAY and keyboard-grab
+      forwarding. Locking forces focus to NULL (leaving text_input and
+      deactivating input_method) and bypasses IME keyboard grabs so
+      passphrase keystrokes go straight to tam-hide.
+    - XDG activation (src/xdg_activation.c): xdg_activation_v1
+      (unprivileged) switches tag view if needed and focuses the target
+      mapped toplevel; ignored while locked.
+    - Primary selection and data control (src/server.c, src/input/input.c):
+      zwp_primary_selection_device_manager_v1 (unprivileged, wired to
+      request_set_primary_selection), zwlr_data_control_manager_v1
+      (privileged), and ext_data_control_manager_v1 (privileged).
+    - XDG decoration (src/decoration.c, src/client.c):
+      zxdg_decoration_manager_v1 (unprivileged) enforces SERVER_SIDE on
+      tiled windows, honors CLIENT_SIDE on floating windows when
+      requested, and updates on float toggles.
+  - Added protocols/input-method-unstable-v2.xml and
+    protocols/wlr-data-control-unstable-v1.xml (recorded in UPSTREAM.md),
+    kept sandbox/demo-locker.c intact, left zwp_virtual_keyboard_manager_v1
+    out of 0.2.2, bumped VERSION to 0.2.2, and updated arch/protocols.md,
+    arch/data-structures.md, ROADMAP.md, plans/P3-daily-parity.md.
+  - Failing-first tests confirmed 11 checks failed before implementation;
+    full automated suite passes: 28 tag, 143 dwindle, 509 Lua, 4 smoke,
+    630 headless input, nm -D symbol check, test_nested_input.py, real
+    wl-copy/wl-paste (regular + primary) headless verification, and
+    tam-hide's 2-output headless integration test.
+    0.2.2 binary SHA-256:
+    b0ee3057e4b355bca577dc9883812d35e6493478cb14bc93d2005f3fd2328b5e.
+  - Added sandbox/demo-0.2.2 and sandbox/demo-0.2.2.lua; Fred ran it and
+    accepted 0.2.2 ("pass. commit").
+
+FAILED
+
+  - Nothing.
+
+HANDOFF
+
+  - 0.2.2 is accepted. Next in P3 is 0.2.3 (IPC socket and tam-pane msg
+    client, arch/ipc.md, plus deciding SIGHUP reload vs IPC reload from
+    R1 finding 17).

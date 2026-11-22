@@ -75,17 +75,21 @@ updated with `tools/pull-references` (see `ideas/sources`):
   `protocols/wlr-output-power-management-unstable-v1.xml`,
   `protocols/wlr-screencopy-unstable-v1.xml`,
   `protocols/wlr-output-management-unstable-v1.xml`,
-  `protocols/wlr-gamma-control-unstable-v1.xml`
+  `protocols/wlr-gamma-control-unstable-v1.xml`,
+  `protocols/input-method-unstable-v2.xml`,
+  `protocols/wlr-data-control-unstable-v1.xml`
 - **Source:** MangoWM `protocols/` commit `5ba74a95` (layer-shell,
   foreign-toplevel, output-power) and Hyprland `protocols/` commit
-  `f3e0768` (screencopy, output-management, gamma-control; upstream
-  `wlr-protocols` MIT/permissive notices kept in each file).
+  `f3e0768` (screencopy, output-management, gamma-control, input-method-v2,
+  wlr-data-control; upstream `wlr-protocols` MIT/permissive notices kept in
+  each file).
 - **How:** Copied unchanged.
 - **Why:** Panels/bars/launchers (`layer-shell`, 0.0.5), window lists
   (`foreign-toplevel`, 0.2.0), DPMS output power (`output-power`, 0.2.0),
   screen capture (`screencopy`, 0.2.1), runtime output configuration
-  (`output-management`, 0.2.1), and gamma ramps (`gamma-control`, 0.2.1)
-  need them.
+  (`output-management`, 0.2.1), gamma ramps (`gamma-control`, 0.2.1),
+  input methods (`input-method-v2`, 0.2.2), and unfocused clipboard access
+  (`wlr-data-control`, 0.2.2) need them.
 
 ### Lua 5.5.1 interpreter
 
@@ -141,3 +145,7 @@ updated with `tools/pull-references` (see `ideas/sources`):
   `src/input/` follows wlroots' own `tinywl` example (public domain), as
   every wlroots compositor does. It was checked against dwl and MangoWM's
   `src/main.c`, but none of their structure was copied.
+- `src/text_input.c` was checked against MangoWM's
+  `src/ext-protocol/text-input.c` for wlroots 0.20 `text-input-v3` and
+  `input-method-v2` lifecycle details, and written fresh in `tam-pane`'s
+  no-globals style with explicit session-lock (`s->locked`) isolation.

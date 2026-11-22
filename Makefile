@@ -69,6 +69,7 @@ WM_SRCS = src/main.c src/server.c src/security.c src/events.c src/monitor.c \
 	src/layer.c src/client.c src/focus.c src/bindings.c src/layout/arrange.c \
 	src/foreign_toplevel.c src/workspace.c src/session_lock.c src/idle.c \
 	src/output_power.c src/capture.c src/output_mgmt.c \
+	src/text_input.c src/xdg_activation.c src/decoration.c \
 	src/input/input.c src/input/keyboard.c src/input/pointer.c
 
 CORE_OBJS = $(patsubst src/%.c,build/%.o,$(CORE_SRCS))
@@ -100,7 +101,14 @@ CLIENT_PROTO_HEADERS = build/protocols/xdg-shell-client-protocol.h \
 	build/protocols/wlr-output-management-unstable-v1-client-protocol.h \
 	build/protocols/wlr-gamma-control-unstable-v1-client-protocol.h \
 	build/protocols/cursor-shape-v1-client-protocol.h \
-	build/protocols/xdg-output-unstable-v1-client-protocol.h
+	build/protocols/xdg-output-unstable-v1-client-protocol.h \
+	build/protocols/text-input-unstable-v3-client-protocol.h \
+	build/protocols/input-method-unstable-v2-client-protocol.h \
+	build/protocols/xdg-activation-v1-client-protocol.h \
+	build/protocols/primary-selection-unstable-v1-client-protocol.h \
+	build/protocols/wlr-data-control-unstable-v1-client-protocol.h \
+	build/protocols/ext-data-control-v1-client-protocol.h \
+	build/protocols/xdg-decoration-unstable-v1-client-protocol.h
 CLIENT_PROTO_SRCS = build/protocols/xdg-shell-protocol.c \
 	build/protocols/wlr-layer-shell-unstable-v1-protocol.c \
 	build/protocols/security-context-v1-protocol.c \
@@ -118,7 +126,14 @@ CLIENT_PROTO_SRCS = build/protocols/xdg-shell-protocol.c \
 	build/protocols/wlr-gamma-control-unstable-v1-protocol.c \
 	build/protocols/cursor-shape-v1-protocol.c \
 	build/protocols/tablet-v2-protocol.c \
-	build/protocols/xdg-output-unstable-v1-protocol.c
+	build/protocols/xdg-output-unstable-v1-protocol.c \
+	build/protocols/text-input-unstable-v3-protocol.c \
+	build/protocols/input-method-unstable-v2-protocol.c \
+	build/protocols/xdg-activation-v1-protocol.c \
+	build/protocols/primary-selection-unstable-v1-protocol.c \
+	build/protocols/wlr-data-control-unstable-v1-protocol.c \
+	build/protocols/ext-data-control-v1-protocol.c \
+	build/protocols/xdg-decoration-unstable-v1-protocol.c
 
 all: build/tam-pane
 
@@ -312,6 +327,62 @@ build/protocols/xdg-output-unstable-v1-client-protocol.h: $(WAYLAND_PROTOCOLS)/u
 	$(WAYLAND_SCANNER) client-header $< $@
 
 build/protocols/xdg-output-unstable-v1-protocol.c: $(WAYLAND_PROTOCOLS)/unstable/xdg-output/xdg-output-unstable-v1.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) private-code $< $@
+
+build/protocols/text-input-unstable-v3-client-protocol.h: $(WAYLAND_PROTOCOLS)/unstable/text-input/text-input-unstable-v3.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) client-header $< $@
+
+build/protocols/text-input-unstable-v3-protocol.c: $(WAYLAND_PROTOCOLS)/unstable/text-input/text-input-unstable-v3.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) private-code $< $@
+
+build/protocols/input-method-unstable-v2-client-protocol.h: protocols/input-method-unstable-v2.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) client-header $< $@
+
+build/protocols/input-method-unstable-v2-protocol.c: protocols/input-method-unstable-v2.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) private-code $< $@
+
+build/protocols/xdg-activation-v1-client-protocol.h: $(WAYLAND_PROTOCOLS)/staging/xdg-activation/xdg-activation-v1.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) client-header $< $@
+
+build/protocols/xdg-activation-v1-protocol.c: $(WAYLAND_PROTOCOLS)/staging/xdg-activation/xdg-activation-v1.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) private-code $< $@
+
+build/protocols/primary-selection-unstable-v1-client-protocol.h: $(WAYLAND_PROTOCOLS)/unstable/primary-selection/primary-selection-unstable-v1.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) client-header $< $@
+
+build/protocols/primary-selection-unstable-v1-protocol.c: $(WAYLAND_PROTOCOLS)/unstable/primary-selection/primary-selection-unstable-v1.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) private-code $< $@
+
+build/protocols/wlr-data-control-unstable-v1-client-protocol.h: protocols/wlr-data-control-unstable-v1.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) client-header $< $@
+
+build/protocols/wlr-data-control-unstable-v1-protocol.c: protocols/wlr-data-control-unstable-v1.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) private-code $< $@
+
+build/protocols/ext-data-control-v1-client-protocol.h: $(WAYLAND_PROTOCOLS)/staging/ext-data-control/ext-data-control-v1.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) client-header $< $@
+
+build/protocols/ext-data-control-v1-protocol.c: $(WAYLAND_PROTOCOLS)/staging/ext-data-control/ext-data-control-v1.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) private-code $< $@
+
+build/protocols/xdg-decoration-unstable-v1-client-protocol.h: $(WAYLAND_PROTOCOLS)/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) client-header $< $@
+
+build/protocols/xdg-decoration-unstable-v1-protocol.c: $(WAYLAND_PROTOCOLS)/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml
 	@mkdir -p $(@D)
 	$(WAYLAND_SCANNER) private-code $< $@
 

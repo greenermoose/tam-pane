@@ -1,4 +1,4 @@
-# Data structures (0.2.1)
+# Data structures (0.2.2)
 
 This file describes the structures as they are built today. Update it in
 the same commit as any change to them.
@@ -54,6 +54,14 @@ the same commit as any change to them.
     `output_mgr` (with `output_mgmt_applying` guard), and `gamma_mgr`
     wired to `wlr_scene` (`src/output_mgmt.c`); and `cursor_shape_mgr`
     with `cursor_shape_name` (`src/input/pointer.c`).
+  - P3 text, activation, clipboard, and decoration managers (0.2.2):
+    `text_input_mgr`, `input_method_mgr`, and `im_relay` (`src/text_input.c`,
+    deactivated and keyboard grabs bypassed while `s->locked`);
+    `xdg_activation` (`src/xdg_activation.c`, ignored while `s->locked`);
+    `primary_selection_mgr` (wired to `request_set_primary_selection` in
+    `src/input/input.c`), `data_control_mgr`, and `ext_data_control_mgr`;
+    and `xdg_decoration_mgr` (`src/decoration.c`, server-side enforced on
+    tiled windows, tracked per client in `tp_client.decoration`).
 - **Compositor keys:** `change_vt` switches VT for Ctrl+Alt+F-keys. It is
   set only when `session` exists (DRM), and tests may substitute their
   own. `quit_requested` is set by `tp_server_quit`, which the emergency

@@ -7,6 +7,7 @@
 #include "tam-pane/security.h"
 #include "tam-pane/server.h"
 #include "tam-pane/server_events.h"
+#include "tam-pane/text_input.h"
 #include <wlr/types/wlr_layer_shell_v1.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_seat.h>
@@ -83,6 +84,7 @@ void tp_focus_layer(struct tp_server *s, struct tp_layer_surface *ls) {
 	if (ls->mon)
 		s->selmon = ls->mon;
 	enter_keyboard(s, ls->layer_surface->surface);
+	tp_text_input_set_focus(s, ls->layer_surface->surface);
 	if (old)
 		tp_events_emit_window(s, TP_EVENT_WINDOW_FOCUS, NULL, false);
 }
@@ -107,6 +109,7 @@ void tp_focus(struct tp_server *s, struct tp_client *c) {
 
 	if (!c) {
 		wlr_seat_keyboard_notify_clear_focus(s->seat);
+		tp_text_input_set_focus(s, NULL);
 		if (old)
 			tp_events_emit_window(s, TP_EVENT_WINDOW_FOCUS, NULL, false);
 		return;
@@ -123,6 +126,7 @@ void tp_focus(struct tp_server *s, struct tp_client *c) {
 		c->mon->focus[tp_tags_slot(tp_tagview_current(&c->mon->view))] = c;
 
 	enter_keyboard(s, c->toplevel->base->surface);
+	tp_text_input_set_focus(s, c->toplevel->base->surface);
 	if (old != c)
 		tp_events_emit_window(s, TP_EVENT_WINDOW_FOCUS, c, true);
 }

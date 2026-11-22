@@ -2,6 +2,7 @@
 #include "tam-pane/server.h"
 #include "tam-pane/capture.h"
 #include "tam-pane/client.h"
+#include "tam-pane/decoration.h"
 #include "tam-pane/foreign_toplevel.h"
 #include "tam-pane/idle.h"
 #include "tam-pane/input.h"
@@ -13,7 +14,9 @@
 #include "tam-pane/output_power.h"
 #include "tam-pane/security.h"
 #include "tam-pane/session_lock.h"
+#include "tam-pane/text_input.h"
 #include "tam-pane/workspace.h"
+#include "tam-pane/xdg_activation.h"
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,11 +27,14 @@
 #include <wlr/render/allocator.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_data_control_v1.h>
 #include <wlr/types/wlr_data_device.h>
+#include <wlr/types/wlr_ext_data_control_v1.h>
 #include <wlr/types/wlr_fractional_scale_v1.h>
 #include <wlr/types/wlr_layer_shell_v1.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_presentation_time.h>
+#include <wlr/types/wlr_primary_selection_v1.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_subcompositor.h>
 #include <wlr/types/wlr_viewporter.h>
@@ -127,6 +133,11 @@ bool tp_server_init(struct tp_server *s) {
 	s->compositor = wlr_compositor_create(s->display, 6, s->renderer);
 	wlr_subcompositor_create(s->display);
 	wlr_data_device_manager_create(s->display);
+	s->primary_selection_mgr =
+		wlr_primary_selection_v1_device_manager_create(s->display);
+	s->data_control_mgr = wlr_data_control_manager_v1_create(s->display);
+	s->ext_data_control_mgr =
+		wlr_ext_data_control_manager_v1_create(s->display, 1);
 	wlr_viewporter_create(s->display);
 	wlr_fractional_scale_manager_v1_create(s->display, 1);
 	/* The scene sends the feedback. GTK 4 needs it: without it, GTK times
@@ -145,13 +156,14 @@ bool tp_server_init(struct tp_server *s) {
 	if (!tp_security_init(s) || !tp_foreign_toplevel_init(s) ||
 		!tp_workspace_init(s) || !tp_session_lock_init(s) ||
 		!tp_idle_init(s) || !tp_output_power_init(s) || !tp_capture_init(s) ||
-		!tp_output_mgmt_init(s))
+		!tp_output_mgmt_init(s) || !tp_xdg_activation_init(s) ||
+		!tp_decoration_init(s))
 		return false;
 
 	tp_monitors_init(s);
 	tp_layers_init(s);
 	tp_clients_init(s);
-	if (!tp_input_init(s) || !tp_pointer_init(s))
+	if (!tp_input_init(s) || !tp_pointer_init(s) || !tp_text_input_init(s))
 		return false;
 	return true;
 }
@@ -264,11 +276,14 @@ void tp_server_finish(struct tp_server *s) {
 	tp_events_finish(s);
 	wl_display_destroy_clients(s->display);
 
+	tp_text_input_finish(s);
 	tp_pointer_finish(s);
 	tp_input_finish(s);
 	tp_clients_finish(s);
 	tp_layers_finish(s);
 	tp_monitors_finish(s);
+	tp_decoration_finish(s);
+	tp_xdg_activation_finish(s);
 	tp_output_mgmt_finish(s);
 	tp_capture_finish(s);
 	tp_output_power_finish(s);

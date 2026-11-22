@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "tam-pane/client.h"
 #include "tam-pane/capture.h"
+#include "tam-pane/decoration.h"
 #include "tam-pane/focus.h"
 #include "tam-pane/foreign_toplevel.h"
 #include "tam-pane/idle.h"
@@ -152,6 +153,7 @@ static void apply_floating(struct tp_client *c) {
 		&c->tree->node,
 		c->server->layer[c->floating ? TP_LAYER_FLOAT : TP_LAYER_TILE]);
 	wlr_xdg_toplevel_set_tiled(c->toplevel, c->floating ? 0 : all);
+	tp_decoration_update(c);
 }
 
 /* Set the fullscreen flag, tell the client, and move the window to the
@@ -170,8 +172,10 @@ static void on_commit(struct wl_listener *l, void *data) {
 	struct tp_client *c = wl_container_of(l, c, commit);
 	/* The first commit asks for a configure; 0x0 lets the client choose
 	 * until the layout places it. */
-	if (c->toplevel->base->initial_commit)
+	if (c->toplevel->base->initial_commit) {
 		wlr_xdg_toplevel_set_size(c->toplevel, 0, 0);
+		tp_decoration_update(c);
+	}
 }
 
 static void on_map(struct wl_listener *l, void *data) {
@@ -285,6 +289,7 @@ static void on_unmap(struct wl_listener *l, void *data) {
 static void on_destroy(struct wl_listener *l, void *data) {
 	struct tp_client *c = wl_container_of(l, c, destroy);
 	tp_capture_client_finish(c);
+	tp_decoration_detach_client(c);
 	tp_foreign_toplevel_unmap(c);
 	if (c->server->focused_client == c)
 		c->server->focused_client = NULL;

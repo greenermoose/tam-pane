@@ -1,0 +1,66 @@
+#!/bin/sh
+# Launch tam-pane 0.2.2 nested under Hyprland to check P3 text, activation,
+# clipboard/primary-selection, and xdg-decoration:
+#   - wl-copy / wl-paste (regular clipboard via data-control AND --primary
+#     via primary-selection) verified automatically inside the nested session
+#   - xdg-decoration enforces server-side mode on tiled windows
+#   - Meta+L optionally locks with tam-hide (when built) to verify lock isolation
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+want=$(tr -d '[:space:]' < "$ROOT/VERSION")
+have=$("$ROOT/build/tam-pane" -v 2>/dev/null | awk '{print $2}') || true
+if [ "$have" != "$want" ]; then
+	echo "build/tam-pane is '${have:-missing}', VERSION is $want: run make first" >&2
+	exit 1
+fi
+if ! command -v wl-copy >/dev/null 2>&1 || ! command -v wl-paste >/dev/null 2>&1; then
+	echo "missing wl-copy / wl-paste (wl-clipboard) on PATH" >&2
+	exit 1
+fi
+
+TAM_HIDE=""
+if command -v tam-hide >/dev/null 2>&1; then
+	TAM_HIDE=$(command -v tam-hide)
+elif [ -x "$ROOT/../tam-hide/build/tam-hide" ]; then
+	TAM_HIDE="$ROOT/../tam-hide/build/tam-hide"
+fi
+
+TMPDIR_DEMO=$(mktemp -d "${TMPDIR:-/tmp}/tam-pane-demo-0.2.2.XXXXXX")
+trap 'rm -rf "$TMPDIR_DEMO"' EXIT INT TERM
+
+CFG="$TMPDIR_DEMO/init.lua"
+GUIDE="$TMPDIR_DEMO/guide"
+CLIP_RES="$TMPDIR_DEMO/clip.result"
+{
+	printf 'local GUIDE = "%s"\n' "$GUIDE"
+	printf 'local CLIP_RES = "%s"\n' "$CLIP_RES"
+	printf 'local TAM_HIDE = "%s"\n' "$TAM_HIDE"
+	cat "$ROOT/sandbox/demo-0.2.2.lua"
+} >"$CFG"
+
+cat >"$GUIDE" <<'GUIDE'
+=== tam-pane 0.2.2 demo: text, activation, clipboard & decorations ===
+
+ 1. On startup, an automated wl-copy / wl-paste check ran for both the
+    regular clipboard (data-control) and primary selection (--primary).
+ 2. Notice this tiled foot window has no client-side titlebar (xdg-decoration
+    enforces server-side mode on tiled windows). Press Meta+V to toggle float.
+ 3. Optional: if tam-hide is built, press Meta+L to lock and unlock cleanly.
+ 4. Press Meta+Shift+E to quit; the launcher verifies the clipboard results.
+
+GUIDE
+
+"$ROOT/tools/nested-input" -c "$CFG" -s '' || true
+
+echo
+if [ -f "$CLIP_RES" ] && grep -qx 'OK' "$CLIP_RES"; then
+	echo "OK: wl-copy / wl-paste verified regular clipboard and primary selection"
+	echo "PASS: 0.2.2 clipboard, primary selection, and decoration check verified"
+else
+	echo "FAIL: wl-copy / wl-paste check did not succeed" >&2
+	if [ -f "$CLIP_RES" ]; then
+		sed 's/^/  /' "$CLIP_RES" >&2
+	fi
+	exit 1
+fi

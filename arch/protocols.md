@@ -1,4 +1,4 @@
-# Wayland protocols (0.2.1)
+# Wayland protocols (0.2.2)
 
 Every Wayland global `tam-pane` advertises must be listed here with its
 reason and its classification (`unprivileged` or `privileged`), and must
@@ -40,7 +40,7 @@ classification here and in `src/security.c` in the same commit.
     explicitly launched screenshot tools (`grim`). Hidden from all other
     clients, including direct same-UID connections.
 
-## Active globals (0.2.1)
+## Active globals (0.2.2)
 
 | Interface | Class | Why it is here |
 | --- | --- | --- |
@@ -61,6 +61,10 @@ classification here and in `src/security.c` in the same commit.
 | `zwp_idle_inhibit_manager_v1` | unprivileged | Visibility-gated idle inhibition for media players and browsers (ignored while locked) |
 | `wp_cursor_shape_manager_v1` | unprivileged | Named pointer cursor shapes on the focused pointer seat |
 | `zxdg_output_manager_v1` | unprivileged | Logical output geometry and names (`grim`, `slurp`, fractional-scale clients) |
+| `zwp_text_input_manager_v3` | unprivileged | Text input state and preedit/commit delivery for focused clients (cleared while locked) |
+| `xdg_activation_v1` | unprivileged | Token-based window activation across tags/monitors (ignored while locked) |
+| `zwp_primary_selection_device_manager_v1` | unprivileged | Middle-click primary selection for focused clients |
+| `zxdg_decoration_manager_v1` | unprivileged | CSD/SSD negotiation (server-side enforced on tiled windows) |
 | `wp_security_context_manager_v1` | privileged | Sandbox engines register restricted listen sockets; hidden from sandboxed clients per spec |
 | `zwlr_layer_shell_v1` | privileged | Panels, bars, wallpapers, launchers; exclusive OVERLAY keyboard focus is reserved for the configured shell connection |
 | `zwlr_foreign_toplevel_manager_v1` | privileged | Window list and activation/fullscreen/close control for bars and shells |
@@ -75,11 +79,6 @@ classification here and in `src/security.c` in the same commit.
 | `ext_foreign_toplevel_image_capture_source_manager_v1` | privileged | Foreign-toplevel capture-source companion; granted only to `tp.capture` connections (refused while locked) |
 | `zwlr_output_manager_v1` | privileged | Runtime monitor layout, mode, scale, and transform configuration |
 | `zwlr_gamma_control_manager_v1` | privileged | Night light / per-output gamma ramps (wired through `wlr_scene`) |
-
-## Planned P3 globals (pre-classified in `src/security.c`)
-
-| Interface | Class | Target | Notes |
-| --- | --- | --- | --- |
-| `zwlr_data_control_manager_v1` | privileged | 0.2.2 | Unfocused clipboard access (`wl-clipboard`) |
-| `ext_data_control_manager_v1` | privileged | 0.2.2 | Replacement clipboard protocol |
-| `zwp_input_method_manager_v2` | privileged | 0.2.2 | Input method daemon (`fcitx5`) |
+| `zwlr_data_control_manager_v1` | privileged | Unfocused clipboard and primary-selection access (`wl-clipboard`) |
+| `ext_data_control_manager_v1` | privileged | Standard replacement clipboard protocol |
+| `zwp_input_method_manager_v2` | privileged | Input method daemon (`fcitx5`); deactivated and keyboard grabs bypassed while locked |

@@ -7,6 +7,7 @@
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_input_device.h>
+#include <wlr/types/wlr_primary_selection.h>
 #include <wlr/types/wlr_seat.h>
 
 void tp_input_update_caps(struct tp_server *s) {
@@ -50,6 +51,14 @@ static void on_request_set_selection(struct wl_listener *l, void *data) {
 	wlr_seat_set_selection(s->seat, ev->source, ev->serial);
 }
 
+static void on_request_set_primary_selection(struct wl_listener *l,
+											 void *data) {
+	struct tp_server *s =
+		wl_container_of(l, s, request_set_primary_selection);
+	struct wlr_seat_request_set_primary_selection_event *ev = data;
+	wlr_seat_set_primary_selection(s->seat, ev->source, ev->serial);
+}
+
 bool tp_input_init(struct tp_server *s) {
 	s->seat = wlr_seat_create(s->display, "seat0");
 	if (!s->seat) {
@@ -63,12 +72,16 @@ bool tp_input_init(struct tp_server *s) {
 	s->request_set_selection.notify = on_request_set_selection;
 	wl_signal_add(&s->seat->events.request_set_selection,
 				  &s->request_set_selection);
+	s->request_set_primary_selection.notify = on_request_set_primary_selection;
+	wl_signal_add(&s->seat->events.request_set_primary_selection,
+				  &s->request_set_primary_selection);
 	return true;
 }
 
 void tp_input_finish(struct tp_server *s) {
 	struct wl_listener *ls[] = {&s->new_input, &s->request_cursor,
-								&s->request_set_selection};
+								&s->request_set_selection,
+								&s->request_set_primary_selection};
 	for (size_t i = 0; i < sizeof(ls) / sizeof(ls[0]); i++) {
 		if (ls[i]->notify)
 			wl_list_remove(&ls[i]->link);

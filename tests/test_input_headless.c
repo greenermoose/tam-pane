@@ -47,6 +47,13 @@
 #include "wlr-gamma-control-unstable-v1-client-protocol.h"
 #include "cursor-shape-v1-client-protocol.h"
 #include "xdg-output-unstable-v1-client-protocol.h"
+#include "text-input-unstable-v3-client-protocol.h"
+#include "input-method-unstable-v2-client-protocol.h"
+#include "xdg-activation-v1-client-protocol.h"
+#include "primary-selection-unstable-v1-client-protocol.h"
+#include "wlr-data-control-unstable-v1-client-protocol.h"
+#include "ext-data-control-v1-client-protocol.h"
+#include "xdg-decoration-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 
 static const struct wlr_keyboard_impl keyboard_impl = { .name = "test" };
@@ -113,6 +120,13 @@ struct test_client {
 	struct zwlr_gamma_control_manager_v1 *gamma_mgr;
 	struct wp_cursor_shape_manager_v1 *cursor_shape_mgr;
 	struct zxdg_output_manager_v1 *xdg_output_mgr;
+	struct zwp_text_input_manager_v3 *text_input_mgr;
+	struct zwp_input_method_manager_v2 *input_method_mgr;
+	struct xdg_activation_v1 *xdg_activation;
+	struct zwp_primary_selection_device_manager_v1 *primary_selection_mgr;
+	struct zwlr_data_control_manager_v1 *wlr_data_control_mgr;
+	struct ext_data_control_manager_v1 *ext_data_control_mgr;
+	struct zxdg_decoration_manager_v1 *xdg_decoration_mgr;
 	uint32_t layer_shell_name;
 	uint32_t lock_mgr_name;
 	uint32_t screencopy_mgr_name;
@@ -125,6 +139,9 @@ struct test_client {
 	bool has_idle_notify, has_idle_inhibit, has_output_power;
 	bool has_screencopy, has_image_copy, has_output_capture_src, has_toplevel_capture_src;
 	bool has_output_mgmt, has_gamma_control, has_cursor_shape, has_xdg_output;
+	bool has_text_input, has_input_method, has_xdg_activation;
+	bool has_primary_selection, has_wlr_data_control, has_ext_data_control;
+	bool has_xdg_decoration;
 	struct test_ft_wlr ft_wlr[8];
 	size_t ft_wlr_count;
 	struct test_ft_ext ft_ext[8];
@@ -865,6 +882,237 @@ static const struct zxdg_output_v1_listener xdg_out_listener = {
 	.description = xo_desc,
 };
 
+/* ---- 0.2.2 protocol client listeners ---- */
+
+struct test_decor_state {
+	uint32_t mode;
+	unsigned int configures;
+};
+static void decor_configure(void *data,
+		struct zxdg_toplevel_decoration_v1 *d, uint32_t mode) {
+	(void)d;
+	struct test_decor_state *st = data;
+	st->mode = mode;
+	st->configures++;
+}
+static const struct zxdg_toplevel_decoration_v1_listener decor_listener = {
+	.configure = decor_configure,
+};
+
+struct test_act_token_state {
+	char token[128];
+	bool done;
+};
+static void act_token_done(void *data, struct xdg_activation_token_v1 *t,
+		const char *token) {
+	(void)t;
+	struct test_act_token_state *st = data;
+	snprintf(st->token, sizeof(st->token), "%s", token ? token : "");
+	st->done = true;
+}
+static const struct xdg_activation_token_v1_listener act_token_listener = {
+	.done = act_token_done,
+};
+
+static void wlr_dc_src_send(void *data, struct zwlr_data_control_source_v1 *s,
+		const char *mime, int32_t fd) {
+	(void)data; (void)s; (void)mime;
+	const char msg[] = "clip-ok";
+	ssize_t n = write(fd, msg, sizeof(msg) - 1);
+	(void)n;
+	close(fd);
+}
+static void wlr_dc_src_cancelled(void *data,
+		struct zwlr_data_control_source_v1 *s) {
+	(void)data; (void)s;
+}
+static const struct zwlr_data_control_source_v1_listener wlr_dc_src_listener = {
+	.send = wlr_dc_src_send,
+	.cancelled = wlr_dc_src_cancelled,
+};
+
+struct test_ext_dc_state {
+	struct ext_data_control_offer_v1 *sel_offer;
+	struct ext_data_control_offer_v1 *prim_offer;
+	char last_mime[64];
+	bool got_sel, got_prim;
+};
+static void ext_dc_offer_mime(void *data, struct ext_data_control_offer_v1 *o,
+		const char *mime) {
+	(void)o;
+	struct test_ext_dc_state *st = data;
+	snprintf(st->last_mime, sizeof(st->last_mime), "%s", mime ? mime : "");
+}
+static const struct ext_data_control_offer_v1_listener ext_dc_offer_listener = {
+	.offer = ext_dc_offer_mime,
+};
+static void ext_dc_data_offer(void *data, struct ext_data_control_device_v1 *d,
+		struct ext_data_control_offer_v1 *offer) {
+	(void)d;
+	ext_data_control_offer_v1_add_listener(offer, &ext_dc_offer_listener, data);
+}
+static void ext_dc_selection(void *data, struct ext_data_control_device_v1 *d,
+		struct ext_data_control_offer_v1 *offer) {
+	(void)d;
+	struct test_ext_dc_state *st = data;
+	if (st->sel_offer)
+		ext_data_control_offer_v1_destroy(st->sel_offer);
+	st->sel_offer = offer;
+	if (offer)
+		st->got_sel = true;
+}
+static void ext_dc_finished(void *data, struct ext_data_control_device_v1 *d) {
+	(void)data; (void)d;
+}
+static void ext_dc_primary_selection(void *data,
+		struct ext_data_control_device_v1 *d,
+		struct ext_data_control_offer_v1 *offer) {
+	(void)d;
+	struct test_ext_dc_state *st = data;
+	if (st->prim_offer)
+		ext_data_control_offer_v1_destroy(st->prim_offer);
+	st->prim_offer = offer;
+	if (offer)
+		st->got_prim = true;
+}
+static const struct ext_data_control_device_v1_listener ext_dc_dev_listener = {
+	.data_offer = ext_dc_data_offer,
+	.selection = ext_dc_selection,
+	.finished = ext_dc_finished,
+	.primary_selection = ext_dc_primary_selection,
+};
+
+struct test_ti_state {
+	struct wl_surface *entered;
+	unsigned int enters, leaves, dones;
+	char preedit[64];
+	char commit[64];
+};
+static void ti_enter(void *data, struct zwp_text_input_v3 *ti,
+		struct wl_surface *surface) {
+	(void)ti;
+	struct test_ti_state *st = data;
+	st->entered = surface;
+	st->enters++;
+}
+static void ti_leave(void *data, struct zwp_text_input_v3 *ti,
+		struct wl_surface *surface) {
+	(void)ti; (void)surface;
+	struct test_ti_state *st = data;
+	st->entered = NULL;
+	st->leaves++;
+}
+static void ti_preedit(void *data, struct zwp_text_input_v3 *ti,
+		const char *text, int32_t begin, int32_t end) {
+	(void)ti; (void)begin; (void)end;
+	struct test_ti_state *st = data;
+	snprintf(st->preedit, sizeof(st->preedit), "%s", text ? text : "");
+}
+static void ti_commit(void *data, struct zwp_text_input_v3 *ti,
+		const char *text) {
+	(void)ti;
+	struct test_ti_state *st = data;
+	snprintf(st->commit, sizeof(st->commit), "%s", text ? text : "");
+}
+static void ti_delete(void *data, struct zwp_text_input_v3 *ti,
+		uint32_t before, uint32_t after) {
+	(void)data; (void)ti; (void)before; (void)after;
+}
+static void ti_done(void *data, struct zwp_text_input_v3 *ti, uint32_t serial) {
+	(void)ti; (void)serial;
+	((struct test_ti_state *)data)->dones++;
+}
+static const struct zwp_text_input_v3_listener ti_listener = {
+	.enter = ti_enter,
+	.leave = ti_leave,
+	.preedit_string = ti_preedit,
+	.commit_string = ti_commit,
+	.delete_surrounding_text = ti_delete,
+	.done = ti_done,
+};
+
+struct test_im_state {
+	bool pending_active, active, unavailable;
+	unsigned int dones;
+	char surrounding[64];
+};
+static void im_activate(void *data, struct zwp_input_method_v2 *im) {
+	(void)im;
+	((struct test_im_state *)data)->pending_active = true;
+}
+static void im_deactivate(void *data, struct zwp_input_method_v2 *im) {
+	(void)im;
+	((struct test_im_state *)data)->pending_active = false;
+}
+static void im_surrounding(void *data, struct zwp_input_method_v2 *im,
+		const char *text, uint32_t cursor, uint32_t anchor) {
+	(void)im; (void)cursor; (void)anchor;
+	struct test_im_state *st = data;
+	snprintf(st->surrounding, sizeof(st->surrounding), "%s", text ? text : "");
+}
+static void im_change_cause(void *data, struct zwp_input_method_v2 *im,
+		uint32_t cause) {
+	(void)data; (void)im; (void)cause;
+}
+static void im_content_type(void *data, struct zwp_input_method_v2 *im,
+		uint32_t hint, uint32_t purpose) {
+	(void)data; (void)im; (void)hint; (void)purpose;
+}
+static void im_done(void *data, struct zwp_input_method_v2 *im) {
+	(void)im;
+	struct test_im_state *st = data;
+	st->active = st->pending_active;
+	st->dones++;
+}
+static void im_unavailable(void *data, struct zwp_input_method_v2 *im) {
+	(void)im;
+	((struct test_im_state *)data)->unavailable = true;
+}
+static const struct zwp_input_method_v2_listener im_listener = {
+	.activate = im_activate,
+	.deactivate = im_deactivate,
+	.surrounding_text = im_surrounding,
+	.text_change_cause = im_change_cause,
+	.content_type = im_content_type,
+	.done = im_done,
+	.unavailable = im_unavailable,
+};
+
+struct test_im_grab_state {
+	unsigned int key_events;
+	uint32_t last_key;
+};
+static void im_grab_keymap(void *data,
+		struct zwp_input_method_keyboard_grab_v2 *g, uint32_t format,
+		int32_t fd, uint32_t size) {
+	(void)data; (void)g; (void)format; (void)size;
+	close(fd);
+}
+static void im_grab_key(void *data,
+		struct zwp_input_method_keyboard_grab_v2 *g, uint32_t serial,
+		uint32_t time, uint32_t key, uint32_t state) {
+	(void)g; (void)serial; (void)time; (void)state;
+	struct test_im_grab_state *st = data;
+	st->key_events++;
+	st->last_key = key;
+}
+static void im_grab_modifiers(void *data,
+		struct zwp_input_method_keyboard_grab_v2 *g, uint32_t serial,
+		uint32_t dep, uint32_t lat, uint32_t lock, uint32_t grp) {
+	(void)data; (void)g; (void)serial; (void)dep; (void)lat; (void)lock; (void)grp;
+}
+static void im_grab_repeat(void *data,
+		struct zwp_input_method_keyboard_grab_v2 *g, int32_t rate,
+		int32_t delay) {
+	(void)data; (void)g; (void)rate; (void)delay;
+}
+static const struct zwp_input_method_keyboard_grab_v2_listener im_grab_listener = {
+	.keymap = im_grab_keymap,
+	.key = im_grab_key,
+	.modifiers = im_grab_modifiers,
+	.repeat_info = im_grab_repeat,
+};
+
 static void registry_global(void *data, struct wl_registry *registry,
 		uint32_t name, const char *interface, uint32_t version) {
 	struct test_client *client = data;
@@ -979,6 +1227,34 @@ static void registry_global(void *data, struct wl_registry *registry,
 		client->has_xdg_output = true;
 		client->xdg_output_mgr = wl_registry_bind(registry, name,
 			&zxdg_output_manager_v1_interface, version < 3 ? version : 3);
+	} else if (!strcmp(interface, zwp_text_input_manager_v3_interface.name)) {
+		client->has_text_input = true;
+		client->text_input_mgr = wl_registry_bind(registry, name,
+			&zwp_text_input_manager_v3_interface, 1);
+	} else if (!strcmp(interface, zwp_input_method_manager_v2_interface.name)) {
+		client->has_input_method = true;
+		client->input_method_mgr = wl_registry_bind(registry, name,
+			&zwp_input_method_manager_v2_interface, 1);
+	} else if (!strcmp(interface, xdg_activation_v1_interface.name)) {
+		client->has_xdg_activation = true;
+		client->xdg_activation = wl_registry_bind(registry, name,
+			&xdg_activation_v1_interface, 1);
+	} else if (!strcmp(interface, zwp_primary_selection_device_manager_v1_interface.name)) {
+		client->has_primary_selection = true;
+		client->primary_selection_mgr = wl_registry_bind(registry, name,
+			&zwp_primary_selection_device_manager_v1_interface, 1);
+	} else if (!strcmp(interface, zwlr_data_control_manager_v1_interface.name)) {
+		client->has_wlr_data_control = true;
+		client->wlr_data_control_mgr = wl_registry_bind(registry, name,
+			&zwlr_data_control_manager_v1_interface, version < 2 ? version : 2);
+	} else if (!strcmp(interface, ext_data_control_manager_v1_interface.name)) {
+		client->has_ext_data_control = true;
+		client->ext_data_control_mgr = wl_registry_bind(registry, name,
+			&ext_data_control_manager_v1_interface, 1);
+	} else if (!strcmp(interface, zxdg_decoration_manager_v1_interface.name)) {
+		client->has_xdg_decoration = true;
+		client->xdg_decoration_mgr = wl_registry_bind(registry, name,
+			&zxdg_decoration_manager_v1_interface, 1);
 	}
 }
 
@@ -2716,6 +2992,10 @@ int main(void) {
 			CHECK(sb.has_idle_inhibit);
 			CHECK(sb.has_cursor_shape);
 			CHECK(sb.has_xdg_output);
+			CHECK(sb.has_text_input);
+			CHECK(sb.has_xdg_activation);
+			CHECK(sb.has_primary_selection);
+			CHECK(sb.has_xdg_decoration);
 			CHECK(sb.layer_shell == NULL);
 			CHECK(sb.security_context_mgr == NULL);
 			CHECK(!sb.has_wlr_foreign_toplevel);
@@ -2730,6 +3010,9 @@ int main(void) {
 			CHECK(!sb.has_image_copy);
 			CHECK(!sb.has_output_capture_src);
 			CHECK(!sb.has_toplevel_capture_src);
+			CHECK(!sb.has_input_method);
+			CHECK(!sb.has_wlr_data_control);
+			CHECK(!sb.has_ext_data_control);
 
 			/* Active bind rejection: attempting to bind the hidden
 			 * zwlr_layer_shell_v1 global by its numeric name must fail
@@ -3605,6 +3888,323 @@ int main(void) {
 			if (!pump(&client, &server)) goto fail;
 		CHECK(xost.w > 0 && xost.h > 0 && xost.name[0] != '\0');
 		zxdg_output_v1_destroy(xo);
+	}
+
+	/* ---- 0.2.2: text-input, input-method, xdg-activation, primary-selection,
+	 *             data-control, xdg-decoration ---- */
+	CHECK(client.unclassified_globals == 0);
+	CHECK(client.has_text_input && client.text_input_mgr != NULL);
+	CHECK(client.has_input_method && client.input_method_mgr != NULL);
+	CHECK(client.has_xdg_activation && client.xdg_activation != NULL);
+	CHECK(client.has_primary_selection && client.primary_selection_mgr != NULL);
+	CHECK(client.has_wlr_data_control && client.wlr_data_control_mgr != NULL);
+	CHECK(client.has_ext_data_control && client.ext_data_control_mgr != NULL);
+	CHECK(client.has_xdg_decoration && client.xdg_decoration_mgr != NULL);
+
+	/* 1) xdg-decoration: server-side enforced on tiled windows; floating
+	 *    windows may use client-side when requested, and returning to tiled
+	 *    restores server-side. Create decoration on a fresh toplevel before
+	 *    attaching a buffer (per xdg-decoration-unstable-v1 spec). */
+	if (client.xdg_decoration_mgr && client.compositor && client.wm_base) {
+		struct test_window dwin = { .client = &client };
+		dwin.surface = wl_compositor_create_surface(client.compositor);
+		dwin.xdg_surface = xdg_wm_base_get_xdg_surface(client.wm_base, dwin.surface);
+		xdg_surface_add_listener(dwin.xdg_surface, &surface_listener, &dwin);
+		dwin.toplevel = xdg_surface_get_toplevel(dwin.xdg_surface);
+		xdg_toplevel_add_listener(dwin.toplevel, &toplevel_listener, &dwin);
+		xdg_toplevel_set_app_id(dwin.toplevel, "decor-test");
+
+		struct test_decor_state dst = {0};
+		struct zxdg_toplevel_decoration_v1 *dec =
+			zxdg_decoration_manager_v1_get_toplevel_decoration(
+				client.xdg_decoration_mgr, dwin.toplevel);
+		zxdg_toplevel_decoration_v1_add_listener(dec, &decor_listener, &dst);
+		zxdg_toplevel_decoration_v1_set_mode(
+			dec, ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE);
+		wl_surface_commit(dwin.surface);
+
+		for (unsigned int i = 0; i < 20 && (!dwin.configured || dst.configures == 0); i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(dwin.configured && dst.configures > 0);
+		CHECK(dst.mode == ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
+
+		/* Pump so the mapped toplevel takes focus. */
+		for (unsigned int i = 0; i < 15; i++)
+			if (!pump(&client, &server)) goto fail;
+		struct tp_client *dc = tp_focused(&server);
+		CHECK(dc != NULL && dc->toplevel && dc->toplevel->app_id &&
+			  strcmp(dc->toplevel->app_id, "decor-test") == 0);
+		if (dc) {
+			tp_client_set_floating(dc, true);
+			for (unsigned int i = 0; i < 20 &&
+				 dst.mode != ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE; i++)
+				if (!pump(&client, &server)) goto fail;
+			CHECK(dst.mode == ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE);
+			wl_surface_commit(dwin.surface);
+			for (unsigned int i = 0; i < 10; i++)
+				if (!pump(&client, &server)) goto fail;
+
+			tp_client_set_floating(dc, false);
+			for (unsigned int i = 0; i < 20 &&
+				 dst.mode != ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE; i++)
+				if (!pump(&client, &server)) goto fail;
+			CHECK(dst.mode == ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
+		}
+		zxdg_toplevel_decoration_v1_destroy(dec);
+		xdg_toplevel_destroy(dwin.toplevel);
+		xdg_surface_destroy(dwin.xdg_surface);
+		wl_surface_destroy(dwin.surface);
+		for (unsigned int i = 0; i < 15; i++)
+			if (!pump(&client, &server)) goto fail;
+	}
+
+	/* 2) xdg-activation: switches tag and focuses target window; ignored while
+	 *    session is locked. */
+	if (client.xdg_activation && client.windows[0].surface &&
+		client.windows[1].surface) {
+		struct tp_client *c0 = NULL, *c1 = NULL, *it;
+		wl_list_for_each(it, &server.clients, link) {
+			if (it->toplevel && it->toplevel->base &&
+				it->toplevel->base->surface) {
+				if (!c0) c0 = it;
+				else if (!c1) c1 = it;
+			}
+		}
+		CHECK(c0 != NULL && c1 != NULL);
+		if (c0 && c1) {
+			tp_client_set_tags(c0, tp_tag_mask(1));
+			tp_client_set_tags(c1, tp_tag_mask(2));
+			tp_tagview_show(&c0->mon->view, tp_tag_mask(1));
+			tp_arrange(c0->mon);
+			tp_focus(&server, c0);
+			CHECK(tp_focused(&server) == c0);
+
+			struct wl_surface *target_surf =
+				(c1->toplevel->base->surface->resource &&
+				 c1 == tp_focused(&server))
+					? client.windows[0].surface
+					: (wl_resource_get_id(c1->toplevel->base->surface->resource) ==
+					   wl_proxy_get_id((struct wl_proxy *)client.windows[1].surface)
+						   ? client.windows[1].surface
+						   : client.windows[0].surface);
+			struct xdg_activation_token_v1 *tok =
+				xdg_activation_v1_get_activation_token(client.xdg_activation);
+			struct test_act_token_state ast = {0};
+			xdg_activation_token_v1_add_listener(tok, &act_token_listener, &ast);
+			xdg_activation_token_v1_commit(tok);
+			for (unsigned int i = 0; i < 20 && !ast.done; i++)
+				if (!pump(&client, &server)) goto fail;
+			CHECK(ast.done && ast.token[0] != '\0');
+			xdg_activation_v1_activate(client.xdg_activation, ast.token,
+									   target_surf);
+			for (unsigned int i = 0; i < 20 && tp_focused(&server) != c1; i++)
+				if (!pump(&client, &server)) goto fail;
+			CHECK(tp_focused(&server) == c1);
+			CHECK(tp_tagview_current(&c1->mon->view) == tp_tag_mask(2));
+			xdg_activation_token_v1_destroy(tok);
+
+			/* Restore both windows to tag 1 and focus c0. */
+			tp_client_set_tags(c1, tp_tag_mask(1));
+			tp_tagview_show(&c0->mon->view, tp_tag_mask(1));
+			tp_arrange(c0->mon);
+			tp_focus(&server, c0);
+		}
+	}
+
+	/* 3) data-control (wlr + ext) and primary-selection: setting clipboard and
+	 *    primary selection via zwlr_data_control_v1 is observed by
+	 *    ext_data_control_v1. */
+	if (client.wlr_data_control_mgr && client.ext_data_control_mgr &&
+		client.seat) {
+		struct test_ext_dc_state dcst = {0};
+		struct ext_data_control_device_v1 *ext_dev =
+			ext_data_control_manager_v1_get_data_device(
+				client.ext_data_control_mgr, client.seat);
+		ext_data_control_device_v1_add_listener(ext_dev, &ext_dc_dev_listener,
+												&dcst);
+		struct zwlr_data_control_device_v1 *wlr_dev =
+			zwlr_data_control_manager_v1_get_data_device(
+				client.wlr_data_control_mgr, client.seat);
+		for (unsigned int i = 0; i < 10; i++)
+			if (!pump(&client, &server)) goto fail;
+
+		struct zwlr_data_control_source_v1 *src =
+			zwlr_data_control_manager_v1_create_data_source(
+				client.wlr_data_control_mgr);
+		zwlr_data_control_source_v1_add_listener(src, &wlr_dc_src_listener, NULL);
+		zwlr_data_control_source_v1_offer(src, "text/plain");
+		zwlr_data_control_device_v1_set_selection(wlr_dev, src);
+		for (unsigned int i = 0; i < 20 && !dcst.got_sel; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(dcst.got_sel && strcmp(dcst.last_mime, "text/plain") == 0);
+
+		struct zwlr_data_control_source_v1 *psrc =
+			zwlr_data_control_manager_v1_create_data_source(
+				client.wlr_data_control_mgr);
+		zwlr_data_control_source_v1_add_listener(psrc, &wlr_dc_src_listener, NULL);
+		zwlr_data_control_source_v1_offer(psrc, "text/plain;charset=utf-8");
+		zwlr_data_control_device_v1_set_primary_selection(wlr_dev, psrc);
+		for (unsigned int i = 0; i < 20 && !dcst.got_prim; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(dcst.got_prim &&
+			  strcmp(dcst.last_mime, "text/plain;charset=utf-8") == 0);
+
+		zwlr_data_control_device_v1_set_selection(wlr_dev, NULL);
+		zwlr_data_control_device_v1_set_primary_selection(wlr_dev, NULL);
+		for (unsigned int i = 0; i < 10; i++)
+			if (!pump(&client, &server)) goto fail;
+		if (dcst.sel_offer) ext_data_control_offer_v1_destroy(dcst.sel_offer);
+		if (dcst.prim_offer) ext_data_control_offer_v1_destroy(dcst.prim_offer);
+		zwlr_data_control_source_v1_destroy(src);
+		zwlr_data_control_source_v1_destroy(psrc);
+		zwlr_data_control_device_v1_destroy(wlr_dev);
+		ext_data_control_device_v1_destroy(ext_dev);
+	}
+
+	/* 4) text-input-v3 + input-method-v2 relay + session-lock isolation
+	 *    (tam-hide): IME receives activate/surrounding_text, relays preedit
+	 *    and commit_string, grabs keys when unlocked, and is deactivated &
+	 *    bypassed while locked so keys reach the lock surface instead. */
+	if (client.text_input_mgr && client.input_method_mgr && client.seat) {
+		struct test_im_state imst = {0};
+		struct zwp_input_method_v2 *im =
+			zwp_input_method_manager_v2_get_input_method(
+				client.input_method_mgr, client.seat);
+		zwp_input_method_v2_add_listener(im, &im_listener, &imst);
+
+		struct test_ti_state tist = {0};
+		struct zwp_text_input_v3 *ti =
+			zwp_text_input_manager_v3_get_text_input(
+				client.text_input_mgr, client.seat);
+		zwp_text_input_v3_add_listener(ti, &ti_listener, &tist);
+
+		for (unsigned int i = 0; i < 20 && !tist.entered; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(tist.entered != NULL);
+
+		zwp_text_input_v3_enable(ti);
+		zwp_text_input_v3_set_surrounding_text(ti, "hello", 5, 5);
+		zwp_text_input_v3_commit(ti);
+		for (unsigned int i = 0; i < 20 && (!imst.active || imst.surrounding[0] == '\0'); i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(imst.active);
+		CHECK(strcmp(imst.surrounding, "hello") == 0);
+
+		zwp_input_method_v2_set_preedit_string(im, "nihao", 0, 5);
+		zwp_input_method_v2_commit_string(im, "ok");
+		zwp_input_method_v2_commit(im, imst.dones);
+		for (unsigned int i = 0; i < 20 && tist.commit[0] == '\0'; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(strcmp(tist.preedit, "nihao") == 0);
+		CHECK(strcmp(tist.commit, "ok") == 0);
+
+		/* Keyboard grab forwards keys to IME when unlocked. */
+		struct test_im_grab_state gst = {0};
+		struct zwp_input_method_keyboard_grab_v2 *grab =
+			zwp_input_method_v2_grab_keyboard(im);
+		zwp_input_method_keyboard_grab_v2_add_listener(
+			grab, &im_grab_listener, &gst);
+		for (unsigned int i = 0; i < 10; i++)
+			if (!pump(&client, &server)) goto fail;
+
+		unsigned int client_keys_before = client.key_events;
+		send_key(&keyboard, KEY_A, WL_KEYBOARD_KEY_STATE_PRESSED, 400);
+		send_key(&keyboard, KEY_A, WL_KEYBOARD_KEY_STATE_RELEASED, 401);
+		for (unsigned int i = 0; i < 15 && gst.key_events < 2; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(gst.key_events >= 2 && gst.last_key == KEY_A);
+		CHECK(client.key_events == client_keys_before);
+
+		/* Lock session (tam-hide scenario): IME must deactivate, text-input
+		 * must leave, and keys must bypass IME grab and reach the lock surface. */
+		int lsv[2] = {-1, -1};
+		CHECK(socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, lsv) == 0);
+		struct wl_client *lcl = wl_client_create(server.display, lsv[0]);
+		CHECK(lcl != NULL);
+		tp_security_set_locker_client(&server, lcl);
+		struct test_client lc = { .shm_fd = -1 };
+		lc.display = wl_display_connect_to_fd(lsv[1]);
+		CHECK(lc.display != NULL);
+		if (lc.display) {
+			lc.registry = wl_display_get_registry(lc.display);
+			wl_registry_add_listener(lc.registry, &registry_listener, &lc);
+			for (unsigned int i = 0; i < 20 && (!lc.lock_mgr || !lc.compositor || !lc.output || !lc.shm || !lc.keyboard); i++) {
+				pump(&lc, &server);
+				pump(&client, &server);
+			}
+			CHECK(lc.lock_mgr != NULL);
+			struct test_lock_state lst = {0};
+			struct ext_session_lock_v1 *lock =
+				ext_session_lock_manager_v1_lock(lc.lock_mgr);
+			ext_session_lock_v1_add_listener(lock, &lock_listener, &lst);
+			struct wl_surface *lsurf_wl =
+				wl_compositor_create_surface(lc.compositor);
+			struct test_lock_surf_state lss = {
+				.client = &lc, .surface = lsurf_wl
+			};
+			struct ext_session_lock_surface_v1 *lsurf =
+				ext_session_lock_v1_get_lock_surface(lock, lsurf_wl, lc.output);
+			ext_session_lock_surface_v1_add_listener(lsurf, &lock_surf_listener, &lss);
+			for (unsigned int i = 0; i < 30 && (!lst.locked || !lss.configured ||
+				 lc.keyboard_focus != lsurf_wl || imst.active || tist.entered); i++) {
+				pump(&lc, &server);
+				pump(&client, &server);
+			}
+			CHECK(server.locked);
+			CHECK(lc.keyboard_focus == lsurf_wl);
+			CHECK(!imst.active);
+			CHECK(tist.entered == NULL);
+
+			/* Key press while locked must go to lock surface, NOT IME grab. */
+			unsigned int im_keys_before = gst.key_events;
+			unsigned int lc_keys_before = lc.key_events;
+			send_key(&keyboard, KEY_B, WL_KEYBOARD_KEY_STATE_PRESSED, 410);
+			send_key(&keyboard, KEY_B, WL_KEYBOARD_KEY_STATE_RELEASED, 411);
+			for (unsigned int i = 0; i < 15 && lc.key_events == lc_keys_before; i++) {
+				pump(&lc, &server);
+				pump(&client, &server);
+			}
+			CHECK(lc.key_events > lc_keys_before);
+			CHECK(gst.key_events == im_keys_before);
+
+			/* xdg-activation while locked must be ignored. */
+			if (client.xdg_activation && client.windows[0].surface) {
+				struct xdg_activation_token_v1 *ltok =
+					xdg_activation_v1_get_activation_token(client.xdg_activation);
+				struct test_act_token_state last = {0};
+				xdg_activation_token_v1_add_listener(ltok, &act_token_listener, &last);
+				xdg_activation_token_v1_commit(ltok);
+				for (unsigned int i = 0; i < 15 && !last.done; i++)
+					pump(&client, &server);
+				xdg_activation_v1_activate(client.xdg_activation, last.token,
+										   client.windows[0].surface);
+				for (unsigned int i = 0; i < 10; i++) {
+					pump(&client, &server);
+					pump(&lc, &server);
+				}
+				CHECK(server.locked);
+				CHECK(lc.keyboard_focus == lsurf_wl);
+				xdg_activation_token_v1_destroy(ltok);
+			}
+
+			ext_session_lock_surface_v1_destroy(lsurf);
+			wl_surface_destroy(lsurf_wl);
+			ext_session_lock_v1_unlock_and_destroy(lock);
+			for (unsigned int i = 0; i < 20 && (server.locked || !tist.entered); i++) {
+				pump(&lc, &server);
+				pump(&client, &server);
+			}
+			CHECK(!server.locked);
+			CHECK(tist.entered != NULL);
+			wl_display_disconnect(lc.display);
+		}
+		tp_security_set_locker_client(&server, NULL);
+
+		zwp_input_method_keyboard_grab_v2_release(grab);
+		zwp_text_input_v3_destroy(ti);
+		zwp_input_method_v2_destroy(im);
+		for (unsigned int i = 0; i < 10; i++)
+			if (!pump(&client, &server)) goto fail;
 	}
 
 	unlink(lua_cfg);

@@ -3,35 +3,37 @@ WHATNOW
 What tam-pane is doing now and what comes next. Read this first; revise
 it at the end of every session (work/README-work).
 
-Updated: 2026-11-22, with W26
+Updated: 2026-11-22, with W27
 
 
 STATE
 
-  Version 0.2.1 on branch dev, accepted by Fred on 2026-11-22 after his
-  nested sandbox/demo-0.2.1 check (W26). Phase P3: 0.2.1 adds raw capture
-  (zwlr_screencopy_manager_v1, ext_image_copy_capture_manager_v1,
-  ext_output_image_capture_source_manager_v1,
-  ext_foreign_toplevel_image_capture_source_manager_v1) gated per-role to
-  tp.capture(...) connections over WAYLAND_SOCKET (tracked in
-  tp_server.capture_clients, revoked on disconnect), wlr-output-management
-  (zwlr_output_manager_v1), gamma control (zwlr_gamma_control_manager_v1
-  wired to wlr_scene), cursor-shape (wp_cursor_shape_manager_v1), and
-  xdg-output (zxdg_output_manager_v1 for grim/slurp logical geometry).
-  All new globals are explicitly classified in src/security.c and
-  arch/protocols.md.
-  0.2.1 binary SHA-256:
-  f62e0c489523ca09600896cfdaf6eecde8950c015f147b04ac77826d20342083
+  Version 0.2.2 on branch dev, accepted by Fred on 2026-11-22 after his
+  nested sandbox/demo-0.2.2 check (W27). Phase P3: 0.2.2 adds text-input
+  v3 (zwp_text_input_manager_v3) and input-method v2
+  (zwp_input_method_manager_v2) with session-lock isolation for tam-hide
+  (deactivated and keyboard grabs bypassed while locked), xdg-activation
+  (xdg_activation_v1, ignored while locked), primary selection
+  (zwp_primary_selection_device_manager_v1), data control
+  (zwlr_data_control_manager_v1 and ext_data_control_manager_v1), and
+  xdg-decoration (zxdg_decoration_manager_v1, server-side enforced on
+  tiled windows). All new globals are explicitly classified in
+  src/security.c and arch/protocols.md. zwp_virtual_keyboard_manager_v1
+  was intentionally left out of 0.2.2; sandbox/demo-locker.c remains
+  intact.
+  0.2.2 binary SHA-256:
+  b0ee3057e4b355bca577dc9883812d35e6493478cb14bc93d2005f3fd2328b5e
 
-  Prior accepted baseline: 0.2.0 (7eafc91, accepted 2026-11-22, W25).
+  Prior accepted baseline: 0.2.1 (325488c, accepted 2026-11-22, W26).
   Review R1 (reviews/R1-code-review-0.1.4.md) findings 1-14, 16, and
   finding 17's binding gate are done; finding 15 waits for 0.2.4, finding
   11 for P4, and finding 17's remaining smaller points land alongside the
   P3 versions that need them.
 
-  Automated checks pass: 28 tag, 143 dwindle, 509 Lua, 582 headless
-  input, 4 smoke, nm -D symbol check, tests/test_nested_input.py, plus
-  headless real-grim capture and denial verification.
+  Automated checks pass: 28 tag, 143 dwindle, 509 Lua, 630 headless
+  input, 4 smoke, nm -D symbol check, tests/test_nested_input.py, real
+  wl-copy/wl-paste headless verification, plus tam-hide's 2-output
+  headless integration test.
 
   Dependencies today: wlroots 0.20, wayland-server, xkbcommon, libtam
   (static), and Lua 5.5.1 (vendored in third_party/lua/, one patch).
@@ -39,14 +41,14 @@ STATE
 
 NEXT
 
-  1. P3, 0.2.2 (plans/P3-daily-parity.md): text-input v3 and input-method
-     v2, xdg-activation, primary selection, data control
-     (zwlr_data_control_manager_v1 / ext_data_control_manager_v1), and
-     xdg-decoration (server side on tiled windows). Classify every new
-     global explicitly in src/security.c and arch/protocols.md. Each
-     change keeps the R1 rules: one bumped version, a failing-first test,
-     a sandbox demo where the nested window can show it, and every
-     affected doc updated.
+  1. P3, 0.2.3 (plans/P3-daily-parity.md): IPC socket
+     ($XDG_RUNTIME_DIR/tam-pane/<socket>.sock) with a line-based request
+     and event format written with libtam's string helpers (no cJSON), a
+     `tam-pane msg` client, and `arch/ipc.md` with tests. Decide R1
+     finding 17's SIGHUP reload point alongside IPC reload. Each change
+     keeps the R1 rules: one bumped version, a failing-first test, a
+     sandbox demo where the nested window can show it, and every affected
+     doc updated.
 
 
 WAITING FOR FRED

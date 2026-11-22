@@ -4,6 +4,7 @@
 #include "tam-pane/input.h"
 #include "tam-pane/lua.h"
 #include "tam-pane/server.h"
+#include "tam-pane/text_input.h"
 #include <stdlib.h>
 #include <tam.h>
 #include <wlr/types/wlr_input_device.h>
@@ -14,6 +15,8 @@
 static void on_modifiers(struct wl_listener *l, void *data) {
 	struct tp_keyboard *k = wl_container_of(l, k, modifiers);
 	tp_idle_notify_activity(k->server);
+	if (tp_text_input_forward_modifiers(k->server, k->wlr))
+		return;
 	wlr_seat_set_keyboard(k->server->seat, k->wlr);
 	wlr_seat_keyboard_notify_modifiers(k->server->seat, &k->wlr->modifiers);
 }
@@ -113,6 +116,8 @@ static void on_key(struct wl_listener *l, void *data) {
 		k->consumed_keys[word] &= ~mask;
 		return;
 	}
+	if (tp_text_input_forward_key(k->server, k->wlr, ev))
+		return;
 	wlr_seat_set_keyboard(k->server->seat, k->wlr);
 	wlr_seat_keyboard_notify_key(k->server->seat, ev->time_msec, ev->keycode,
 								 ev->state);

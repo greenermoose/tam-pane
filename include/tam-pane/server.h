@@ -43,6 +43,13 @@ struct wlr_xdg_output_manager_v1;
 struct wlr_output_manager_v1;
 struct wlr_gamma_control_manager_v1;
 struct wlr_cursor_shape_manager_v1;
+struct wlr_text_input_manager_v3;
+struct wlr_input_method_manager_v2;
+struct wlr_xdg_activation_v1;
+struct wlr_primary_selection_v1_device_manager;
+struct wlr_data_control_manager_v1;
+struct wlr_ext_data_control_manager_v1;
+struct wlr_xdg_decoration_manager_v1;
 struct wlr_xcursor_manager;
 struct wlr_xdg_shell;
 struct wlr_layer_shell_v1;
@@ -50,6 +57,7 @@ struct tp_client;
 struct tp_layer_surface;
 struct tp_lua;
 struct tp_monitor;
+struct tp_text_input_relay;
 
 /* Interactive pointer drag state (explicit in tp_server, no globals). */
 enum tp_grab_mode {
@@ -162,11 +170,26 @@ struct tp_server {
 	bool output_mgmt_applying;
 	struct wlr_gamma_control_manager_v1 *gamma_mgr;
 
+	struct wlr_text_input_manager_v3 *text_input_mgr;
+	struct wlr_input_method_manager_v2 *input_method_mgr;
+	struct tp_text_input_relay *im_relay;
+
+	struct wlr_xdg_activation_v1 *xdg_activation;
+	struct wl_listener request_activate;
+
+	struct wlr_primary_selection_v1_device_manager *primary_selection_mgr;
+	struct wlr_data_control_manager_v1 *data_control_mgr;
+	struct wlr_ext_data_control_manager_v1 *ext_data_control_mgr;
+
+	struct wlr_xdg_decoration_manager_v1 *xdg_decoration_mgr;
+	struct wl_listener new_xdg_decoration;
+
 	struct wlr_seat *seat;
 	struct wl_list keyboards; /* tp_keyboard.link */
 	struct wl_listener new_input;
 	struct wl_listener request_cursor;
 	struct wl_listener request_set_selection;
+	struct wl_listener request_set_primary_selection;
 
 	struct wlr_cursor *cursor;
 	struct wlr_xcursor_manager *cursor_mgr;
