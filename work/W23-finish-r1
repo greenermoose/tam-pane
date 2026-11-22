@@ -23,6 +23,13 @@ GUIDANCE
   Fred: "Files opened to the left of the terminal window and the menu
   was off the screen." (his sandbox/demo-0.1.14 check)
   Fred: "pass. Next?" (after his sandbox/demo-0.1.15 check)
+  Fred: "What do I need to review for 0.1.16?", then "demo".
+  Fred, at demo-0.1.16 step 2: Meta+V floated the terminal at its own
+  size in the top-left corner, not centred at half size (screenshot).
+  Asked how a toggled window should float, Fred chose "Half size,
+  centred" (first float: half the monitor, centred on its own monitor;
+  later floats return to the last floating place), and "Accept 0.1.16,
+  fix in 0.1.17".
 
 
 DONE
@@ -164,8 +171,8 @@ DONE
     Meta+Shift+R reloads. The launcher checks the logged error reads
     "tp.config.gaps: 999 out of range [0, 256]" with no "%", and asks
     y/n about the floating window. The reload path was checked
-    headless (same append, then SIGHUP): the verdict passes. Docs: ROADMAP.md, bugs/B8 and the bug index,
-    R1 finding 14 status.
+    headless (same append, then SIGHUP): the verdict passes.
+  - Docs: ROADMAP.md, bugs/B8 and the bug index, R1 finding 14 status.
   - R1 findings 9, 11 and 15 to 17 written into the plans as design
     work, each placed before the version that needs it: P3 gets 9
     (before 0.2.0), 15 (before 0.2.4), 16 (with 0.2.0) and 17; P4 gets
@@ -204,7 +211,14 @@ FAILED
 
 HANDOFF
 
-  - 0.1.16 waits for Fred's sandbox/demo-0.1.16 check.
+  - 0.1.16 accepted by Fred; B8 Verified. Its demo's step 2 showed a
+    bug that 0.1.15 has too (same condition in tp_client_set_floating):
+    a window mapped tiled keeps float_geom (0, 0, its first size), so
+    Meta+V floats it at the layout's top-left, which on more than one
+    monitor can be another monitor. The headless tests never saw it:
+    their 2x2 windows always take the half-size default. My demo guide
+    described that default, not what foot gets. Recorded as B9, fixed
+    in 0.1.17.
   - R1 is finished: every finding is fixed, became a bug, or is
     scheduled in P3 or P4. Next is P3 (0.2.0), starting with the
     privileged-protocol filter design (finding 9).

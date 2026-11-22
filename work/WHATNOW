@@ -8,10 +8,11 @@ Updated: 2026-11-21, with W23
 
 STATE
 
-  Version 0.1.16 on branch dev, a candidate waiting for Fred's
-  sandbox/demo-0.1.16 check: R1 finding 14
-  (de-duplication) and B8 (garbled Lua error numbers). 0.1.15
-  (c5ec224) was accepted on d5b85a6; B6 and B7 are Verified. Fred's
+  Version 0.1.16 on branch dev (845b2c2), accepted by Fred after his
+  sandbox/demo-0.1.16 check: R1 finding 14 (de-duplication) and B8
+  (garbled Lua error numbers, Verified). Its demo found B9, a floating
+  bug 0.1.15 has too; the fix is 0.1.17. 0.1.15 (c5ec224) was accepted
+  on d5b85a6; B6 and B7 are Verified. Fred's
   0.1.13 check found B6 (Files crashed nested), and his 0.1.14 check
   found B7 (the menu still ran off-screen: reposition was not
   handled), so 0.1.13 and 0.1.14 were not accepted on their own.
@@ -47,8 +48,10 @@ STATE
 
 NEXT
 
-  1. After Fred passes demo-0.1.16, commit "Accept 0.1.16" and mark B8
-     Verified.
+  1. B9 (0.1.17): Meta+V on a window that mapped tiled floats it at the
+     layout's top-left at its first size. Fred chose: first float is
+     half the monitor, centred on the window's own monitor; later floats
+     return to the last floating place.
   2. P3, 0.2.0 (plans/P3-daily-parity.md). Begin with its "Design work
      from review R1" section: design the privileged-protocol filter
      (finding 9) and the explicit focused window (16) before 0.2.0's
@@ -59,8 +62,6 @@ NEXT
 
 WAITING FOR FRED
 
-  - sandbox/demo-0.1.16: floating size, and a config error that shows
-    its numbers.
   - Whether to report GTK 4.24.1's divide by a zero refresh upstream
     (B6).
   - At the first run on real hardware (P4): the VT half of B5, and the
