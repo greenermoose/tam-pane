@@ -5,6 +5,8 @@
 #include "tam-pane/geom.h"
 #include "tam-pane/layout/dwindle.h"
 #include "tam-pane/tags.h"
+#include <stdbool.h>
+#include <stdint.h>
 #include <wayland-server-core.h>
 
 struct tp_server;
@@ -39,6 +41,8 @@ struct tp_monitor {
 	float host_scale;
 	int32_t host_w, host_h;
 	struct tp_monitor_workspaces *workspaces;
+	bool arrange_dirty;
+	uint64_t arrange_count;
 };
 
 void tp_monitors_init(struct tp_server *s);

@@ -1,0 +1,60 @@
+W29 DEFERRED PER-MONITOR ARRANGE ON IDLE (R1 #15, 0.2.4)
+
+Date: 2026-11-23
+AI harness: agy 1.5.14
+AI model: Gemini 4 Neon (Medium)
+
+GUIDANCE
+
+  Fred: "/plan Do the next work slice of tam-pane."
+  Fred: "/plan Confirm" (land R1 finding 15 as 0.2.4, shifting layouts
+  and scratchpad to 0.2.5 and XWayland to 0.2.6).
+  Fred: "pass. Commit and finish"
+
+DONE
+
+  - 0.2.4 (Phase P3, R1 finding 15): replaced eager tp_arrange() and
+    tp_arrange_all() with per-monitor dirty tracking and one coalesced
+    arrange per idle:
+    - Added tp_monitor.arrange_dirty and tp_monitor.arrange_count
+      (include/tam-pane/monitor.h), tp_server.arrange_idle
+      (include/tam-pane/server.h), and tp_arrange_flush() /
+      tp_arrange_finish() (include/tam-pane/layout/arrange.h,
+      src/layout/arrange.c, src/server.c).
+    - Coalesced repeated tp_arrange() / tp_arrange_all() calls onto one
+      server-owned Wayland idle callback (safe when a dirty monitor is
+      destroyed before idle), running tp_idle_update_inhibit() and
+      tp_pointer_refocus_now() once per batch.
+    - Eliminated per-arrange heap allocation in sync_tree() for up to 64
+      tiled windows using a stack buffer.
+    - Added on-demand tp_arrange_flush() guards at synchronous read
+      boundaries: tiled swap/move/resize (src/bindings.c), tiled pointer
+      drag start/restart (src/input/pointer.c), popup unconstrain
+      (src/client.c), window event snapshots when listeners exist
+      (src/events.c), and IPC windows/focused queries (src/ipc.c).
+  - Failing-first check confirmed deferred-arrange test failed against
+    0.2.3 (CHECK failed: fc->geom.x == before_x).
+  - Expanded tests/test_input_headless.c with coalescing, rapid tiled
+    drag, cross-monitor move, dirty-monitor destroy, and IPC flush
+    checks, and updated synthetic test sites to dispatch idle.
+  - Bumped VERSION to 0.2.4, updated ROADMAP.md, plans/P3-daily-parity.md,
+    reviews/R1-code-review-0.1.4.md, arch/data-structures.md, and
+    work/WHATNOW; added sandbox/demo-0.2.4 and sandbox/demo-0.2.4.lua.
+  - Clean build and full automated suite pass: 28 tag, 143 dwindle, 509
+    Lua, 84 IPC, 5 smoke-headless, 709 headless input, nm -D symbol
+    check, and tests/test_nested_input.py.
+    0.2.4 binary SHA-256:
+    bb2daa30f36a3f32f97150e8ebb6708ad1589ff38bc13fa674d0737c2255b092.
+
+  - Fred ran sandbox/demo-0.2.4 and accepted 0.2.4 ("pass. Commit and
+    finish").
+
+FAILED
+
+  - Nothing.
+
+HANDOFF
+
+  - 0.2.4 is accepted. Next milestone in P3: 0.2.5 (master-stack,
+    scroller, monocle layouts sharing dwindle's interface, plus a
+    scratchpad).

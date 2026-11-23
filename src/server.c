@@ -268,6 +268,7 @@ void tp_server_finish(struct tp_server *s) {
 		return;
 	}
 	s->stopping = true;
+	tp_arrange_finish(s);
 	if (s->reload_idle) {
 		wl_event_source_remove(s->reload_idle);
 		s->reload_idle = NULL;

@@ -1,0 +1,104 @@
+#!/bin/sh
+# Launch tam-pane 0.2.4 nested under Hyprland to check R1 finding 15
+# (per-monitor dirty flag and coalesced one-arrange-per-idle):
+#   - automated startup script opens a second window, bursts rapid IPC
+#     dispatches (float/tile/resize/tag switches), and verifies consistent
+#     `tam-pane msg windows` geometry
+#   - you can drag-resize the tiled split with Meta+Right-drag to feel the
+#     coalesced layout updates
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+want=$(tr -d '[:space:]' < "$ROOT/VERSION")
+have=$("$ROOT/build/tam-pane" -v 2>/dev/null | awk '{print $2}') || true
+if [ "$have" != "$want" ]; then
+	echo "build/tam-pane is '${have:-missing}', VERSION is $want: run make first" >&2
+	exit 1
+fi
+
+TMPDIR_DEMO=$(mktemp -d "${TMPDIR:-/tmp}/tam-pane-demo-0.2.4.XXXXXX")
+trap 'rm -rf "$TMPDIR_DEMO"' EXIT INT TERM
+
+CFG="$TMPDIR_DEMO/init.lua"
+GUIDE="$TMPDIR_DEMO/guide"
+RES="$TMPDIR_DEMO/arrange.result"
+CHECK_SH="$TMPDIR_DEMO/check-arrange.sh"
+
+cat >"$CHECK_SH" <<'SCRIPT'
+#!/bin/sh
+set -u
+TP="$1"
+RES="$2"
+
+# Wait for the two startup windows to map.
+i=0
+while [ "$i" -lt 40 ]; do
+	wins=$("$TP" msg windows 2>/dev/null || true)
+	cnt=$(printf '%s\n' "$wins" | grep -c '^window	' || true)
+	if [ "$cnt" -ge 2 ]; then
+		break
+	fi
+	sleep 0.1
+	i=$((i + 1))
+done
+
+if [ "${cnt:-0}" -lt 2 ]; then
+	echo "FAIL expected >=2 windows, got ${cnt:-0}" >"$RES"
+	exit 1
+fi
+
+# Burst rapid layout-mutating dispatches back to back.
+for _ in 1 2 3 4 5; do
+	"$TP" msg dispatch resize right 20 >/dev/null 2>&1 || { echo "FAIL resize right" >"$RES"; exit 1; }
+done
+for _ in 1 2 3 4 5; do
+	"$TP" msg dispatch resize left 20 >/dev/null 2>&1 || { echo "FAIL resize left" >"$RES"; exit 1; }
+done
+"$TP" msg dispatch toggle_float >/dev/null 2>&1 || { echo "FAIL float on" >"$RES"; exit 1; }
+"$TP" msg dispatch toggle_float >/dev/null 2>&1 || { echo "FAIL float off" >"$RES"; exit 1; }
+"$TP" msg dispatch tag view 2 >/dev/null 2>&1 || { echo "FAIL tag 2" >"$RES"; exit 1; }
+"$TP" msg dispatch tag view 1 >/dev/null 2>&1 || { echo "FAIL tag 1" >"$RES"; exit 1; }
+
+after=$("$TP" msg windows 2>&1) || { echo "FAIL windows: $after" >"$RES"; exit 1; }
+after_cnt=$(printf '%s\n' "$after" | grep -c '^window	' || true)
+if [ "$after_cnt" -ge 2 ] && ! printf '%s\n' "$after" | grep -q 'w=0	'; then
+	echo OK >"$RES"
+else
+	printf 'FAIL unexpected windows after burst:\n%s\n' "$after" >"$RES"
+fi
+SCRIPT
+chmod +x "$CHECK_SH"
+
+{
+	printf 'local GUIDE = "%s"\n' "$GUIDE"
+	printf 'local TP_BIN = "%s"\n' "$ROOT/build/tam-pane"
+	printf 'local RES = "%s"\n' "$RES"
+	printf 'local CHECK_SH = "%s"\n' "$CHECK_SH"
+	cat "$ROOT/sandbox/demo-0.2.4.lua"
+} >"$CFG"
+
+cat >"$GUIDE" <<'GUIDE'
+=== tam-pane 0.2.4 demo: deferred per-monitor arrange (R1 #15) ===
+
+ 1. On startup, two tiled terminals opened and an automated burst ran
+    rapid IPC resize, float/tile, and tag-switch dispatches, then verified
+    consistent window geometry via `tam-pane msg windows`.
+ 2. Try dragging the split between the two tiled windows with Meta+Right-drag
+    (pointer motion events coalesce into one arrange per idle).
+ 3. Press Meta+Shift+E to quit; the launcher verifies the automated check.
+
+GUIDE
+
+"$ROOT/tools/nested-input" -c "$CFG" -s '' || true
+
+echo
+if [ -f "$RES" ] && grep -qx 'OK' "$RES"; then
+	echo "OK: burst resize, float/tile, and tag-switch dispatches kept clean geometry"
+	echo "PASS: 0.2.4 deferred per-monitor arrange check verified"
+else
+	echo "FAIL: automated deferred-arrange check did not succeed" >&2
+	if [ -f "$RES" ]; then
+		sed 's/^/  /' "$RES" >&2
+	fi
+	exit 1
+fi

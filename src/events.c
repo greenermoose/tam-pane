@@ -2,6 +2,7 @@
 #include "tam-pane/server_events.h"
 #include "tam-pane/client.h"
 #include "tam-pane/ipc.h"
+#include "tam-pane/layout/arrange.h"
 #include "tam-pane/lua.h"
 #include "tam-pane/monitor.h"
 #include "tam-pane/server.h"
@@ -154,6 +155,8 @@ void tp_events_emit_window(struct tp_server *s, enum tp_event_kind kind,
 						   const struct tp_client *c, bool focused) {
 	if (!event_has_listeners(s, kind))
 		return;
+	if (c && c->mon && c->mon->arrange_dirty && kind != TP_EVENT_WINDOW_CLOSE)
+		tp_arrange_flush(s);
 
 	struct tp_event ev = {.kind = kind};
 	ev.window.focused = focused;

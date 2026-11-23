@@ -5,9 +5,10 @@ of versions. Versions follow semantic versioning: during 0.x, the minor
 number marks a phase's big step and the patch number marks each
 milestone inside it.
 
-**Current version:** 0.2.3 (Phase P2 complete at 0.1.4, R1 hardening
+**Current version:** 0.2.4 (Phase P2 complete at 0.1.4, R1 hardening
 0.1.5–0.1.19 accepted; Phase P3 in progress: 0.2.0–0.2.3 accepted by Fred
-on 2026-11-22; development continues on branch `dev`).
+on 2026-11-22, 0.2.4 accepted on 2026-11-23; development continues on
+branch `dev`).
 
 ## Tamlinux timing
 
@@ -114,9 +115,12 @@ are fixed before P3, one version each:
 - **0.2.2** Text and activation: text-input and input-method, xdg-activation,
   primary selection, decorations.
 - **0.2.3** An IPC socket and a `tam-pane msg` client.
-- **0.2.4** More layouts (master-stack, scroller, monocle) and a
+- **0.2.4** Deferred per-monitor arrange on idle (R1 finding 15): a
+  per-monitor dirty flag and one coalesced arrange per idle, with
+  stack-buffered tree sync and on-demand flush for synchronous readers.
+- **0.2.5** More layouts (master-stack, scroller, monocle) and a
   scratchpad.
-- **0.2.5** XWayland, with a temporary xcb dependency.
+- **0.2.6** XWayland, with a temporary xcb dependency.
 
 ### Phase P4: dogfood in Tamlinux 0.7 (0.3.x), `plans/P4-dogfood-tamlinux-0.7.md`
 

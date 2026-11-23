@@ -38,7 +38,8 @@ static void sync_tree(struct tp_monitor *m, struct tp_dwindle *tree) {
 	struct tp_server *s = m->server;
 	size_t n = tp_dwindle_count(tree);
 	if (n) {
-		void **items = malloc(n * sizeof(*items));
+		void *stack_items[64];
+		void **items = n <= 64 ? stack_items : malloc(n * sizeof(*items));
 		if (!items)
 			return;
 		tp_dwindle_items(tree, items, n);
@@ -47,7 +48,8 @@ static void sync_tree(struct tp_monitor *m, struct tp_dwindle *tree) {
 			if (c->mon != m || !is_tiled(c))
 				tp_dwindle_remove(tree, c);
 		}
-		free(items);
+		if (items != stack_items)
+			free(items);
 	}
 
 	struct tp_client *near = focused_in_tree(s, m, tree);
@@ -70,7 +72,7 @@ static void sync_tree(struct tp_monitor *m, struct tp_dwindle *tree) {
 	}
 }
 
-void tp_arrange(struct tp_monitor *m) {
+static void arrange_monitor(struct tp_monitor *m) {
 	struct tp_server *s = m->server;
 	struct tp_dwindle *tree = tp_monitor_tree(m);
 
@@ -91,11 +93,73 @@ void tp_arrange(struct tp_monitor *m) {
 	sync_tree(m, tree);
 	tp_dwindle_layout(tree, tp_rect_inset(m->usable, s->settings.gap_outer),
 					  s->settings.gap_inner, place_tile, NULL);
-	tp_idle_update_inhibit(s);
-	tp_pointer_refocus_now(s);
+}
+
+static void on_arrange_idle(void *data) {
+	struct tp_server *s = data;
+	s->arrange_idle = NULL;
+	tp_arrange_flush(s);
+}
+
+static void schedule_arrange(struct tp_server *s) {
+	if (!s || s->stopping || !s->loop || s->arrange_idle)
+		return;
+	s->arrange_idle = wl_event_loop_add_idle(s->loop, on_arrange_idle, s);
+}
+
+void tp_arrange(struct tp_monitor *m) {
+	if (!m || !m->server || m->server->stopping)
+		return;
+	m->arrange_dirty = true;
+	schedule_arrange(m->server);
 }
 
 void tp_arrange_all(struct tp_server *s) {
+	if (!s || s->stopping)
+		return;
+	bool any = false;
 	struct tp_monitor *m;
-	wl_list_for_each(m, &s->monitors, link) tp_arrange(m);
+	wl_list_for_each(m, &s->monitors, link) {
+		m->arrange_dirty = true;
+		any = true;
+	}
+	if (any)
+		schedule_arrange(s);
+}
+
+void tp_arrange_flush(struct tp_server *s) {
+	if (!s)
+		return;
+	if (s->arrange_idle) {
+		wl_event_source_remove(s->arrange_idle);
+		s->arrange_idle = NULL;
+	}
+	if (s->stopping) {
+		struct tp_monitor *m;
+		wl_list_for_each(m, &s->monitors, link) m->arrange_dirty = false;
+		return;
+	}
+	bool arranged = false;
+	struct tp_monitor *m;
+	wl_list_for_each(m, &s->monitors, link) {
+		if (!m->arrange_dirty)
+			continue;
+		m->arrange_dirty = false;
+		arrange_monitor(m);
+		m->arrange_count++;
+		arranged = true;
+	}
+	if (arranged) {
+		tp_idle_update_inhibit(s);
+		tp_pointer_refocus_now(s);
+	}
+}
+
+void tp_arrange_finish(struct tp_server *s) {
+	if (!s)
+		return;
+	if (s->arrange_idle) {
+		wl_event_source_remove(s->arrange_idle);
+		s->arrange_idle = NULL;
+	}
 }

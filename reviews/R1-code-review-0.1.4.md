@@ -199,8 +199,8 @@ schedules are not findings here.
   `malloc`, quadratic `find`s and a pointer re-enter. A dirty flag per
   monitor with one arrange per idle or frame would save work and
   wakeups.
-- **Status:** scheduled in `plans/P3-daily-parity.md` (Design work
-  from review R1), before 0.2.4
+- **Status:** fixed in 0.2.4 (`tp_monitor.arrange_dirty`,
+  `tp_server.arrange_idle`, `tp_arrange_flush`, stack-buffered `sync_tree`)
 
 ### 16. `tp_focused()` infers focus from the seat (low)
 

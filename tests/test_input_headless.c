@@ -1806,6 +1806,7 @@ int main(void) {
 	chord(&keyboard, KEY_1, false, true);
 	CHECK(tp_focused(&server) == a);
 	tp_client_set_tags(a, tp_tag_mask(9));
+	wl_event_loop_dispatch(server.loop, 0);
 	CHECK(tp_focused(&server) == b);
 	CHECK(m->focus[1] != a && m->focus[2] != a && m->focus[0] != a);
 	CHECK(!a->tree->node.enabled);
@@ -1866,29 +1867,36 @@ int main(void) {
 	int32_t w0_before = c0->geom.w;
 	tp_focus(&server, c0);
 	chord_mod(&keyboard, KEY_RIGHT, false, false, true);
+	wl_event_loop_dispatch(server.loop, 0);
 	CHECK(c0->geom.w > w0_before);
 	chord_mod(&keyboard, KEY_LEFT, false, false, true);
+	wl_event_loop_dispatch(server.loop, 0);
 	CHECK(c0->geom.w == w0_before);
 
 	int32_t h1_before = c1->geom.h;
 	tp_focus(&server, c1);
 	chord_mod(&keyboard, KEY_DOWN, false, false, true);
+	wl_event_loop_dispatch(server.loop, 0);
 	CHECK(c1->geom.h > h1_before);
 	chord_mod(&keyboard, KEY_UP, false, false, true);
+	wl_event_loop_dispatch(server.loop, 0);
 	CHECK(c1->geom.h == h1_before);
 
 	/* Directional swap: Meta+Shift+Down swaps c1 and c2. */
 	struct tp_rect g1 = c1->geom, g2 = c2->geom;
 	tp_focus(&server, c1);
 	chord_mod(&keyboard, KEY_DOWN, true, false, false);
+	wl_event_loop_dispatch(server.loop, 0);
 	CHECK(c1->geom.y == g2.y && c2->geom.y == g1.y);
 	CHECK(tp_focused(&server) == c1);
 	chord_mod(&keyboard, KEY_UP, true, false, false);
+	wl_event_loop_dispatch(server.loop, 0);
 	CHECK(c1->geom.y == g1.y && c2->geom.y == g2.y);
 
 	/* Directional move: Meta+Ctrl+Right moves c0 into c1's slot -> [[c0|c1]/c2]. */
 	tp_focus(&server, c0);
 	chord_mod(&keyboard, KEY_RIGHT, false, true, false);
+	wl_event_loop_dispatch(server.loop, 0);
 	CHECK(c0->geom.y == c1->geom.y && c0->geom.x < c1->geom.x);
 	CHECK(c2->geom.y > c0->geom.y && c2->geom.w > c0->geom.w);
 
@@ -1901,6 +1909,7 @@ int main(void) {
 	emit_button(&server, &pointer, BTN_RIGHT, WL_POINTER_BUTTON_STATE_PRESSED, 102);
 	CHECK(server.grab.mode == TP_GRAB_RESIZE && server.grab.tiled);
 	emit_motion(&server, &pointer, 80.0, 0.0, 103);
+	wl_event_loop_dispatch(server.loop, 0);
 	CHECK(c0->geom.w > w0_before);
 	emit_button(&server, &pointer, BTN_RIGHT, WL_POINTER_BUTTON_STATE_RELEASED, 104);
 	send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_RELEASED, 105);
@@ -1996,6 +2005,7 @@ int main(void) {
 	w0_before = c0->geom.w;
 	emit_motion(&server, &pointer, 60.0, 0.0, 143);
 	emit_motion(&server, &pointer, 60.0, 0.0, 144);
+	wl_event_loop_dispatch(server.loop, 0);
 	CHECK(server.grab.mode == TP_GRAB_RESIZE && server.grab.tiled);
 	CHECK(c0->geom.w != w0_before);
 	emit_button(&server, &pointer, BTN_RIGHT, WL_POINTER_BUTTON_STATE_RELEASED, 145);
@@ -2312,6 +2322,7 @@ int main(void) {
 	/* Meta+Shift+Period moves focused window c1 from m1 to m2. */
 	tp_focus(&server, c1);
 	chord(&keyboard, KEY_DOT, true, false);
+	wl_event_loop_dispatch(server.loop, 0);
 	CHECK(c1->mon == m2 && c0->mon == m1);
 	CHECK(c1->geom.x >= m2->usable.x);
 	chord(&keyboard, KEY_DOT, false, false);
@@ -2322,6 +2333,7 @@ int main(void) {
 	 * 13). Then Meta+Shift+Comma brings it back and it tiles again. */
 	tp_focus(&server, c0);
 	chord(&keyboard, KEY_V, false, false);
+	wl_event_loop_dispatch(server.loop, 0);
 	CHECK(c0->floating && c0->mon == m1);
 	/* The test clients draw a 2x2 buffer: point inside it. */
 	wlr_cursor_warp(server.cursor, &pointer.base, c0->float_geom.x + 1.0,
@@ -2351,6 +2363,7 @@ int main(void) {
 		CHECK(m2->focus[i] != c0);
 	tp_focus(&server, c0);
 	chord(&keyboard, KEY_V, false, false);
+	wl_event_loop_dispatch(server.loop, 0);
 	CHECK(!c0->floating && c0->mon == m1);
 	CHECK(tp_dwindle_find(tp_monitor_tree(m1), c0) != NULL);
 	tp_monitor_focus(&server, m2);
@@ -2379,6 +2392,7 @@ int main(void) {
 		CHECK(cb->toplevel->base->geometry.width == 200);
 
 		chord(&keyboard, KEY_V, false, false);
+		wl_event_loop_dispatch(server.loop, 0);
 		struct tp_rect u2 = m2->usable;
 		int32_t hw = u2.w / 2, hh = u2.h / 2;
 		CHECK(cb->floating && cb->mon == m2);
@@ -2495,6 +2509,7 @@ int main(void) {
 	CHECK(server.settings.gap_inner == 20);
 	CHECK(server.settings.gap_outer == 30);
 	tp_arrange(c1->mon);
+	wl_event_loop_dispatch(server.loop, 0);
 	CHECK(c1->geom.x == c1->mon->usable.x + 30);
 	CHECK(c1->geom.y == c1->mon->usable.y + 30);
 	CHECK(c1->geom.w == c1->mon->usable.w - 60);
@@ -4421,6 +4436,121 @@ int main(void) {
 		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path, big, rep,
 								sizeof(rep)));
 		CHECK(strncmp(rep, "ERR ", 4) == 0);
+	}
+
+	/* ---- 0.2.4 (R1 finding 15): deferred per-monitor arrange on idle ---- */
+	{
+		struct tp_monitor *m = server.selmon;
+		struct tp_client *fc = tp_focused(&server);
+		CHECK(m != NULL && fc != NULL && !fc->floating && !fc->fullscreen);
+		if (m && fc && !fc->floating && !fc->fullscreen) {
+			/* 1) Back-to-back tp_arrange(m) calls coalesce into 1 idle pass,
+			 *    leaving clean monitors untouched. */
+			wl_event_loop_dispatch(server.loop, 0);
+			struct wlr_output *extra_out =
+				wlr_headless_add_output(headless, 640, 480);
+			CHECK(extra_out != NULL);
+			wl_event_loop_dispatch(server.loop, 0);
+			struct tp_monitor *m_clean = extra_out ? extra_out->data : NULL;
+			CHECK(m_clean != NULL && m_clean != m);
+
+			uint64_t cnt_m = m->arrange_count;
+			uint64_t cnt_clean = m_clean ? m_clean->arrange_count : 0;
+			int32_t saved_outer = server.settings.gap_outer;
+			int32_t before_x = fc->geom.x;
+
+			server.settings.gap_outer = saved_outer + 10;
+			tp_arrange(m);
+			tp_arrange(m);
+			tp_arrange(m);
+			/* Deferred: layout must not run eagerly before idle. */
+			CHECK(m->arrange_dirty);
+			CHECK(m->arrange_count == cnt_m);
+			CHECK(fc->geom.x == before_x);
+			wl_event_loop_dispatch(server.loop, 0);
+			CHECK(!m->arrange_dirty);
+			CHECK(m->arrange_count == cnt_m + 1);
+			if (m_clean)
+				CHECK(m_clean->arrange_count == cnt_clean);
+			CHECK(fc->geom.x == before_x + 10);
+
+			/* 2) Rapid tiled pointer resize motions coalesce into 1 pass. */
+			struct tp_client *peer = NULL, *it;
+			wl_list_for_each(it, &server.clients, link) {
+				if (it != fc && it->mapped) {
+					peer = it;
+					break;
+				}
+			}
+			if (peer) {
+				if (peer->mon != m)
+					tp_client_set_monitor(peer, m, false);
+				if (peer->floating)
+					tp_client_set_floating(peer, false);
+				if (peer->fullscreen)
+					tp_client_set_fullscreen(peer, false);
+				tp_client_set_tags(peer, tp_tagview_current(&m->view));
+				wl_event_loop_dispatch(server.loop, 0);
+				int32_t w_before = fc->geom.w;
+				uint64_t cnt_drag = m->arrange_count;
+				wlr_cursor_warp(server.cursor, &pointer.base,
+					fc->geom.x + 1.0, fc->geom.y + 1.0);
+				emit_motion(&server, &pointer, 0, 0, 900);
+				send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_PRESSED, 901);
+				emit_button(&server, &pointer, BTN_RIGHT,
+					WL_POINTER_BUTTON_STATE_PRESSED, 902);
+				CHECK(server.grab.mode == TP_GRAB_RESIZE && server.grab.tiled);
+				for (int step = 1; step <= 5; step++)
+					emit_motion(&server, &pointer, 8.0, 0.0, 902 + step);
+				CHECK(m->arrange_count == cnt_drag);
+				wl_event_loop_dispatch(server.loop, 0);
+				CHECK(m->arrange_count == cnt_drag + 1);
+				CHECK(fc->geom.w != w_before);
+				emit_button(&server, &pointer, BTN_RIGHT,
+					WL_POINTER_BUTTON_STATE_RELEASED, 910);
+				send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_RELEASED, 911);
+				CHECK(server.grab.mode == TP_GRAB_NONE);
+			}
+
+			/* 3) Cross-monitor move marks both dirty and runs 1 pass each. */
+			if (m_clean) {
+				uint64_t c_old = m->arrange_count;
+				uint64_t c_new = m_clean->arrange_count;
+				tp_client_set_monitor(fc, m_clean, false);
+				CHECK(m->arrange_dirty && m_clean->arrange_dirty);
+				CHECK(m->arrange_count == c_old && m_clean->arrange_count == c_new);
+				wl_event_loop_dispatch(server.loop, 0);
+				CHECK(m->arrange_count == c_old + 1);
+				CHECK(m_clean->arrange_count == c_new + 1);
+				CHECK(fc->geom.x >= m_clean->usable.x);
+
+				/* Move back to m, then mark m_clean dirty and destroy it
+				 * before idle: idle must skip freed monitor cleanly. */
+				tp_client_set_monitor(fc, m, false);
+				wl_event_loop_dispatch(server.loop, 0);
+				tp_arrange(m_clean);
+				CHECK(m_clean->arrange_dirty);
+				wlr_output_destroy(extra_out);
+				wl_event_loop_dispatch(server.loop, 0);
+			}
+
+			/* 4) IPC windows query flushes pending dirty arrange. */
+			server.settings.gap_outer = saved_outer;
+			tp_arrange(m);
+			CHECK(m->arrange_dirty);
+			if (ipc_sock_path[0]) {
+				char rep[4096];
+				char want_x[64];
+				snprintf(want_x, sizeof(want_x), "\tx=%d\t", before_x);
+				CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+										"windows\n", rep, sizeof(rep)));
+				CHECK(!m->arrange_dirty);
+				CHECK(strstr(rep, want_x) != NULL);
+			} else {
+				wl_event_loop_dispatch(server.loop, 0);
+			}
+			CHECK(fc->geom.x == before_x);
+		}
 	}
 
 	unlink(lua_cfg);

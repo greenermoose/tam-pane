@@ -11,6 +11,7 @@
 #include "tam-pane/ipc.h"
 #include "tam-pane/client.h"
 #include "tam-pane/focus.h"
+#include "tam-pane/layout/arrange.h"
 #include "tam-pane/lua.h"
 #include "tam-pane/monitor.h"
 #include "tam-pane/server.h"
@@ -368,11 +369,13 @@ static bool handle_line(struct tp_ipc_client *c, char *line) {
 			reply = build_version(s);
 		else if (strcmp(line, "monitors") == 0)
 			reply = build_monitors(s);
-		else if (strcmp(line, "windows") == 0)
+		else if (strcmp(line, "windows") == 0) {
+			tp_arrange_flush(s);
 			reply = build_windows(s);
-		else if (strcmp(line, "focused") == 0)
+		} else if (strcmp(line, "focused") == 0) {
+			tp_arrange_flush(s);
 			reply = build_focused(s);
-		else if (strcmp(line, "tags") == 0)
+		} else if (strcmp(line, "tags") == 0)
 			reply = build_tags(s);
 		else if (strcmp(line, "cursor") == 0)
 			reply = build_cursor(s);

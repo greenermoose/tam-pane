@@ -206,6 +206,7 @@ struct tp_server {
 
 	struct wl_event_source *sigterm, *sigint, *sighup;
 	struct wl_event_source *reload_idle;
+	struct wl_event_source *arrange_idle;
 	/* Switch to VT n (1..12) for Ctrl+Alt+F-keys. Set only when tam-pane
 	 * owns a session (DRM); NULL nested or headless. Tests may set their
 	 * own. */

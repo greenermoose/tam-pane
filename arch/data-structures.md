@@ -1,4 +1,4 @@
-# Data structures (0.2.3)
+# Data structures (0.2.4)
 
 This file describes the structures as they are built today. Update it in
 the same commit as any change to them.
@@ -71,6 +71,13 @@ the same commit as any change to them.
     per-event-kind subscriber counts. `SIGHUP` shuts down cleanly like
     `SIGTERM`/`SIGINT` (R1 finding 17); reloads use `tam-pane msg reload`
     or `tp.dsp.reload()`.
+  - `arrange_idle` (`struct wl_event_source *`, `src/layout/arrange.c`,
+    0.2.4): single server-owned Wayland idle source armed by `tp_arrange()`
+    and `tp_arrange_all()`, coalescing multiple layout mutations into one
+    arrange pass per dirty monitor per idle (`tp_arrange_flush()`), with a
+    single post-batch `tp_idle_update_inhibit()` and
+    `tp_pointer_refocus_now()` call and teardown cleanup in
+    `tp_arrange_finish()`.
 - **Compositor keys:** `change_vt` switches VT for Ctrl+Alt+F-keys. It is
   set only when `session` exists (DRM), and tests may substitute their
   own. `quit_requested` is set by `tp_server_quit`, which the emergency
@@ -127,6 +134,9 @@ the same commit as any change to them.
 - **`workspaces`:** opaque `struct tp_monitor_workspaces *`
   (`src/workspace.c`, 0.2.0) holding this monitor's
   `ext_workspace_group_handle_v1` and 9 `ext_workspace_handle_v1` entries.
+- **`arrange_dirty` / `arrange_count`:** per-monitor dirty flag and
+  monotonic completed-arrange counter (`src/layout/arrange.c`, 0.2.4) used
+  to coalesce repeated `tp_arrange()` calls onto one pass per idle.
 
 ## tp_layer_surface (`include/tam-pane/layer.h`)
 

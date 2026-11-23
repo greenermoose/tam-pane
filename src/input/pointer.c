@@ -113,6 +113,8 @@ static void update_grab(struct tp_server *s) {
 			/* The tree freed a node since the drag began (another window
 			 * left it), so the splits the drag held may be gone. Carry on
 			 * from here against the tree as it is now. */
+			if (c->mon->arrange_dirty)
+				tp_arrange_flush(s);
 			if (!tp_dwindle_drag_begin(tree, c, s->cursor->x, s->cursor->y,
 									   &g->drag)) {
 				tp_pointer_cancel_grab(s, NULL);
@@ -223,6 +225,8 @@ static bool try_begin_grab(struct tp_server *s, struct tp_client *c,
 	}
 
 	if (button == BTN_RIGHT && !c->floating && c->mon) {
+		if (c->mon->arrange_dirty)
+			tp_arrange_flush(s);
 		struct tp_dwindle_drag drag;
 		if (!tp_dwindle_drag_begin(tp_monitor_tree(c->mon), c, s->cursor->x,
 								   s->cursor->y, &drag))

@@ -57,6 +57,8 @@ void tp_action_run(struct tp_server *s, const struct tp_action *act) {
 		struct tp_client *c = tp_focused(s);
 		if (!c || !c->mon || c->floating || c->fullscreen)
 			break;
+		if (c->mon->arrange_dirty)
+			tp_arrange_flush(s);
 		if (tp_dwindle_swap_dir(tp_monitor_tree(c->mon), c,
 								(enum tp_dir)act->dir))
 			tp_arrange(c->mon);
@@ -66,6 +68,8 @@ void tp_action_run(struct tp_server *s, const struct tp_action *act) {
 		struct tp_client *c = tp_focused(s);
 		if (!c || !c->mon || c->floating || c->fullscreen)
 			break;
+		if (c->mon->arrange_dirty)
+			tp_arrange_flush(s);
 		if (tp_dwindle_move_dir(tp_monitor_tree(c->mon), c,
 								(enum tp_dir)act->dir, s->settings.split_ratio))
 			tp_arrange(c->mon);
@@ -81,6 +85,8 @@ void tp_action_run(struct tp_server *s, const struct tp_action *act) {
 			tp_client_resize_floating(c, dir, step);
 			break;
 		}
+		if (c->mon->arrange_dirty)
+			tp_arrange_flush(s);
 		if (tp_dwindle_resize(tp_monitor_tree(c->mon), c, dir, step))
 			tp_arrange(c->mon);
 		break;

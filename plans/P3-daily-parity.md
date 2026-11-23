@@ -1,6 +1,6 @@
 # P3: Daily-driver parity (0.2.x)
 
-**Status:** in progress (0.2.0, 0.2.1, 0.2.2, and 0.2.3 accepted by Fred on 2026-11-22).
+**Status:** in progress (0.2.0–0.2.3 accepted by Fred on 2026-11-22; 0.2.4 accepted on 2026-11-23).
 
 ## Goal
 
@@ -21,9 +21,12 @@ and X11 programs.
 - **0.2.3** An IPC socket (`$XDG_RUNTIME_DIR/tam-pane/<socket>.sock`) with
   a line-based request and event format, written with libtam's string
   helpers, so no cJSON. A `tam-pane msg` client.
-- **0.2.4** master-stack, scroller and monocle layouts, sharing the
+- **0.2.4** Deferred per-monitor arrange on idle (R1 finding 15): per-monitor
+  dirty flag, one coalesced arrange per idle, single post-batch idle-inhibit
+  and pointer refocus, and stack-buffered tree sync.
+- **0.2.5** master-stack, scroller and monocle layouts, sharing the
   layout interface that dwindle uses. A scratchpad.
-- **0.2.5** XWayland, behind a build option. It adds xcb as a temporary
+- **0.2.6** XWayland, behind a build option. It adds xcb as a temporary
   dependency.
 
 ## Design work from review R1
@@ -44,11 +47,15 @@ fails first.
   remains available. In P3, session lock is granted to the locker
   launched by tam-pane, and raw capture to the portal backend plus any
   explicitly launched screenshot tool.
-- **One arrange per idle (finding 15), before 0.2.4.** `tp_arrange` runs
-  several times per action, each with a `malloc`, quadratic finds and a
-  pointer re-enter. A per-monitor dirty flag and one arrange per idle or
-  frame saves work and wakeups. The new layouts in 0.2.4 should be
-  written against that.
+- **One arrange per idle (finding 15), done in 0.2.4.** `tp_arrange` and
+  `tp_arrange_all` mark monitors dirty (`tp_monitor.arrange_dirty`) and arm
+  one server-owned idle source (`tp_server.arrange_idle`). `tp_arrange_flush`
+  lays out only dirty monitors, avoids per-arrange heap allocation in
+  `sync_tree` for up to 64 tiled windows, and runs `tp_idle_update_inhibit`
+  and `tp_pointer_refocus_now` once per batch. Synchronous readers (tiled
+  swap/move/resize/drag-begin, popup unconstrain, IPC `windows`/`focused`,
+  and window events with active listeners) flush on demand. The new layouts
+  in 0.2.5 build on this.
 - **An explicit focused window (finding 16), done in 0.1.19.**
   `tp_server.focused_client` tracks the focused toplevel explicitly, and
   `tp_focused()` returns it directly instead of inferring focus from

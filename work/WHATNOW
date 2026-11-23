@@ -3,34 +3,33 @@ WHATNOW
 What tam-pane is doing now and what comes next. Read this first; revise
 it at the end of every session (work/README-work).
 
-Updated: 2026-11-22, with W28
+Updated: 2026-11-23, with W29
 
 
 STATE
 
-  Version 0.2.3 on branch dev, accepted by Fred on 2026-11-22 after his
-  nested sandbox/demo-0.2.3 check (W28). Phase P3: 0.2.3 adds a same-UID
-  Unix domain IPC socket ($XDG_RUNTIME_DIR/tam-pane/<socket>.sock,
-  exported as TAM_PANE_SOCKET) with a line-based request/reply and
-  event-stream format built with libtam's tam_str_* helpers (no cJSON),
-  a `tam-pane msg` client subcommand, and arch/ipc.md. Commands: version,
-  monitors, windows, focused, tags, cursor, binds, reload, dispatch,
-  subscribe. While locked, queries, subscribe, and reload stay allowed
-  and dispatch returns ERR session is locked. R1 finding 17's SIGHUP
-  point is resolved: SIGHUP now triggers clean shutdown like
-  SIGTERM/SIGINT, and live reloads use `tam-pane msg reload` or
-  tp.dsp.reload().
-  0.2.3 binary SHA-256:
-  f0eda31ffe3c7949ad6cd0f2f9507f6684c0547b466248801c98055ca8198888
+  Version 0.2.4 on branch dev, accepted by Fred on 2026-11-23 after his
+  nested sandbox/demo-0.2.4 check (W29). Phase P3 / R1 finding 15: replaces eager
+  tp_arrange() / tp_arrange_all() with a per-monitor arrange_dirty flag
+  (plus arrange_count) and a single server-owned Wayland idle source
+  (tp_server.arrange_idle) that coalesces multiple mutations into one
+  arrange pass per dirty monitor per idle, runs tp_idle_update_inhibit()
+  and tp_pointer_refocus_now() once per batch, and uses a 64-entry stack
+  buffer in sync_tree() to avoid per-arrange heap allocation. Synchronous
+  readers (tiled swap/move/resize/drag-begin, popup unconstrain, IPC
+  windows/focused, and window events with active listeners) flush on
+  demand via tp_arrange_flush().
+  0.2.4 binary SHA-256:
+  bb2daa30f36a3f32f97150e8ebb6708ad1589ff38bc13fa674d0737c2255b092
 
-  Prior accepted baseline: 0.2.2 (63442c5, accepted 2026-11-22, W27).
-  Review R1 (reviews/R1-code-review-0.1.4.md) findings 1-14, 16, and
-  finding 17's binding gate and SIGHUP point are done; finding 15 waits
-  for 0.2.4, finding 11 for P4, and finding 17's remaining smaller points
-  land alongside the P3 versions that need them.
+  Prior accepted baseline: 0.2.3 (c97a25f, accepted 2026-11-22, W28).
+  Review R1 (reviews/R1-code-review-0.1.4.md) findings 1-10, 12-16, and
+  finding 17's binding gate and SIGHUP point are done; finding 11 waits
+  for P4, and finding 17's remaining smaller points land alongside the P3
+  versions that need them.
 
   Automated checks pass: 28 tag, 143 dwindle, 509 Lua, 84 IPC, 5 smoke,
-  683 headless input, nm -D symbol check, and tests/test_nested_input.py.
+  709 headless input, nm -D symbol check, and tests/test_nested_input.py.
 
   Dependencies today: wlroots 0.20, wayland-server, xkbcommon, libtam
   (static), and Lua 5.5.1 (vendored in third_party/lua/, one patch).
@@ -38,12 +37,11 @@ STATE
 
 NEXT
 
-  1. P3, before 0.2.4 (plans/P3-daily-parity.md): R1 finding 15 (one
-     arrange per idle / per-monitor dirty flag), then 0.2.4 (master-stack,
-     scroller, and monocle layouts sharing dwindle's interface, plus a
-     scratchpad). Each change keeps the R1 rules: one bumped version, a
-     failing-first test, a sandbox demo where the nested window can show
-     it, and every affected doc updated.
+  1. P3 0.2.5 (plans/P3-daily-parity.md): master-stack, scroller, and
+     monocle layouts sharing dwindle's interface, plus a scratchpad,
+     built on top of 0.2.4's deferred arrange. Each change keeps the R1
+     rules: one bumped version, a failing-first test, a sandbox demo
+     where the nested window can show it, and every affected doc updated.
 
 
 WAITING FOR FRED

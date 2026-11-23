@@ -53,6 +53,8 @@ static void popup_unconstrain(struct wlr_xdg_popup *popup) {
 	struct tp_client *c = popup_client(popup);
 	if (!c || !c->mon)
 		return;
+	if (c->mon->arrange_dirty)
+		tp_arrange_flush(c->server);
 	struct tp_rect r = c->fullscreen ? c->mon->area : c->mon->usable;
 	struct wlr_box g = c->toplevel->base->geometry;
 	struct wlr_box box = {
