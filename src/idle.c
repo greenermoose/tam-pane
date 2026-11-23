@@ -3,6 +3,7 @@
 #include "tam-pane/client.h"
 #include "tam-pane/layer.h"
 #include "tam-pane/server.h"
+#include "tam-pane/xwayland.h"
 #include <stdlib.h>
 #include <tam.h>
 #include <wlr/types/wlr_compositor.h>
@@ -56,6 +57,10 @@ static bool surface_visible(struct tp_server *s, struct wlr_surface *surface) {
 		struct tp_layer_surface *ls = wlr_ls->data;
 		return ls && ls->mapped;
 	}
+
+	struct tp_client *xc = tp_xwayland_client_from_surface(root);
+	if (xc)
+		return tp_client_visible(xc);
 
 	return root->mapped;
 }

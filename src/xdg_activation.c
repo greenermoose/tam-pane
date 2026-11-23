@@ -7,6 +7,7 @@
 #include "tam-pane/server.h"
 #include "tam-pane/server_events.h"
 #include "tam-pane/workspace.h"
+#include "tam-pane/xwayland.h"
 #include <tam.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_xdg_activation_v1.h>
@@ -18,12 +19,15 @@ static void on_request_activate(struct wl_listener *l, void *data) {
 	if (!s || s->locked || s->stopping || !ev || !ev->surface)
 		return;
 
+	struct tp_client *c = NULL;
 	struct wlr_xdg_surface *xs =
 		wlr_xdg_surface_try_from_wlr_surface(ev->surface);
-	if (!xs || xs->role != WLR_XDG_SURFACE_ROLE_TOPLEVEL || !xs->data)
-		return;
-	struct wlr_scene_tree *tree = xs->data;
-	struct tp_client *c = tree->node.data;
+	if (xs && xs->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL && xs->data) {
+		struct wlr_scene_tree *tree = xs->data;
+		c = tree->node.data;
+	} else {
+		c = tp_xwayland_client_from_surface(ev->surface);
+	}
 	if (!c || !c->mapped)
 		return;
 

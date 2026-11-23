@@ -59,8 +59,9 @@ and libgbm stay.
 - **pango and cairo:** title text.
 - **cJSON:** IPC text, replaced by a line format in P3.
 - **pcre2:** rule matching, replaced by Lua patterns in P2.
-- **xcb and xcb-icccm:** XWayland. They come back temporarily in P3
-  (0.2.5), behind a build option.
+- **xcb and xcb-icccm:** XWayland. Not linked in default builds
+  (`XWAYLAND=0`). Opt-in only via `make XWAYLAND=1` (0.2.6), temporary
+  until all X11 apps are replaced by native Wayland apps.
 - **meson and ninja.**
 
 ## Vendored in tree (no external dependency)
@@ -72,6 +73,10 @@ and libgbm stay.
   `debug`) are not compiled or linked. One marked patch in `lstrlib.c`
   (0.1.8) lets the watchdog stop the pattern matcher (`UPSTREAM.md`).
 
-## Coming in later phases
+## Optional build-time dependencies (`XWAYLAND=1`, 0.2.6)
 
-- **xcb** (P3, 0.2.5): temporary, for XWayland only.
+- **xcb, xcb-icccm**
+  - **Why:** opt-in XWayland support (`make XWAYLAND=1`, `-DTP_XWAYLAND=1`).
+    Default builds (`XWAYLAND=0`) do not link them (`readelf -d` shows no
+    `libxcb` NEEDED).
+  - **Planned exit:** removed once no X11 apps remain on Tamlinux.

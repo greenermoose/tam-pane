@@ -226,7 +226,7 @@ static void on_new_lock(struct wl_listener *l, void *data) {
 	tp_text_input_set_focus(s, NULL);
 
 	if (s->focused_client)
-		wlr_xdg_toplevel_set_activated(s->focused_client->toplevel, false);
+		tp_client_set_activated(s->focused_client, false);
 	s->focused_layer = NULL;
 	if (s->seat) {
 		wlr_seat_keyboard_notify_clear_focus(s->seat);

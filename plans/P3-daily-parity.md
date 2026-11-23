@@ -1,6 +1,6 @@
 # P3: Daily-driver parity (0.2.x)
 
-**Status:** in progress (0.2.0–0.2.3 accepted by Fred on 2026-11-22; 0.2.4–0.2.5 accepted on 2026-11-23).
+**Status:** complete (0.2.0–0.2.3 accepted by Fred on 2026-11-22; 0.2.4–0.2.6 accepted on 2026-11-23).
 
 ## Goal
 
@@ -26,8 +26,9 @@ and X11 programs.
   and pointer refocus, and stack-buffered tree sync.
 - **0.2.5** master-stack, scroller and monocle layouts, sharing the
   layout interface that dwindle uses. A scratchpad.
-- **0.2.6** XWayland, behind a build option. It adds xcb as a temporary
-  dependency.
+- **0.2.6** Opt-in XWayland behind `XWAYLAND=1` (default `XWAYLAND=0`,
+  zero-`xcb`). Adds `xcb` and `xcb-icccm` as temporary dependencies when
+  enabled.
 
 ## Design work from review R1
 

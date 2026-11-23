@@ -20,6 +20,12 @@ struct wlr_ext_image_capture_source_v1;
 struct wlr_scene_tree;
 struct wlr_surface;
 struct wlr_xdg_toplevel;
+struct wlr_xwayland_surface;
+
+enum tp_client_kind {
+	TP_CLIENT_XDG = 0,
+	TP_CLIENT_XWAYLAND,
+};
 
 struct tp_client {
 	struct wl_list link;  /* tp_server.clients */
@@ -27,10 +33,13 @@ struct tp_client {
 	struct tp_server *server;
 	struct tp_monitor *mon;
 	char *home_output; /* original output name when displaced by hot-plug */
+	enum tp_client_kind kind;
 	struct wlr_xdg_toplevel *toplevel;
+	struct wlr_xwayland_surface *xwayland;
 	struct wlr_scene_tree *tree;
 	tp_tags_t tags;
 	bool mapped;
+	bool associated; /* XWayland: surface map/unmap listeners attached */
 	bool floating;
 	bool fullscreen;
 	bool scratchpad;
@@ -45,6 +54,11 @@ struct tp_client {
 	struct wl_listener request_maximize;
 	struct wl_listener set_title;
 	struct wl_listener set_app_id;
+	struct wl_listener associate;
+	struct wl_listener dissociate;
+	struct wl_listener request_configure;
+	struct wl_listener request_activate;
+	struct wl_listener set_override_redirect;
 	struct tp_foreign_toplevel *foreign;
 	struct tp_decoration *decoration;
 	struct wlr_ext_image_capture_source_v1 *capture_source;
@@ -53,6 +67,18 @@ struct tp_client {
 
 void tp_clients_init(struct tp_server *s);
 void tp_clients_finish(struct tp_server *s);
+
+/* Client-kind accessors (work for both XDG and XWayland windows). */
+struct wlr_surface *tp_client_surface(const struct tp_client *c);
+const char *tp_client_app_id(const struct tp_client *c);
+const char *tp_client_title(const struct tp_client *c);
+bool tp_client_is_xwayland(const struct tp_client *c);
+void tp_client_set_activated(struct tp_client *c, bool activated);
+
+/* Shared map/unmap pipelines called by XDG and XWayland lifecycle handlers. */
+void tp_client_apply_map(struct tp_client *c, struct tp_rect initial_geom,
+						 bool default_floating, bool request_fullscreen);
+void tp_client_apply_unmap(struct tp_client *c);
 
 /* True when the window is mapped and its tags are in its monitor's view. */
 bool tp_client_visible(const struct tp_client *c);

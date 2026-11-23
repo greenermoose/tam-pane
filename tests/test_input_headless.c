@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <wayland-client.h>
 #include <wlr/interfaces/wlr_keyboard.h>
@@ -4674,6 +4675,147 @@ int main(void) {
 			}
 		}
 	}
+
+	/* 0.2.6 XWayland security classification & IPC xwayland/display fields. */
+	CHECK(tp_security_classify_global("xwayland_shell_v1") ==
+		  TP_GLOBAL_PRIVILEGED);
+	CHECK(!tp_security_allow_xwayland(&server, NULL));
+	if (ipc_sock_path[0]) {
+		char rep[4096];
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path, "version\n",
+								rep, sizeof(rep)));
+		CHECK(strstr(rep, "\tdisplay=") != NULL);
+#if defined(TP_XWAYLAND) && TP_XWAYLAND
+		CHECK(server.xwayland != NULL);
+		CHECK(server.xwayland_display != NULL &&
+			  server.xwayland_display[0] == ':');
+		CHECK(strstr(rep, "\tdisplay=:") != NULL);
+#else
+		CHECK(server.xwayland == NULL);
+		CHECK(server.xwayland_display == NULL);
+		CHECK(strstr(rep, "\tdisplay=\n") != NULL);
+#endif
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path, "windows\n",
+								rep, sizeof(rep)));
+		CHECK(strstr(rep, "\txwayland=0\t") != NULL);
+	}
+
+#if defined(TP_XWAYLAND) && TP_XWAYLAND
+	/* Real XWayland integration check: spawn build/sandbox/demo-x11 with an
+	 * override-redirect popup against the compositor's lazy Xwayland display.
+	 * Verifies lazy startup, WM_CLASS/WM_NAME -> app_id/title, tiling, IPC
+	 * xwayland=1, foreign-toplevel export, OR popup on TP_LAYER_OVERLAY,
+	 * float/fullscreen/scratchpad transitions, and WM_DELETE_WINDOW close. */
+	if (server.xwayland && server.xwayland_display &&
+		access("build/sandbox/demo-x11", X_OK) == 0) {
+		pid_t xpid = fork();
+		CHECK(xpid >= 0);
+		if (xpid == 0) {
+			setenv("DISPLAY", server.xwayland_display, 1);
+			execl("build/sandbox/demo-x11", "demo-x11", "--title", "x11-check",
+				  "--popup", (char *)NULL);
+			_exit(127);
+		}
+		if (xpid > 0) {
+			struct tp_client *xc = NULL;
+			for (int i = 0; i < 400 && !xc; i++) {
+				wl_event_loop_dispatch(server.loop, 20);
+				wl_display_flush_clients(server.display);
+				struct tp_client *it;
+				wl_list_for_each(it, &server.clients, link) {
+					if (tp_client_is_xwayland(it) && it->mapped) {
+						xc = it;
+						break;
+					}
+				}
+			}
+			CHECK(xc != NULL);
+			if (xc) {
+				/* Drain idle arrange and let OR popup map. */
+				for (int i = 0; i < 20; i++) {
+					wl_event_loop_dispatch(server.loop, 10);
+					wl_display_flush_clients(server.display);
+				}
+				CHECK(tp_client_app_id(xc) &&
+					  strcmp(tp_client_app_id(xc), "demo-x11") == 0);
+				CHECK(tp_client_title(xc) &&
+					  strcmp(tp_client_title(xc), "x11-check") == 0);
+				CHECK(!xc->floating);
+				CHECK(xc->geom.w > 0 && xc->geom.h > 0);
+				CHECK(xc->foreign != NULL);
+				/* OR popup mapped on TP_LAYER_OVERLAY without entering clients. */
+				int xcount = 0;
+				struct tp_client *it;
+				wl_list_for_each(it, &server.clients, link) {
+					if (tp_client_is_xwayland(it))
+						xcount++;
+				}
+				CHECK(xcount == 1);
+				CHECK(!wl_list_empty(&server.layer[TP_LAYER_OVERLAY]->children));
+
+				if (ipc_sock_path[0]) {
+					char rep[4096];
+					CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+											"windows\n", rep, sizeof(rep)));
+					CHECK(strstr(rep, "\txwayland=1\t") != NULL);
+					CHECK(strstr(rep, "\tapp_id=demo-x11\t") != NULL);
+					CHECK(strstr(rep, "\ttitle=x11-check\n") != NULL);
+				}
+
+				/* Float, fullscreen, scratchpad transitions on XWayland window. */
+				tp_client_set_floating(xc, true);
+				wl_event_loop_dispatch(server.loop, 0);
+				CHECK(xc->floating);
+				tp_client_set_fullscreen(xc, true);
+				wl_event_loop_dispatch(server.loop, 0);
+				CHECK(xc->fullscreen);
+				tp_client_set_fullscreen(xc, false);
+				wl_event_loop_dispatch(server.loop, 0);
+				CHECK(!xc->fullscreen);
+				tp_client_scratchpad_move(xc);
+				wl_event_loop_dispatch(server.loop, 0);
+				CHECK(xc->scratchpad && !xc->scratchpad_visible);
+				tp_scratchpad_toggle(&server);
+				wl_event_loop_dispatch(server.loop, 0);
+				CHECK(xc->scratchpad && xc->scratchpad_visible);
+				tp_client_scratchpad_move(xc);
+				tp_client_set_floating(xc, false);
+				wl_event_loop_dispatch(server.loop, 0);
+				CHECK(!xc->scratchpad && !xc->floating);
+
+				/* Close via WM_DELETE_WINDOW and verify clean unmap & exit. */
+				tp_client_close(xc);
+				bool unmapped = false;
+				for (int i = 0; i < 200 && !unmapped; i++) {
+					wl_event_loop_dispatch(server.loop, 10);
+					wl_display_flush_clients(server.display);
+					bool found = false;
+					wl_list_for_each(it, &server.clients, link) {
+						if (tp_client_is_xwayland(it))
+							found = true;
+					}
+					if (!found)
+						unmapped = true;
+				}
+				CHECK(unmapped);
+			}
+			int xstatus = 0;
+			pid_t got = 0;
+			for (int i = 0; i < 100; i++) {
+				got = waitpid(xpid, &xstatus, WNOHANG);
+				if (got == xpid)
+					break;
+				wl_event_loop_dispatch(server.loop, 10);
+			}
+			if (got != xpid) {
+				kill(xpid, SIGKILL);
+				waitpid(xpid, &xstatus, 0);
+			}
+			CHECK(got == xpid && WIFEXITED(xstatus) &&
+				  WEXITSTATUS(xstatus) == 0);
+		}
+	}
+#endif
 
 	unlink(lua_cfg);
 	rmdir(lua_dir);

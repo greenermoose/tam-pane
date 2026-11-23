@@ -1,0 +1,75 @@
+W31 OPT-IN XWAYLAND (0.2.6)
+
+Date: 2026-11-23
+AI harness: agy 1.5.14
+AI model: Gemini 4 Neon (Medium)
+
+GUIDANCE
+
+  Fred: "/plan Do the next work slice of tam-pane"
+  Fred: "1 Default should be no XWayland. make XWAYLAND=0 produces a
+         zero-xcb build (-DTP_XWAYLAND=0). Set to 1 for XWayland.
+         2 Confirm lazy startup
+         3 Confirm IPC fields
+         Update plan. Build an XWayland-enabled binary for the 0.2.6 demo.
+         But normal binaries will not be XWayland enabled. The goal is to
+         have no X11 apps on Tamlinux; they should all be rewritten for
+         Wayland."
+  Fred: "Approved. Proceed."
+  Fred: "pass. commit and finish"
+
+DONE
+
+  - 0.2.6 (Phase P3 complete, plans/P3-daily-parity.md): added opt-in
+    XWayland support behind `XWAYLAND=1` (default `XWAYLAND ?= 0`,
+    zero-xcb build with `-DTP_XWAYLAND=0`):
+    - Build system (`Makefile`): `XWAYLAND ?= 0`; when `XWAYLAND=1`, links
+      temporary `xcb` / `xcb-icccm`, defines `-DTP_XWAYLAND=1`, compiles
+      `src/xwayland.c`, and builds `build/sandbox/demo-x11`.
+    - Security (`include/tam-pane/security.h`, `src/security.c`):
+      classified `xwayland_shell_v1` as `TP_GLOBAL_PRIVILEGED` and gated
+      it in `global_filter()` on `tp_security_allow_xwayland()`, granting
+      it exclusively to `s->xwayland->server->client`.
+    - Unified client abstraction (`include/tam-pane/client.h`,
+      `src/client.c`, `src/focus.c`, `src/session_lock.c`,
+      `src/foreign_toplevel.c`, `src/events.c`, `src/ipc.c`, `src/idle.c`,
+      `src/xdg_activation.c`): added `enum tp_client_kind`, client-kind
+      accessors (`tp_client_surface`, `tp_client_app_id`, `tp_client_title`,
+      `tp_client_is_xwayland`, `tp_client_set_activated`), and shared
+      `tp_client_apply_map` / `tp_client_apply_unmap` pipelines.
+    - XWayland module (`include/tam-pane/xwayland.h`, `src/xwayland.c`,
+      `src/server.c`): lazy `wlr_xwayland_create(..., true)` with graceful
+      Wayland-only fallback if unavailable; exports `DISPLAY` before
+      `TP_EVENT_STARTUP`; full managed X11 lifecycle and override-redirect
+      popups on `TP_LAYER_OVERLAY`.
+    - IPC (`src/ipc.c`, `arch/ipc.md`): added `xwayland=<0|1>` to `window`
+      lines (`windows` / `focused`) and `display=<DISPLAY>` to `version`.
+  - Failing-first check confirmed `xwayland_shell_v1` classification and
+    IPC `display=` / `xwayland=0` checks failed against 0.2.5 in
+    `tests/test_input_headless.c`.
+  - Bumped VERSION to 0.2.6, added `sandbox/demo-x11.c`,
+    `sandbox/demo-0.2.6`, and `sandbox/demo-0.2.6.lua`, and updated
+    README, ROADMAP.md, plans/P3-daily-parity.md, arch/protocols.md,
+    arch/dependencies.md, arch/data-structures.md, arch/ipc.md, and
+    work/WHATNOW.
+  - Verified both builds:
+    - Default `XWAYLAND=0`: zero warnings, zero `libxcb` NEEDED in
+      `readelf -d build/tam-pane`, 28 tag, 143 dwindle, 102 layouts, 537
+      Lua, 111 IPC, 5 smoke-headless, 743 headless input, nm -D check.
+    - Opt-in `XWAYLAND=1`: zero warnings, 764 headless input checks
+      (including live lazy Xwayland + demo-x11 managed window + OR popup +
+      float/fullscreen/scratchpad + WM_DELETE_WINDOW close), nm -D check,
+      and tests/test_nested_input.py.
+      0.2.6 XWAYLAND=1 binary SHA-256:
+      e028cb874e3e2d414f64aa2f387c45ff7312485ede2d80ae301ab793f2227d42.
+  - Fred ran `sandbox/demo-0.2.6` and accepted 0.2.6 ("pass. commit and
+    finish").
+
+FAILED
+
+  - Nothing.
+
+HANDOFF
+
+  - 0.2.6 is accepted and Phase P3 is complete. Next: Phase P4
+    (plans/P4-dogfood-tamlinux-0.7.md), 0.3.0 packaging and login session.

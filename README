@@ -60,7 +60,8 @@ BUILDING
   wayland-protocols, libxkbcommon, and libtam installed under
   LIBTAM_PREFIX (default $HOME/.local).
 
-    make              build build/tam-pane
+    make              build build/tam-pane (zero-xcb, XWAYLAND=0 default)
+    make XWAYLAND=1   opt-in XWayland build (adds temporary xcb, xcb-icccm)
     make test         unit tests, then headless start/stop checks
     make install      install to PREFIX (default $HOME/.local)
     make uninstall    remove the installed binary

@@ -161,12 +161,9 @@ void tp_events_emit_window(struct tp_server *s, enum tp_event_kind kind,
 	struct tp_event ev = {.kind = kind};
 	ev.window.focused = focused;
 	if (c) {
-		if (c->toplevel) {
-			copy_str(ev.window.app_id, sizeof(ev.window.app_id),
-					 c->toplevel->app_id);
-			copy_str(ev.window.title, sizeof(ev.window.title),
-					 c->toplevel->title);
-		}
+		copy_str(ev.window.app_id, sizeof(ev.window.app_id),
+				 tp_client_app_id(c));
+		copy_str(ev.window.title, sizeof(ev.window.title), tp_client_title(c));
 		if (c->mon && c->mon->output)
 			copy_str(ev.window.monitor, sizeof(ev.window.monitor),
 					 c->mon->output->name);

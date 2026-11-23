@@ -70,4 +70,9 @@ void tp_security_remove_capture_client(struct tp_server *s,
 bool tp_security_allow_capture(const struct tp_server *s,
 							   const struct wl_client *client);
 
+/* Whether `client` is the compositor's own Xwayland server connection,
+ * allowed to see and bind xwayland_shell_v1. */
+bool tp_security_allow_xwayland(const struct tp_server *s,
+								const struct wl_client *client);
+
 #endif

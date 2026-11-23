@@ -11,6 +11,7 @@
 #include "tam-pane/monitor.h"
 #include "tam-pane/server.h"
 #include "tam-pane/server_events.h"
+#include "tam-pane/xwayland.h"
 #include <stdlib.h>
 #include <tam.h>
 #include <wlr/types/wlr_compositor.h>
@@ -151,44 +152,42 @@ static void center_float(struct tp_client *c) {
 static void apply_floating(struct tp_client *c) {
 	const uint32_t all = WLR_EDGE_TOP | WLR_EDGE_BOTTOM | WLR_EDGE_LEFT |
 						 WLR_EDGE_RIGHT;
-	wlr_scene_node_reparent(
-		&c->tree->node,
-		c->server->layer[c->floating ? TP_LAYER_FLOAT : TP_LAYER_TILE]);
-	wlr_xdg_toplevel_set_tiled(c->toplevel, c->floating ? 0 : all);
-	tp_decoration_update(c);
+	if (c->tree) {
+		wlr_scene_node_reparent(
+			&c->tree->node,
+			c->server->layer[c->floating ? TP_LAYER_FLOAT : TP_LAYER_TILE]);
+	}
+	if (c->kind == TP_CLIENT_XDG && c->toplevel) {
+		wlr_xdg_toplevel_set_tiled(c->toplevel, c->floating ? 0 : all);
+		tp_decoration_update(c);
+	}
 }
 
 /* Set the fullscreen flag, tell the client, and move the window to the
  * matching layer. The caller arranges. */
 static void apply_fullscreen(struct tp_client *c, bool fullscreen) {
 	c->fullscreen = fullscreen;
-	wlr_xdg_toplevel_set_fullscreen(c->toplevel, fullscreen);
+	if (c->kind == TP_CLIENT_XWAYLAND)
+		tp_xwayland_set_fullscreen(c, fullscreen);
+	else if (c->toplevel)
+		wlr_xdg_toplevel_set_fullscreen(c->toplevel, fullscreen);
 	tp_foreign_toplevel_set_fullscreen(c, fullscreen);
 	enum tp_layer layer = fullscreen	? TP_LAYER_FULLSCREEN
 						  : c->floating ? TP_LAYER_FLOAT
 										: TP_LAYER_TILE;
-	wlr_scene_node_reparent(&c->tree->node, c->server->layer[layer]);
+	if (c->tree)
+		wlr_scene_node_reparent(&c->tree->node, c->server->layer[layer]);
 }
 
-static void on_commit(struct wl_listener *l, void *data) {
-	struct tp_client *c = wl_container_of(l, c, commit);
-	/* The first commit asks for a configure; 0x0 lets the client choose
-	 * until the layout places it. */
-	if (c->toplevel->base->initial_commit) {
-		wlr_xdg_toplevel_set_size(c->toplevel, 0, 0);
-		tp_decoration_update(c);
-	}
-}
-
-static void on_map(struct wl_listener *l, void *data) {
-	struct tp_client *c = wl_container_of(l, c, map);
+void tp_client_apply_map(struct tp_client *c, struct tp_rect initial_geom,
+						 bool default_floating, bool request_fullscreen) {
 	struct tp_server *s = c->server;
+	const char *app_id = tp_client_app_id(c);
+	const char *title = tp_client_title(c);
 
 	struct tp_rule_result rule = {0};
-	if (s->lua) {
-		tp_lua_eval_rules(s->lua, c->toplevel->app_id, c->toplevel->title,
-						  &rule);
-	}
+	if (s->lua)
+		tp_lua_eval_rules(s->lua, app_id, title, &rule);
 
 	c->mapped = true;
 	struct tp_monitor *mon = s->selmon;
@@ -208,15 +207,9 @@ static void on_map(struct wl_listener *l, void *data) {
 	else
 		c->tags = c->mon ? tp_tagview_current(&c->mon->view) : tp_tag_mask(1);
 
-	struct wlr_box g = c->toplevel->base->geometry;
-	c->geom = c->float_geom = (struct tp_rect){0, 0, g.width, g.height};
-	/* Dialogs and fixed-size windows float, as in every tiling manager. */
-	c->floating = c->toplevel->parent != NULL ||
-				  (c->toplevel->current.min_width > 0 &&
-				   c->toplevel->current.min_width ==
-					   c->toplevel->current.max_width &&
-				   c->toplevel->current.min_height ==
-					   c->toplevel->current.max_height);
+	c->geom = c->float_geom =
+		(struct tp_rect){0, 0, initial_geom.w, initial_geom.h};
+	c->floating = default_floating;
 	if (rule.has_floating)
 		c->floating = rule.floating;
 	if (rule.has_scratchpad && rule.scratchpad) {
@@ -247,7 +240,7 @@ static void on_map(struct wl_listener *l, void *data) {
 	apply_floating(c);
 	/* A program may ask for fullscreen before it maps; on_unmap cleared
 	 * the flag, so a remap follows the client's current request too. */
-	if (c->toplevel->requested.fullscreen)
+	if (request_fullscreen)
 		apply_fullscreen(c, true);
 
 	bool focus_now = tp_client_visible(c) && c->mon == s->selmon;
@@ -263,13 +256,13 @@ static void on_map(struct wl_listener *l, void *data) {
 	if (focus_now)
 		tp_focus(s, c);
 	tp_idle_update_inhibit(s);
-	tam_log_debug("window mapped: %s, tags 0x%x, %s",
-				  c->toplevel->app_id ? c->toplevel->app_id : "(no app id)",
-				  c->tags, c->floating ? "floating" : "tiled");
+	tam_log_debug("window mapped: %s (%s), tags 0x%x, %s",
+				  app_id ? app_id : "(no app id)",
+				  c->kind == TP_CLIENT_XWAYLAND ? "xwayland" : "xdg", c->tags,
+				  c->floating ? "floating" : "tiled");
 }
 
-static void on_unmap(struct wl_listener *l, void *data) {
-	struct tp_client *c = wl_container_of(l, c, unmap);
+void tp_client_apply_unmap(struct tp_client *c) {
 	struct tp_server *s = c->server;
 	bool had_focus = tp_focused(s) == c;
 
@@ -284,6 +277,8 @@ static void on_unmap(struct wl_listener *l, void *data) {
 	tp_client_detach(c);
 	wl_list_remove(&c->link);
 	wl_list_remove(&c->flink);
+	wl_list_init(&c->link);
+	wl_list_init(&c->flink);
 	if (c->mon)
 		tp_arrange(c->mon);
 	tp_idle_update_inhibit(s);
@@ -293,6 +288,35 @@ static void on_unmap(struct wl_listener *l, void *data) {
 		if (!s->focused_client)
 			tp_events_emit_window(s, TP_EVENT_WINDOW_FOCUS, NULL, false);
 	}
+}
+
+static void on_commit(struct wl_listener *l, void *data) {
+	struct tp_client *c = wl_container_of(l, c, commit);
+	/* The first commit asks for a configure; 0x0 lets the client choose
+	 * until the layout places it. */
+	if (c->toplevel->base->initial_commit) {
+		wlr_xdg_toplevel_set_size(c->toplevel, 0, 0);
+		tp_decoration_update(c);
+	}
+}
+
+static void on_map(struct wl_listener *l, void *data) {
+	struct tp_client *c = wl_container_of(l, c, map);
+	struct wlr_box g = c->toplevel->base->geometry;
+	/* Dialogs and fixed-size windows float, as in every tiling manager. */
+	bool def_float = c->toplevel->parent != NULL ||
+					 (c->toplevel->current.min_width > 0 &&
+					  c->toplevel->current.min_width ==
+						  c->toplevel->current.max_width &&
+					  c->toplevel->current.min_height ==
+						  c->toplevel->current.max_height);
+	tp_client_apply_map(c, (struct tp_rect){0, 0, g.width, g.height}, def_float,
+						c->toplevel->requested.fullscreen);
+}
+
+static void on_unmap(struct wl_listener *l, void *data) {
+	struct tp_client *c = wl_container_of(l, c, unmap);
+	tp_client_apply_unmap(c);
 }
 
 static void on_destroy(struct wl_listener *l, void *data) {
@@ -395,6 +419,43 @@ void tp_clients_finish(struct tp_server *s) {
 
 /* ---- operations ---- */
 
+struct wlr_surface *tp_client_surface(const struct tp_client *c) {
+	if (!c)
+		return NULL;
+	if (c->kind == TP_CLIENT_XWAYLAND)
+		return tp_xwayland_surface(c);
+	return c->toplevel ? c->toplevel->base->surface : NULL;
+}
+
+const char *tp_client_app_id(const struct tp_client *c) {
+	if (!c)
+		return NULL;
+	if (c->kind == TP_CLIENT_XWAYLAND)
+		return tp_xwayland_app_id(c);
+	return c->toplevel ? c->toplevel->app_id : NULL;
+}
+
+const char *tp_client_title(const struct tp_client *c) {
+	if (!c)
+		return NULL;
+	if (c->kind == TP_CLIENT_XWAYLAND)
+		return tp_xwayland_title(c);
+	return c->toplevel ? c->toplevel->title : NULL;
+}
+
+bool tp_client_is_xwayland(const struct tp_client *c) {
+	return c && c->kind == TP_CLIENT_XWAYLAND;
+}
+
+void tp_client_set_activated(struct tp_client *c, bool activated) {
+	if (!c)
+		return;
+	if (c->kind == TP_CLIENT_XWAYLAND)
+		tp_xwayland_set_activated(c, activated);
+	else if (c->toplevel)
+		wlr_xdg_toplevel_set_activated(c->toplevel, activated);
+}
+
 bool tp_client_visible(const struct tp_client *c) {
 	if (!c || !c->mapped || !c->mon)
 		return false;
@@ -406,15 +467,24 @@ bool tp_client_visible(const struct tp_client *c) {
 void tp_client_place(struct tp_client *c, struct tp_rect box) {
 	bool resized = box.w != c->geom.w || box.h != c->geom.h;
 	c->geom = box;
-	wlr_scene_node_set_position(&c->tree->node, box.x, box.y);
-	/* Each size request costs the client a configure and a redraw, so
-	 * send one only when the size really changes. */
-	if (resized)
+	if (c->tree)
+		wlr_scene_node_set_position(&c->tree->node, box.x, box.y);
+	if (c->kind == TP_CLIENT_XWAYLAND) {
+		tp_xwayland_place(c, box);
+	} else if (resized && c->toplevel) {
+		/* Each size request costs the client a configure and a redraw, so
+		 * send one only when the size really changes. */
 		wlr_xdg_toplevel_set_size(c->toplevel, box.w, box.h);
+	}
 }
 
 void tp_client_close(struct tp_client *c) {
-	wlr_xdg_toplevel_send_close(c->toplevel);
+	if (!c)
+		return;
+	if (c->kind == TP_CLIENT_XWAYLAND)
+		tp_xwayland_close(c);
+	else if (c->toplevel)
+		wlr_xdg_toplevel_send_close(c->toplevel);
 }
 
 void tp_client_toggle_tags(struct tp_client *c, tp_tags_t mask) {

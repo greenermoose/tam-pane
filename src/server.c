@@ -18,6 +18,7 @@
 #include "tam-pane/text_input.h"
 #include "tam-pane/workspace.h"
 #include "tam-pane/xdg_activation.h"
+#include "tam-pane/xwayland.h"
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -160,6 +161,7 @@ bool tp_server_init(struct tp_server *s) {
 	tp_clients_init(s);
 	if (!tp_input_init(s) || !tp_pointer_init(s) || !tp_text_input_init(s))
 		return false;
+	tp_xwayland_init(s);
 	return true;
 }
 
@@ -174,6 +176,8 @@ bool tp_server_start(struct tp_server *s) {
 		return false;
 	}
 	setenv("WAYLAND_DISPLAY", s->socket, 1);
+	if (s->xwayland_display && *s->xwayland_display)
+		setenv("DISPLAY", s->xwayland_display, 1);
 	if (!tp_ipc_start(s)) {
 		tam_log_error("cannot start the IPC socket");
 		return false;
@@ -275,6 +279,7 @@ void tp_server_finish(struct tp_server *s) {
 	}
 	tp_ipc_finish(s);
 	tp_events_finish(s);
+	tp_xwayland_finish(s);
 	wl_display_destroy_clients(s->display);
 
 	tp_text_input_finish(s);

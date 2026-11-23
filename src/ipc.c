@@ -157,10 +157,12 @@ static tam_str_t append_window_line(tam_str_t out, const struct tp_server *s,
 	const char *mon = (c->mon && c->mon->output && c->mon->output->name)
 						  ? c->mon->output->name
 						  : "";
-	const char *app_id =
-		(c->toplevel && c->toplevel->app_id) ? c->toplevel->app_id : "";
-	const char *title =
-		(c->toplevel && c->toplevel->title) ? c->toplevel->title : "";
+	const char *app_id = tp_client_app_id(c);
+	const char *title = tp_client_title(c);
+	if (!app_id)
+		app_id = "";
+	if (!title)
+		title = "";
 	bool focused = (s->focused_client == c);
 
 	out = tam_str_cat(out, "window\tmonitor=");
@@ -168,9 +170,10 @@ static tam_str_t append_window_line(tam_str_t out, const struct tp_server *s,
 	out = tam_str_cat_printf(
 		out,
 		"\ttags=%u\tfocused=%d\tfloating=%d\tfullscreen=%d\tscratchpad=%d"
-		"\tx=%d\ty=%d\tw=%d\th=%d\tapp_id=",
+		"\txwayland=%d\tx=%d\ty=%d\tw=%d\th=%d\tapp_id=",
 		c->tags, focused ? 1 : 0, c->floating ? 1 : 0, c->fullscreen ? 1 : 0,
-		c->scratchpad ? 1 : 0, c->geom.x, c->geom.y, c->geom.w, c->geom.h);
+		c->scratchpad ? 1 : 0, tp_client_is_xwayland(c) ? 1 : 0, c->geom.x,
+		c->geom.y, c->geom.w, c->geom.h);
 	out = tp_ipc_escape_append(out, app_id);
 	out = tam_str_cat(out, "\ttitle=");
 	out = tp_ipc_escape_append(out, title);
@@ -182,6 +185,9 @@ static tam_str_t build_version(const struct tp_server *s) {
 	out = tp_ipc_escape_append(out, TP_VERSION);
 	out = tam_str_cat(out, "\tsocket=");
 	out = tp_ipc_escape_append(out, s->socket ? s->socket : "");
+	out = tam_str_cat(out, "\tdisplay=");
+	out = tp_ipc_escape_append(out,
+							   s->xwayland_display ? s->xwayland_display : "");
 	return tam_str_cat(out, "\nEND\n");
 }
 

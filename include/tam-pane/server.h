@@ -53,6 +53,7 @@ struct wlr_xdg_decoration_manager_v1;
 struct wlr_xcursor_manager;
 struct wlr_xdg_shell;
 struct wlr_layer_shell_v1;
+struct wlr_xwayland;
 struct tp_client;
 struct tp_ipc_server;
 struct tp_layer_surface;
@@ -184,6 +185,11 @@ struct tp_server {
 
 	struct wlr_xdg_decoration_manager_v1 *xdg_decoration_mgr;
 	struct wl_listener new_xdg_decoration;
+
+	struct wlr_xwayland *xwayland;
+	const char *xwayland_display;
+	struct wl_listener xwayland_ready;
+	struct wl_listener xwayland_new_surface;
 
 	struct wlr_seat *seat;
 	struct wl_list keyboards; /* tp_keyboard.link */

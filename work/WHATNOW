@@ -3,41 +3,44 @@ WHATNOW
 What tam-pane is doing now and what comes next. Read this first; revise
 it at the end of every session (work/README-work).
 
-Updated: 2026-11-23, with W30
+Updated: 2026-11-23, with W31
 
 
 STATE
 
-  Version 0.2.5 on branch dev, accepted by Fred on 2026-11-23 after his
-  nested sandbox/demo-0.2.5 check (W30). Phase P3: adds a unified per-tag-slot
-  tp_layout interface (include/tam-pane/layout/layout.h) sharing dwindle's
-  interface across master-stack (master.c), scroller (scroller.c), and
-  monocle (monocle.c), plus a floating scratchpad (src/client.c), Lua
-  config/dispatchers/rules, default bindings (Meta+Space, Meta+Shift+Space,
-  Meta+-, Meta+Shift+-), and IPC layout/scratchpad support.
-  0.2.5 binary SHA-256:
-  43a11d39e5dae0f44f9be3f3911b1dc21d51a330b1fa497c3d9684aad29bdbe7
+  Version 0.2.6 on branch dev, accepted by Fred on 2026-11-23 after his
+  nested sandbox/demo-0.2.6 check (W31). Phase P3 complete: adds opt-in
+  XWayland support behind `XWAYLAND=1` (default `XWAYLAND=0` produces a
+  zero-xcb build with `-DTP_XWAYLAND=0`; Tamlinux's goal is no X11 apps).
+  Includes lazy `wlr_xwayland_create`, `xwayland_shell_v1` restricted to
+  `s->xwayland->server->client` in `src/security.c`, unified `tp_client`
+  helpers (`src/client.c`, `src/xwayland.c`), override-redirect popups on
+  `TP_LAYER_OVERLAY`, IPC `xwayland=<0|1>` and `version` `display=<DISPLAY>`,
+  and `sandbox/demo-x11.c` + `sandbox/demo-0.2.6`.
+  0.2.6 XWAYLAND=1 binary SHA-256 (verified by Fred):
+  e028cb874e3e2d414f64aa2f387c45ff7312485ede2d80ae301ab793f2227d42
 
-  Prior accepted baseline: 0.2.4 (e0c115f, accepted 2026-11-23, W29).
+  Prior accepted baseline: 0.2.5 (1eec348, accepted 2026-11-23, W30).
   Review R1 (reviews/R1-code-review-0.1.4.md) findings 1-10, 12-16, and
   finding 17's binding gate and SIGHUP point are done; finding 11 waits
-  for P4, and finding 17's remaining smaller points land alongside the P3
+  for P4, and finding 17's remaining smaller points land alongside the P4
   versions that need them.
 
-  Automated checks pass: 28 tag, 143 dwindle, 102 layouts, 537 Lua, 111
-  IPC, 5 smoke, 734 headless input, nm -D symbol check, and
-  tests/test_nested_input.py.
+  Automated checks pass for both XWAYLAND=0 (28 tag, 143 dwindle, 102
+  layouts, 537 Lua, 111 IPC, 5 smoke, 743 headless input, zero libxcb
+  NEEDED) and XWAYLAND=1 (764 headless input including real Xwayland +
+  demo-x11 + OR popup, nm -D symbol check, tests/test_nested_input.py).
 
   Dependencies today: wlroots 0.20, wayland-server, xkbcommon, libtam
   (static), and Lua 5.5.1 (vendored in third_party/lua/, one patch).
+  Opt-in XWAYLAND=1 adds temporary xcb and xcb-icccm.
 
 
 NEXT
 
-  1. P3 0.2.6 (plans/P3-daily-parity.md): XWayland, behind a build option
-     (temporary xcb / xcb-icccm dependency). Each change keeps the R1
-     rules: one bumped version, a failing-first test, a sandbox demo
-     where the nested window can show it, and every affected doc updated.
+  1. Phase P4 (plans/P4-dogfood-tamlinux-0.7.md): 0.3.0 — package
+     tam-pane in tamlinux-packages with a login session entry (keeping
+     Hyprland installed as fallback), and begin dogfooding in Tamlinux 0.7.
 
 
 WAITING FOR FRED

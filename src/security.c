@@ -7,6 +7,10 @@
 #include <unistd.h>
 #include <wayland-server-core.h>
 #include <wlr/types/wlr_security_context_v1.h>
+#if defined(TP_XWAYLAND) && TP_XWAYLAND
+#include <wlr/xwayland/server.h>
+#include <wlr/xwayland/xwayland.h>
+#endif
 
 /*
  * Every Wayland global advertised by tam-pane must be explicitly listed in
@@ -60,6 +64,7 @@ static const char *const PRIVILEGED_GLOBALS[] = {
 	"zwlr_data_control_manager_v1",
 	"ext_data_control_manager_v1",
 	"zwp_input_method_manager_v2",
+	"xwayland_shell_v1",
 };
 
 static bool list_contains(const char *const *list, size_t count,
@@ -129,6 +134,8 @@ static bool global_filter(const struct wl_client *client,
 		 strcmp(name, "ext_foreign_toplevel_image_capture_source_manager_v1") ==
 			 0))
 		return tp_security_allow_capture(s, client);
+	if (name && strcmp(name, "xwayland_shell_v1") == 0)
+		return tp_security_allow_xwayland(s, client);
 	return true;
 }
 
@@ -243,6 +250,18 @@ bool tp_security_allow_capture(const struct tp_server *s,
 			return true;
 	}
 	return false;
+}
+
+bool tp_security_allow_xwayland(const struct tp_server *s,
+								const struct wl_client *client) {
+#if defined(TP_XWAYLAND) && TP_XWAYLAND
+	return s && client && s->xwayland && s->xwayland->server &&
+		   s->xwayland->server->client == client;
+#else
+	(void)s;
+	(void)client;
+	return false;
+#endif
 }
 
 bool tp_security_init(struct tp_server *s) {

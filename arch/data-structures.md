@@ -155,7 +155,14 @@ the same commit as any change to them.
 
 ## tp_client (`include/tam-pane/client.h`)
 
-- One xdg toplevel.
+- One managed toplevel window (`TP_CLIENT_XDG` via `wlr_xdg_toplevel`, or
+  `TP_CLIENT_XWAYLAND` via `wlr_xwayland_surface` when built with
+  `XWAYLAND=1`, 0.2.6). Client-kind accessors (`tp_client_surface`,
+  `tp_client_app_id`, `tp_client_title`, `tp_client_is_xwayland`,
+  `tp_client_set_activated`) and shared `tp_client_apply_map` /
+  `tp_client_apply_unmap` pipelines keep the rest of the compositor
+  kind-agnostic. Override-redirect X11 surfaces live on `TP_LAYER_OVERLAY`
+  as `tp_xwayland_unmanaged` outside `tp_server.clients`.
 - **Fields:** its monitor; `home_output` (remembered output name when
   displaced by hot-plug disconnect, cleared when reclaimed or explicitly moved
   to another monitor); its tag mask; whether it is mapped, floating,

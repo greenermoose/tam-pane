@@ -14,11 +14,25 @@
 PREFIX ?= $(HOME)/.local
 BINDIR ?= $(PREFIX)/bin
 LIBTAM_PREFIX ?= $(HOME)/.local
+# Opt-in XWayland support (0 = default, zero-xcb build; 1 = enable XWayland
+# with temporary xcb / xcb-icccm dependency).
+XWAYLAND ?= 0
 
 PKG_CONFIG ?= pkg-config
 PKGS = wlroots-0.20 wayland-server wayland-client xkbcommon
 # Used only by the test client, never linked into the compositor.
 CLIENT_PKGS = wayland-client
+
+ifeq ($(XWAYLAND),1)
+PKGS += xcb xcb-icccm
+XWAYLAND_CFLAGS = -DTP_XWAYLAND=1
+XCB_CFLAGS := $(shell $(PKG_CONFIG) --cflags xcb xcb-icccm)
+XCB_LIBS := $(shell $(PKG_CONFIG) --libs xcb xcb-icccm)
+else
+XWAYLAND_CFLAGS = -DTP_XWAYLAND=0
+XCB_CFLAGS =
+XCB_LIBS =
+endif
 
 VERSION := $(shell tr -d '[:space:]' < VERSION)
 WAYLAND_SCANNER := $(shell $(PKG_CONFIG) --variable=wayland_scanner wayland-scanner)
@@ -27,7 +41,7 @@ WAYLAND_PROTOCOLS := $(shell $(PKG_CONFIG) --variable=pkgdatadir wayland-protoco
 CFLAGS ?= -O2 -g
 override CFLAGS += -std=c11 -Wall -Wextra -Wpedantic -Wno-unused-parameter \
 	-D_POSIX_C_SOURCE=200809L -DWLR_USE_UNSTABLE \
-	-DTP_VERSION='"$(VERSION)"' \
+	-DTP_VERSION='"$(VERSION)"' $(XWAYLAND_CFLAGS) \
 	-Iinclude -Ibuild/protocols -I$(LIBTAM_PREFIX)/include -Ithird_party/lua \
 	-ffile-prefix-map=$(CURDIR)=. -MMD -MP
 # Vendored Lua 5.5: static object set, hidden visibility, no dlopen (-rdynamic
@@ -72,6 +86,9 @@ WM_SRCS = src/main.c src/server.c src/security.c src/events.c src/ipc.c \
 	src/session_lock.c src/idle.c src/output_power.c src/capture.c \
 	src/output_mgmt.c src/text_input.c src/xdg_activation.c src/decoration.c \
 	src/input/input.c src/input/keyboard.c src/input/pointer.c
+ifeq ($(XWAYLAND),1)
+WM_SRCS += src/xwayland.c
+endif
 
 CORE_OBJS = $(patsubst src/%.c,build/%.o,$(CORE_SRCS))
 LUA_HOST_OBJS = $(patsubst src/%.c,build/%.o,$(LUA_HOST_SRCS))
@@ -418,7 +435,15 @@ build/sandbox/demo-locker: sandbox/demo-locker.c \
 		build/protocols/ext-session-lock-v1-protocol.c \
 		$(shell $(PKG_CONFIG) --libs $(CLIENT_PKGS))
 
-test: $(TESTS) build/tam-pane build/tests/test_input_headless build/sandbox/demo-locker
+DEMO_BINS = build/sandbox/demo-locker
+ifeq ($(XWAYLAND),1)
+DEMO_BINS += build/sandbox/demo-x11
+build/sandbox/demo-x11: sandbox/demo-x11.c
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(XCB_CFLAGS) -o $@ $< $(XCB_LIBS)
+endif
+
+test: $(TESTS) build/tam-pane build/tests/test_input_headless $(DEMO_BINS)
 	@for t in $(TESTS); do $$t || exit 1; done
 	@if nm -D build/tam-pane | grep -Eq ' luaL?_'; then \
 		echo "ERROR: build/tam-pane exports dynamic lua_* symbols"; exit 1; \

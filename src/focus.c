@@ -10,10 +10,10 @@
 #include "tam-pane/server.h"
 #include "tam-pane/server_events.h"
 #include "tam-pane/text_input.h"
+#include "tam-pane/xwayland.h"
 #include <wlr/types/wlr_layer_shell_v1.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_seat.h>
-#include <wlr/types/wlr_xdg_shell.h>
 
 static void enter_keyboard(struct tp_server *s, struct wlr_surface *surface) {
 	struct wlr_keyboard *kb = wlr_seat_get_keyboard(s->seat);
@@ -78,7 +78,7 @@ void tp_focus_layer(struct tp_server *s, struct tp_layer_surface *ls) {
 		return;
 	struct tp_client *old = s->focused_client;
 	if (old) {
-		wlr_xdg_toplevel_set_activated(old->toplevel, false);
+		tp_client_set_activated(old, false);
 		tp_foreign_toplevel_set_activated(old, false);
 	}
 	s->focused_client = NULL;
@@ -103,7 +103,7 @@ void tp_focus(struct tp_server *s, struct tp_client *c) {
 
 	struct tp_client *old = s->focused_client;
 	if (old && old != c) {
-		wlr_xdg_toplevel_set_activated(old->toplevel, false);
+		tp_client_set_activated(old, false);
 		tp_foreign_toplevel_set_activated(old, false);
 	}
 	s->focused_layer = NULL;
@@ -119,8 +119,9 @@ void tp_focus(struct tp_server *s, struct tp_client *c) {
 
 	wl_list_remove(&c->flink);
 	wl_list_insert(&s->focus_stack, &c->flink);
-	wlr_scene_node_raise_to_top(&c->tree->node);
-	wlr_xdg_toplevel_set_activated(c->toplevel, true);
+	if (c->tree)
+		wlr_scene_node_raise_to_top(&c->tree->node);
+	tp_client_set_activated(c, true);
 	tp_foreign_toplevel_set_activated(c, true);
 	if (c->mon)
 		s->selmon = c->mon;
@@ -132,8 +133,14 @@ void tp_focus(struct tp_server *s, struct tp_client *c) {
 			tp_arrange(c->mon);
 	}
 
-	enter_keyboard(s, c->toplevel->base->surface);
-	tp_text_input_set_focus(s, c->toplevel->base->surface);
+	struct wlr_surface *surf = tp_client_surface(c);
+	if (surf && (!tp_client_is_xwayland(c) || tp_xwayland_accepts_keyboard(c))) {
+		enter_keyboard(s, surf);
+		tp_text_input_set_focus(s, surf);
+	} else {
+		wlr_seat_keyboard_notify_clear_focus(s->seat);
+		tp_text_input_set_focus(s, NULL);
+	}
 	if (old != c)
 		tp_events_emit_window(s, TP_EVENT_WINDOW_FOCUS, c, true);
 }

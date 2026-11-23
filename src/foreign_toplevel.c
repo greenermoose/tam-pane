@@ -94,8 +94,12 @@ void tp_foreign_toplevel_map(struct tp_client *c) {
 		return;
 	ft->client = c;
 
-	const char *title = c->toplevel->title ? c->toplevel->title : "";
-	const char *app_id = c->toplevel->app_id ? c->toplevel->app_id : "";
+	const char *title = tp_client_title(c);
+	const char *app_id = tp_client_app_id(c);
+	if (!title)
+		title = "";
+	if (!app_id)
+		app_id = "";
 
 	ft->wlr_handle =
 		wlr_foreign_toplevel_handle_v1_create(s->foreign_toplevel_mgr);
@@ -156,8 +160,12 @@ void tp_foreign_toplevel_update_info(struct tp_client *c) {
 	if (!c || !c->foreign)
 		return;
 	struct tp_foreign_toplevel *ft = c->foreign;
-	const char *title = c->toplevel->title ? c->toplevel->title : "";
-	const char *app_id = c->toplevel->app_id ? c->toplevel->app_id : "";
+	const char *title = tp_client_title(c);
+	const char *app_id = tp_client_app_id(c);
+	if (!title)
+		title = "";
+	if (!app_id)
+		app_id = "";
 
 	if (ft->wlr_handle) {
 		wlr_foreign_toplevel_handle_v1_set_title(ft->wlr_handle, title);

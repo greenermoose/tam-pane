@@ -1,4 +1,4 @@
-# Wayland protocols (0.2.2)
+# Wayland protocols (0.2.6)
 
 Every Wayland global `tam-pane` advertises must be listed here with its
 reason and its classification (`unprivileged` or `privileged`), and must
@@ -39,8 +39,13 @@ classification here and in `src/security.c` in the same commit.
     disconnect) — e.g. a portal backend started in `startup` plus
     explicitly launched screenshot tools (`grim`). Hidden from all other
     clients, including direct same-UID connections.
+  - **XWayland shell (0.2.6, opt-in `XWAYLAND=1`)** (`xwayland_shell_v1`):
+    granted exclusively to the compositor's own `Xwayland` server connection
+    (`s->xwayland->server->client`). Hidden from all other clients,
+    including direct same-UID connections. Not advertised in default
+    `XWAYLAND=0` builds.
 
-## Active globals (0.2.2)
+## Active globals (0.2.6)
 
 | Interface | Class | Why it is here |
 | --- | --- | --- |
@@ -82,3 +87,4 @@ classification here and in `src/security.c` in the same commit.
 | `zwlr_data_control_manager_v1` | privileged | Unfocused clipboard and primary-selection access (`wl-clipboard`) |
 | `ext_data_control_manager_v1` | privileged | Standard replacement clipboard protocol |
 | `zwp_input_method_manager_v2` | privileged | Input method daemon (`fcitx5`); deactivated and keyboard grabs bypassed while locked |
+| `xwayland_shell_v1` | privileged | Opt-in `XWAYLAND=1` only; granted exclusively to `Xwayland` (`s->xwayland->server->client`) |

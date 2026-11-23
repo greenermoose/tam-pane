@@ -1,0 +1,143 @@
+#!/bin/sh
+# Launch tam-pane 0.2.6 (built with XWAYLAND=1) nested under Hyprland to check
+# opt-in XWayland support:
+#   - automated startup script verifies DISPLAY in `tam-pane msg version`,
+#     maps build/sandbox/demo-x11 alongside the Wayland guide terminal,
+#     checks xwayland=1 / app_id=demo-x11 / geometry, and exercises float,
+#     fullscreen, and scratchpad on the X11 window
+#   - press 'p' inside the blue X11 window to toggle an amber override-redirect
+#     popup, Meta+V to float, Meta+F to fullscreen, Meta+W to close, and
+#     Meta+Shift+E to quit
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+want=$(tr -d '[:space:]' < "$ROOT/VERSION")
+have=$("$ROOT/build/tam-pane" -v 2>/dev/null | awk '{print $2}') || true
+if [ "$have" != "$want" ]; then
+	echo "build/tam-pane is '${have:-missing}', VERSION is $want: run make clean && make XWAYLAND=1 build/tam-pane build/sandbox/demo-x11" >&2
+	exit 1
+fi
+if [ ! -x "$ROOT/build/sandbox/demo-x11" ]; then
+	echo "build/sandbox/demo-x11 is missing: run make clean && make XWAYLAND=1 build/tam-pane build/sandbox/demo-x11" >&2
+	exit 1
+fi
+
+TMPDIR_DEMO=$(mktemp -d "${TMPDIR:-/tmp}/tam-pane-demo-0.2.6.XXXXXX")
+trap 'rm -rf "$TMPDIR_DEMO"' EXIT INT TERM
+
+CFG="$TMPDIR_DEMO/init.lua"
+GUIDE="$TMPDIR_DEMO/guide"
+RES="$TMPDIR_DEMO/xwayland.result"
+CHECK_SH="$TMPDIR_DEMO/check-xwayland.sh"
+
+cat >"$CHECK_SH" <<'SCRIPT'
+#!/bin/sh
+set -u
+TP="$1"
+RES="$2"
+
+ver=$("$TP" msg version 2>&1) || {
+	echo "FAIL version: $ver" >"$RES"
+	exit 1
+}
+if ! printf '%s\n' "$ver" | grep -q '	display=:[0-9]'; then
+	printf 'FAIL expected display=:<n> in version (was tam-pane built with XWAYLAND=1?):\n%s\n' "$ver" >"$RES"
+	exit 1
+fi
+
+# Wait for the XWayland demo-x11 window to map (lazy Xwayland starts on demand).
+i=0
+while [ "$i" -lt 80 ]; do
+	wins=$("$TP" msg windows 2>/dev/null || true)
+	if printf '%s\n' "$wins" | grep -q '	xwayland=1	.*	app_id=demo-x11	'; then
+		break
+	fi
+	sleep 0.1
+	i=$((i + 1))
+done
+
+wins=$("$TP" msg windows 2>&1) || {
+	echo "FAIL windows: $wins" >"$RES"
+	exit 1
+}
+if ! printf '%s\n' "$wins" | grep -q '	xwayland=1	.*	app_id=demo-x11	'; then
+	printf 'FAIL demo-x11 did not map as xwayland=1:\n%s\n' "$wins" >"$RES"
+	exit 1
+fi
+if ! printf '%s\n' "$wins" | grep -q '	xwayland=0	'; then
+	printf 'FAIL expected Wayland guide window (xwayland=0):\n%s\n' "$wins" >"$RES"
+	exit 1
+fi
+if printf '%s\n' "$wins" | grep '	xwayland=1	' | grep -q 'w=0	'; then
+	printf 'FAIL zero-width XWayland window:\n%s\n' "$wins" >"$RES"
+	exit 1
+fi
+
+# Focus demo-x11 if needed, then verify float and fullscreen toggles via IPC.
+foc=$("$TP" msg focused 2>&1 || true)
+if ! printf '%s\n' "$foc" | grep -q '	xwayland=1	'; then
+	"$TP" msg dispatch focus next >/dev/null 2>&1 || true
+fi
+"$TP" msg dispatch toggle_float >/dev/null 2>&1 || {
+	echo "FAIL toggle_float on XWayland" >"$RES"
+	exit 1
+}
+foc=$("$TP" msg focused 2>&1 || true)
+if ! printf '%s\n' "$foc" | grep -q '	floating=1	.*	xwayland=1	'; then
+	printf 'FAIL expected floating=1 on XWayland window:\n%s\n' "$foc" >"$RES"
+	exit 1
+fi
+"$TP" msg dispatch toggle_float >/dev/null 2>&1 || true
+
+"$TP" msg dispatch toggle_fullscreen >/dev/null 2>&1 || {
+	echo "FAIL toggle_fullscreen on XWayland" >"$RES"
+	exit 1
+}
+foc=$("$TP" msg focused 2>&1 || true)
+if ! printf '%s\n' "$foc" | grep -q '	fullscreen=1	.*	xwayland=1	'; then
+	printf 'FAIL expected fullscreen=1 on XWayland window:\n%s\n' "$foc" >"$RES"
+	exit 1
+fi
+"$TP" msg dispatch toggle_fullscreen >/dev/null 2>&1 || true
+
+echo OK >"$RES"
+SCRIPT
+chmod +x "$CHECK_SH"
+
+{
+	printf 'local GUIDE = "%s"\n' "$GUIDE"
+	printf 'local TP_BIN = "%s"\n' "$ROOT/build/tam-pane"
+	printf 'local DEMO_X11 = "%s"\n' "$ROOT/build/sandbox/demo-x11"
+	printf 'local RES = "%s"\n' "$RES"
+	printf 'local CHECK_SH = "%s"\n' "$CHECK_SH"
+	cat "$ROOT/sandbox/demo-0.2.6.lua"
+} >"$CFG"
+
+cat >"$GUIDE" <<'GUIDE'
+=== tam-pane 0.2.6 demo: opt-in XWayland (XWAYLAND=1) ===
+
+ 1. On startup, the blue X11 window (demo-x11) connected lazily to Xwayland
+    and tiled beside this Wayland terminal. An automated IPC check verified
+    DISPLAY, xwayland=1, geometry, floating, and fullscreen on demo-x11.
+ 2. Click or focus the blue X11 window and try:
+      - p        toggle an amber override-redirect X11 popup
+      - Meta+V   toggle floating (drag with Meta+Left-drag)
+      - Meta+F   toggle fullscreen
+      - Meta+W   close the X11 window via WM_DELETE_WINDOW
+ 3. Press Meta+Shift+E to quit; the launcher verifies the automated check.
+
+GUIDE
+
+"$ROOT/tools/nested-input" -c "$CFG" -s '' || true
+
+echo
+if [ -f "$RES" ] && grep -qx 'OK' "$RES"; then
+	echo "OK: XWayland lazy startup, managed tiling/float/fullscreen, and IPC verified"
+	echo "PASS: 0.2.6 XWayland check verified"
+else
+	echo "FAIL: automated 0.2.6 XWayland check did not succeed" >&2
+	if [ -f "$RES" ]; then
+		sed 's/^/  /' "$RES" >&2
+	fi
+	exit 1
+fi
