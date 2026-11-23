@@ -3,6 +3,7 @@
 #include "tam-pane/lua.h"
 #include "tam-pane/server.h"
 #include "tam-pane/spawn.h"
+#include <getopt.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,12 +13,12 @@
 #include <wlr/util/log.h>
 
 static void usage(FILE *out) {
-	fprintf(out, "usage: tam-pane [-v] [-d] [-c config-file] [-s startup-command]\n"
+	fprintf(out, "usage: tam-pane [-v | --version] [-d] [-c config-file] [-s startup-command]\n"
 				 "       tam-pane msg [-S socket] <command> [args...]\n"
-				 "  -v  print the version and exit\n"
-				 "  -d  log debug messages\n"
-				 "  -c  load Lua configuration from config-file\n"
-				 "  -s  run a command with /bin/sh -c once started\n");
+				 "  -v, --version  print the version and exit\n"
+				 "  -d             log debug messages\n"
+				 "  -c             load Lua configuration from config-file\n"
+				 "  -s             run a command with /bin/sh -c once started\n");
 }
 
 int main(int argc, char *argv[]) {
@@ -27,9 +28,13 @@ int main(int argc, char *argv[]) {
 	const char *startup = NULL;
 	const char *config_path = NULL;
 	bool debug = false;
+	const struct option long_opts[] = {
+		{"version", no_argument, NULL, 'v'},
+		{NULL, 0, NULL, 0},
+	};
 	int opt;
 
-	while ((opt = getopt(argc, argv, "vdc:s:h")) != -1) {
+	while ((opt = getopt_long(argc, argv, "vdc:s:h", long_opts, NULL)) != -1) {
 		switch (opt) {
 		case 'v':
 			printf("tam-pane %s\n", TP_VERSION);

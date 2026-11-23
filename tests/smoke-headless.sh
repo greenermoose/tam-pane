@@ -3,6 +3,7 @@
 # private XDG_RUNTIME_DIR, so there is no screen, no input device and no
 # effect on the running desktop.
 #
+#   0. -v and --version print identical version lines and exit 0;
 #   1. start, open the Wayland socket, exit 0 on SIGTERM;
 #   2. when foot is installed: map two windows, let one close, and still
 #      exit 0 on SIGTERM while the other is connected;
@@ -73,6 +74,21 @@ report() {
 		fail=1
 	fi
 }
+
+# 0. Version flags: -v and --version print identical version output and exit 0.
+name=version-flags
+v_out=$("$bin" -v 2>&1)
+v_rc=$?
+ver_flag_out=$("$bin" --version 2>&1)
+ver_flag_rc=$?
+log=$(printf '%s\n%s\n' "$v_out" "$ver_flag_out")
+if [ "$v_rc" -eq 0 ] && [ "$ver_flag_rc" -eq 0 ] &&
+	[ "$v_out" = "$ver_flag_out" ] &&
+	printf '%s\n' "$v_out" | grep -q '^tam-pane '; then
+	report ok
+else
+	report bad "-v rc=$v_rc out='$v_out', --version rc=$ver_flag_rc out='$ver_flag_out'"
+fi
 
 run start-stop socket
 if [ "$socket" = yes ] && [ "$status" -eq 0 ]; then report ok
