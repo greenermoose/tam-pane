@@ -5,10 +5,10 @@ of versions. Versions follow semantic versioning: during 0.x, the minor
 number marks a phase's big step and the patch number marks each
 milestone inside it.
 
-**Current version:** 0.2.4 (Phase P2 complete at 0.1.4, R1 hardening
+**Current version:** 0.2.5 (Phase P2 complete at 0.1.4, R1 hardening
 0.1.5–0.1.19 accepted; Phase P3 in progress: 0.2.0–0.2.3 accepted by Fred
-on 2026-11-22, 0.2.4 accepted on 2026-11-23; development continues on
-branch `dev`).
+on 2026-11-22, 0.2.4–0.2.5 accepted on 2026-11-23; development continues
+on branch `dev`).
 
 ## Tamlinux timing
 

@@ -1,4 +1,4 @@
-# Data structures (0.2.4)
+# Data structures (0.2.5)
 
 This file describes the structures as they are built today. Update it in
 the same commit as any change to them.
@@ -22,10 +22,10 @@ the same commit as any change to them.
   - the listeners, grouped by the module that owns them;
   - `grab` (`struct tp_pointer_grab`), explicit state for an active
     `Meta+Left/Right` pointer move or resize drag (no globals). A tiled
-    drag (`struct tp_dwindle_drag`) holds split-node pointers, plus the
-    tree and generation it began on. When `tp_dwindle_drag_valid` fails,
-    the drag begins again from the pointer, so it never touches a freed
-    node (0.1.5).
+    drag (`struct tp_layout_drag`, 0.2.5) wraps engine-specific drag state
+    (dwindle split nodes, master-stack `mfact`, or scroller column width)
+    with a generation counter. When `tp_layout_drag_valid` fails, the drag
+    begins again from the pointer, so it never touches freed state (0.1.5).
   - `layer_shell` (`struct wlr_layer_shell_v1`) and `focused_layer`
     (`struct tp_layer_surface *`) for exclusive or on-demand layer keyboard
     focus.
@@ -128,9 +128,12 @@ the same commit as any change to them.
   combined views. Focus changes update only the active slot; invalid
   candidates fall back to the most recently focused visible window.
 - **`view`:** the monitor's tag view (below).
-- **`trees`:** `TP_TAG_SLOTS` dwindle trees, one per single tag plus slot
-  0, which is shared by every multi-tag view. `tp_monitor_tree()` returns
-  the tree for the current view, so each tag keeps its own layout.
+- **`layouts`:** `TP_TAG_SLOTS` `struct tp_layout` slots (`include/tam-pane/layout/layout.h`,
+  0.2.5), one per single tag plus slot 0 for multi-tag views. Each slot
+  holds its active `enum tp_layout_kind` (`dwindle`, `master`, `scroller`,
+  or `monocle`) plus the per-engine state so switching tags or layouts
+  preserves split ratios, `mfact`/`nmaster`, and scroller column widths.
+  `tp_monitor_layout()` returns the slot for the current view.
 - **`workspaces`:** opaque `struct tp_monitor_workspaces *`
   (`src/workspace.c`, 0.2.0) holding this monitor's
   `ext_workspace_group_handle_v1` and 9 `ext_workspace_handle_v1` entries.
@@ -155,8 +158,9 @@ the same commit as any change to them.
 - One xdg toplevel.
 - **Fields:** its monitor; `home_output` (remembered output name when
   displaced by hot-plug disconnect, cleared when reclaimed or explicitly moved
-  to another monitor); its tag mask; whether it is mapped, floating or
-  fullscreen; its current and floating geometry; its scene tree; and its
+  to another monitor); its tag mask; whether it is mapped, floating,
+  fullscreen, or in the scratchpad (`scratchpad`, `scratchpad_visible`,
+  0.2.5); its current and floating geometry; its scene tree; and its
   listeners.
 - **Kept small on purpose.** Effects, animations and Lua state will live
   in their own modules, keyed by the client, not as more fields.

@@ -288,6 +288,11 @@ static int l_tp_rule(lua_State *L) {
 			copy_nonempty_str(L, -1, "tp.rule.monitor", entry.monitor,
 							  sizeof(entry.monitor));
 			entry.has_monitor = true;
+		} else if (strcmp(key, "scratchpad") == 0) {
+			if (lua_type(L, -1) != LUA_TBOOLEAN)
+				return luaL_error(L, "tp.rule.scratchpad: expected boolean");
+			entry.scratchpad = lua_toboolean(L, -1) != 0;
+			entry.has_scratchpad = true;
 		} else {
 			return luaL_error(L, "tp.rule: unknown key '%s'", key);
 		}
@@ -299,9 +304,11 @@ static int l_tp_rule(lua_State *L) {
 	if (has_tag_single && has_tags_table)
 		return luaL_error(L, "tp.rule: cannot specify both 'tag' and 'tags'");
 	if (!entry.has_tags && !entry.has_floating && !entry.has_size &&
-		entry.pos_mode == TP_RULE_POS_NONE && !entry.has_monitor)
+		entry.pos_mode == TP_RULE_POS_NONE && !entry.has_monitor &&
+		!entry.has_scratchpad)
 		return luaL_error(L, "tp.rule: must set at least one property "
-							 "(tag, tags, floating, size, position, monitor)");
+							 "(tag, tags, floating, size, position, monitor, "
+							 "scratchpad)");
 
 	entry.id = ++lua->next_rule_id;
 	if (!rule_list_append(&lua->staged_rules, &entry))
@@ -428,6 +435,10 @@ bool tp_lua_eval_rules(struct tp_lua *lua, const char *app_id,
 		if (r->has_monitor) {
 			out->has_monitor = true;
 			memcpy(out->monitor, r->monitor, sizeof(out->monitor));
+		}
+		if (r->has_scratchpad) {
+			out->has_scratchpad = true;
+			out->scratchpad = r->scratchpad;
 		}
 	}
 

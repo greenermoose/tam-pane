@@ -1,0 +1,61 @@
+W30 MASTER-STACK, SCROLLER, MONOCLE LAYOUTS AND SCRATCHPAD (0.2.5)
+
+Date: 2026-11-23
+AI harness: agy 1.5.14
+AI model: Gemini 4 Neon (Medium)
+
+GUIDANCE
+
+  Fred: "/plan Do the next work slice for tam-pane"
+  Fred: "1 confirmed / 2 confirmed / 3 confirmed / Plan approved. proceed."
+  Fred: "pass. Commit and finish"
+
+DONE
+
+  - 0.2.5 (Phase P3, plans/P3-daily-parity.md): added master-stack,
+    scroller, and monocle layouts behind a unified tp_layout interface,
+    plus a floating scratchpad:
+    - Pure layout engines (no wlroots, in CORE_SRCS):
+      include/tam-pane/layout/{master,scroller,monocle,layout}.h and
+      src/layout/{master,scroller,monocle,layout}.c.
+    - Per-tag-slot tp_layout on tp_monitor (replacing bare dwindle trees),
+      preserving per-engine state across tag and layout switches; unified
+      sync/layout in src/layout/arrange.c, focus-triggered re-arrange for
+      scroller/monocle in src/focus.c, and Meta+Right-drag support across
+      dwindle, master-stack, and scroller in src/input/pointer.c.
+    - Floating scratchpad in src/client.c (tp_client_scratchpad_move,
+      tp_scratchpad_toggle) that stays visible across tag switches,
+      carries across monitors, releases on Meta+V or tag assignment, and
+      supports `scratchpad = true` in tp.rule.
+    - Lua API: tp.config keys (`layout`, `master_ratio`, `master_count`,
+      `scroller_width`), tp.dsp.layout, tp.dsp.scratchpad, default
+      bindings (Meta+Space, Meta+Shift+Space, Meta+minus, Meta+Shift+minus).
+    - IPC: `layout=<name>` in `monitors`, `scratchpad=<0|1>` in `windows`
+      and `focused`, scratchpad excluded from `tags` occupied mask, and
+      `dispatch layout ...` / `dispatch scratchpad ...`.
+  - Failing-first check confirmed `layout set master` and `scratchpad
+    toggle` dispatches failed against 0.2.4 in tests/test_ipc.c.
+  - Added tests/test_layouts.c (102 checks) and expanded tests/test_lua.c
+    (537 checks), tests/test_ipc.c (111 checks), and
+    tests/test_input_headless.c (734 checks).
+  - Bumped VERSION to 0.2.5, added sandbox/demo-0.2.5 and
+    sandbox/demo-0.2.5.lua, and updated README, ROADMAP.md,
+    plans/P3-daily-parity.md, arch/data-structures.md, arch/lua-api.md,
+    arch/ipc.md, and work/WHATNOW.
+  - Clean build and full automated suite pass: 28 tag, 143 dwindle, 102
+    layouts, 537 Lua, 111 IPC, 5 smoke-headless, 734 headless input,
+    nm -D symbol check, and tests/test_nested_input.py.
+    0.2.5 binary SHA-256:
+    43a11d39e5dae0f44f9be3f3911b1dc21d51a330b1fa497c3d9684aad29bdbe7.
+
+  - Fred ran sandbox/demo-0.2.5 and accepted 0.2.5 ("pass. Commit and
+    finish").
+
+FAILED
+
+  - Nothing.
+
+HANDOFF
+
+  - 0.2.5 is accepted. Next milestone in P3: 0.2.6 (XWayland, behind a
+    build option).

@@ -61,7 +61,8 @@ LUA_SRCS = third_party/lua/lapi.c third_party/lua/lauxlib.c \
 LUA_OBJS = $(patsubst third_party/lua/%.c,build/lua/%.o,$(LUA_SRCS))
 
 # Pure logic: no wlroots, so the unit tests build without it.
-CORE_SRCS = src/tags.c src/layout/dwindle.c
+CORE_SRCS = src/tags.c src/layout/dwindle.c src/layout/master.c \
+	src/layout/scroller.c src/layout/monocle.c src/layout/layout.c
 LUA_HOST_SRCS = src/lua.c src/lua_bindings.c src/lua_events.c src/lua_rules.c \
 	src/settings.c src/spawn.c src/ipc_proto.c
 # The compositor proper.
@@ -75,8 +76,8 @@ WM_SRCS = src/main.c src/server.c src/security.c src/events.c src/ipc.c \
 CORE_OBJS = $(patsubst src/%.c,build/%.o,$(CORE_SRCS))
 LUA_HOST_OBJS = $(patsubst src/%.c,build/%.o,$(LUA_HOST_SRCS))
 WM_OBJS = $(patsubst src/%.c,build/%.o,$(WM_SRCS))
-TESTS = build/tests/test_tags build/tests/test_dwindle build/tests/test_lua \
-	build/tests/test_ipc
+TESTS = build/tests/test_tags build/tests/test_dwindle \
+	build/tests/test_layouts build/tests/test_lua build/tests/test_ipc
 
 PROTO_HEADERS = build/protocols/xdg-shell-protocol.h \
 	build/protocols/wlr-layer-shell-unstable-v1-protocol.h \
@@ -387,17 +388,17 @@ build/protocols/xdg-decoration-unstable-v1-protocol.c: $(WAYLAND_PROTOCOLS)/unst
 	@mkdir -p $(@D)
 	$(WAYLAND_SCANNER) private-code $< $@
 
-build/tests/test_lua: tests/test_lua.c build/tags.o $(LUA_HOST_OBJS) $(LUA_OBJS) $(LIBTAM) tests/check.h
+build/tests/test_lua: tests/test_lua.c $(CORE_OBJS) $(LUA_HOST_OBJS) $(LUA_OBJS) $(LIBTAM) tests/check.h
 	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(XKB_CFLAGS) -o $@ $< build/tags.o $(LUA_HOST_OBJS) $(LUA_OBJS) $(LIBTAM) $(XKB_LIBS) -lm
+	$(CC) $(CFLAGS) $(XKB_CFLAGS) -o $@ $< $(CORE_OBJS) $(LUA_HOST_OBJS) $(LUA_OBJS) $(LIBTAM) $(XKB_LIBS) -lm
 
-build/tests/test_ipc: tests/test_ipc.c build/tags.o $(LUA_HOST_OBJS) $(LUA_OBJS) $(LIBTAM) tests/check.h
+build/tests/test_ipc: tests/test_ipc.c $(CORE_OBJS) $(LUA_HOST_OBJS) $(LUA_OBJS) $(LIBTAM) tests/check.h
 	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(XKB_CFLAGS) -o $@ $< build/tags.o $(LUA_HOST_OBJS) $(LUA_OBJS) $(LIBTAM) $(XKB_LIBS) -lm
+	$(CC) $(CFLAGS) $(XKB_CFLAGS) -o $@ $< $(CORE_OBJS) $(LUA_HOST_OBJS) $(LUA_OBJS) $(LIBTAM) $(XKB_LIBS) -lm
 
 build/tests/test_%: tests/test_%.c $(CORE_OBJS) tests/check.h
 	@mkdir -p $(@D)
-	$(CC) $(CFLAGS) -o $@ $< $(CORE_OBJS)
+	$(CC) $(CFLAGS) -o $@ $< $(CORE_OBJS) -lm
 
 build/tests/test_input_headless: tests/test_input_headless.c $(CORE_OBJS) \
 	$(LUA_HOST_OBJS) $(filter-out build/main.o,$(WM_OBJS)) $(PROTO_OBJS) \

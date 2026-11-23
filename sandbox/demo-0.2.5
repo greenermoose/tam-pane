@@ -1,0 +1,137 @@
+#!/bin/sh
+# Launch tam-pane 0.2.5 nested under Hyprland to check the shared layout
+# interface (dwindle, master-stack, scroller, monocle) and floating scratchpad:
+#   - automated startup script opens 3 windows, cycles all 4 layouts via
+#     `tam-pane msg`, verifies `monitors` layout reporting and window geometry,
+#     and exercises `scratchpad move` + `scratchpad toggle`
+#   - you can interactively try Meta+Space / Meta+Shift+Space (layouts) and
+#     Meta+Shift+- / Meta+- (scratchpad) before quitting with Meta+Shift+E
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+want=$(tr -d '[:space:]' < "$ROOT/VERSION")
+have=$("$ROOT/build/tam-pane" -v 2>/dev/null | awk '{print $2}') || true
+if [ "$have" != "$want" ]; then
+	echo "build/tam-pane is '${have:-missing}', VERSION is $want: run make first" >&2
+	exit 1
+fi
+
+TMPDIR_DEMO=$(mktemp -d "${TMPDIR:-/tmp}/tam-pane-demo-0.2.5.XXXXXX")
+trap 'rm -rf "$TMPDIR_DEMO"' EXIT INT TERM
+
+CFG="$TMPDIR_DEMO/init.lua"
+GUIDE="$TMPDIR_DEMO/guide"
+RES="$TMPDIR_DEMO/layouts.result"
+CHECK_SH="$TMPDIR_DEMO/check-layouts.sh"
+
+cat >"$CHECK_SH" <<'SCRIPT'
+#!/bin/sh
+set -u
+TP="$1"
+RES="$2"
+
+# Wait for the three startup windows to map.
+i=0
+while [ "$i" -lt 40 ]; do
+	wins=$("$TP" msg windows 2>/dev/null || true)
+	cnt=$(printf '%s\n' "$wins" | grep -c '^window	' || true)
+	if [ "$cnt" -ge 3 ]; then
+		break
+	fi
+	sleep 0.1
+	i=$((i + 1))
+done
+
+if [ "${cnt:-0}" -lt 3 ]; then
+	echo "FAIL expected >=3 windows, got ${cnt:-0}" >"$RES"
+	exit 1
+fi
+
+# Verify cycling through master, scroller, monocle, and back to dwindle.
+for lay in master scroller monocle dwindle; do
+	"$TP" msg dispatch layout set "$lay" >/dev/null 2>&1 || {
+		echo "FAIL dispatch layout set $lay" >"$RES"
+		exit 1
+	}
+	mons=$("$TP" msg monitors 2>&1) || {
+		echo "FAIL monitors: $mons" >"$RES"
+		exit 1
+	}
+	if ! printf '%s\n' "$mons" | grep -q "	layout=$lay\$"; then
+		printf 'FAIL expected layout=%s in monitors:\n%s\n' "$lay" "$mons" >"$RES"
+		exit 1
+	fi
+	wins=$("$TP" msg windows 2>&1) || {
+		echo "FAIL windows: $wins" >"$RES"
+		exit 1
+	}
+	if printf '%s\n' "$wins" | grep -q 'w=0	'; then
+		printf 'FAIL zero-width window in layout %s:\n%s\n' "$lay" "$wins" >"$RES"
+		exit 1
+	fi
+done
+
+# Verify scratchpad move, toggle on, and release back to tag.
+"$TP" msg dispatch scratchpad move >/dev/null 2>&1 || {
+	echo "FAIL scratchpad move" >"$RES"
+	exit 1
+}
+"$TP" msg dispatch scratchpad toggle >/dev/null 2>&1 || {
+	echo "FAIL scratchpad toggle on" >"$RES"
+	exit 1
+}
+foc=$("$TP" msg focused 2>&1) || {
+	echo "FAIL focused: $foc" >"$RES"
+	exit 1
+}
+if ! printf '%s\n' "$foc" | grep -q '	scratchpad=1	'; then
+	printf 'FAIL expected scratchpad=1 on focused window:\n%s\n' "$foc" >"$RES"
+	exit 1
+fi
+"$TP" msg dispatch scratchpad move >/dev/null 2>&1 || {
+	echo "FAIL scratchpad release" >"$RES"
+	exit 1
+}
+"$TP" msg dispatch toggle_float >/dev/null 2>&1 || true
+
+echo OK >"$RES"
+SCRIPT
+chmod +x "$CHECK_SH"
+
+{
+	printf 'local GUIDE = "%s"\n' "$GUIDE"
+	printf 'local TP_BIN = "%s"\n' "$ROOT/build/tam-pane"
+	printf 'local RES = "%s"\n' "$RES"
+	printf 'local CHECK_SH = "%s"\n' "$CHECK_SH"
+	cat "$ROOT/sandbox/demo-0.2.5.lua"
+} >"$CFG"
+
+cat >"$GUIDE" <<'GUIDE'
+=== tam-pane 0.2.5 demo: master-stack, scroller, monocle & scratchpad ===
+
+ 1. On startup, 3 tiled terminals opened and an automated IPC check verified
+    all 4 layouts (dwindle, master, scroller, monocle) and scratchpad
+    move/toggle/release.
+ 2. Press Meta+Space (or Meta+Shift+Space) to cycle layouts:
+      dwindle -> master -> scroller -> monocle
+    Use Meta+J / Meta+K to move focus (scrolls in scroller, switches in monocle).
+    Use Meta+Alt+Left/Right or Meta+Right-drag to resize splits/master/columns.
+ 3. Press Meta+Shift+- to stow the focused window into the scratchpad, then
+    Meta+- to toggle it over any tag (try Meta+2 then Meta+-).
+ 4. Press Meta+Shift+E to quit; the launcher verifies the automated check.
+
+GUIDE
+
+"$ROOT/tools/nested-input" -c "$CFG" -s '' || true
+
+echo
+if [ -f "$RES" ] && grep -qx 'OK' "$RES"; then
+	echo "OK: all 4 layouts (dwindle, master, scroller, monocle) and scratchpad verified"
+	echo "PASS: 0.2.5 layouts and scratchpad check verified"
+else
+	echo "FAIL: automated 0.2.5 layout/scratchpad check did not succeed" >&2
+	if [ -f "$RES" ]; then
+		sed 's/^/  /' "$RES" >&2
+	fi
+	exit 1
+fi

@@ -8,7 +8,7 @@
 #define TAM_PANE_SERVER_H
 
 #include "tam-pane/geom.h"
-#include "tam-pane/layout/dwindle.h"
+#include "tam-pane/layout/layout.h"
 #include "tam-pane/server_events.h"
 #include "tam-pane/settings.h"
 #include <limits.h>
@@ -75,7 +75,7 @@ struct tp_pointer_grab {
 	struct tp_rect start_geom;
 	uint32_t edges;
 	bool tiled;
-	struct tp_dwindle_drag drag;
+	struct tp_layout_drag drag;
 };
 
 /* Scene layers, bottom to top. */

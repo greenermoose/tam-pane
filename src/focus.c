@@ -3,6 +3,8 @@
 #include "tam-pane/client.h"
 #include "tam-pane/foreign_toplevel.h"
 #include "tam-pane/layer.h"
+#include "tam-pane/layout/arrange.h"
+#include "tam-pane/layout/layout.h"
 #include "tam-pane/monitor.h"
 #include "tam-pane/security.h"
 #include "tam-pane/server.h"
@@ -122,8 +124,13 @@ void tp_focus(struct tp_server *s, struct tp_client *c) {
 	tp_foreign_toplevel_set_activated(c, true);
 	if (c->mon)
 		s->selmon = c->mon;
-	if (c->mon && tp_client_visible(c))
+	if (c->mon && tp_client_visible(c) && !c->scratchpad)
 		c->mon->focus[tp_tags_slot(tp_tagview_current(&c->mon->view))] = c;
+	if (c->mon && !c->floating && !c->fullscreen && !c->scratchpad) {
+		enum tp_layout_kind kind = tp_monitor_layout(c->mon)->kind;
+		if (kind == TP_LAYOUT_SCROLLER || kind == TP_LAYOUT_MONOCLE)
+			tp_arrange(c->mon);
+	}
 
 	enter_keyboard(s, c->toplevel->base->surface);
 	tp_text_input_set_focus(s, c->toplevel->base->surface);

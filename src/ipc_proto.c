@@ -3,6 +3,7 @@
  * Pure IPC wire helpers and the `tam-pane msg` CLI client (no wlroots).
  */
 #include "tam-pane/ipc.h"
+#include "tam-pane/layout/layout.h"
 #include "tam-pane/tags.h"
 #include <ctype.h>
 #include <errno.h>
@@ -422,6 +423,84 @@ bool tp_ipc_parse_dispatch(const char *args, struct tp_action *out,
 		return true;
 	}
 
+	if (strcmp(verb, "layout") == 0) {
+		char sub[32], arg[32];
+		if (!next_token(&p, sub, sizeof(sub))) {
+			if (err && err_size > 0)
+				snprintf(err, err_size,
+						 "layout expects 'set', 'next', 'prev', or 'nmaster'");
+			return false;
+		}
+		if (strcmp(sub, "next") == 0 || strcmp(sub, "prev") == 0) {
+			if (has_extra_tokens(p)) {
+				if (err && err_size > 0)
+					snprintf(err, err_size, "layout %s takes no arguments", sub);
+				return false;
+			}
+			out->kind = TP_ACT_LAYOUT_CYCLE;
+			out->dir = strcmp(sub, "next") == 0 ? 1 : -1;
+			return true;
+		}
+		if (strcmp(sub, "set") == 0) {
+			enum tp_layout_kind kind;
+			if (!next_token(&p, arg, sizeof(arg)) ||
+				!tp_layout_kind_from_name(arg, &kind) || has_extra_tokens(p)) {
+				if (err && err_size > 0)
+					snprintf(err, err_size,
+							 "layout set expects 'dwindle', 'master', "
+							 "'scroller', or 'monocle'");
+				return false;
+			}
+			out->kind = TP_ACT_LAYOUT_SET;
+			out->dir = (int)kind;
+			return true;
+		}
+		if (strcmp(sub, "nmaster") == 0) {
+			if (!next_token(&p, arg, sizeof(arg)) || has_extra_tokens(p)) {
+				if (err && err_size > 0)
+					snprintf(err, err_size,
+							 "layout nmaster expects 'inc' or 'dec'");
+				return false;
+			}
+			if (strcmp(arg, "inc") == 0 || strcmp(arg, "+1") == 0)
+				out->dir = 1;
+			else if (strcmp(arg, "dec") == 0 || strcmp(arg, "-1") == 0)
+				out->dir = -1;
+			else {
+				if (err && err_size > 0)
+					snprintf(err, err_size,
+							 "layout nmaster expects 'inc' or 'dec'");
+				return false;
+			}
+			out->kind = TP_ACT_LAYOUT_NMASTER;
+			return true;
+		}
+		if (err && err_size > 0)
+			snprintf(err, err_size, "unknown layout action '%s'", sub);
+		return false;
+	}
+
+	if (strcmp(verb, "scratchpad") == 0) {
+		char sub[32];
+		if (!next_token(&p, sub, sizeof(sub)) || has_extra_tokens(p)) {
+			if (err && err_size > 0)
+				snprintf(err, err_size,
+						 "scratchpad expects 'toggle' or 'move'");
+			return false;
+		}
+		if (strcmp(sub, "toggle") == 0) {
+			out->kind = TP_ACT_SCRATCHPAD_TOGGLE;
+			return true;
+		}
+		if (strcmp(sub, "move") == 0) {
+			out->kind = TP_ACT_SCRATCHPAD_MOVE;
+			return true;
+		}
+		if (err && err_size > 0)
+			snprintf(err, err_size, "scratchpad expects 'toggle' or 'move'");
+		return false;
+	}
+
 	if (strcmp(verb, "spawn") == 0) {
 		const char *cmd = skip_ws(p);
 		if (!cmd || !*cmd) {
@@ -494,6 +573,19 @@ tam_str_t tp_ipc_format_action(tam_str_t s, const struct tp_action *act) {
 	case TP_ACT_MONITOR_MOVE:
 		return tam_str_cat(s, act->dir < 0 ? "monitor move prev"
 										   : "monitor move next");
+	case TP_ACT_LAYOUT_SET:
+		return tam_str_cat_printf(
+			s, "layout set %s",
+			tp_layout_kind_name((enum tp_layout_kind)act->dir));
+	case TP_ACT_LAYOUT_CYCLE:
+		return tam_str_cat(s, act->dir < 0 ? "layout prev" : "layout next");
+	case TP_ACT_LAYOUT_NMASTER:
+		return tam_str_cat(s, act->dir < 0 ? "layout nmaster dec"
+										   : "layout nmaster inc");
+	case TP_ACT_SCRATCHPAD_TOGGLE:
+		return tam_str_cat(s, "scratchpad toggle");
+	case TP_ACT_SCRATCHPAD_MOVE:
+		return tam_str_cat(s, "scratchpad move");
 	}
 	return tam_str_cat(s, "unknown");
 }

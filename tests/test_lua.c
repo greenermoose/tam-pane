@@ -432,8 +432,8 @@ static void test_default_bindings(void) {
 	CHECK(lua != NULL);
 	tp_lua_set_action_fn(lua, mock_action, NULL);
 
-	/* 13 core + 12 directional + 36 tag defaults = 61 bindings. */
-	CHECK(tp_lua_binding_count(lua) == 61);
+	/* 17 core + 12 directional + 36 tag defaults = 65 bindings. */
+	CHECK(tp_lua_binding_count(lua) == 65);
 	CHECK(!tp_lua_has_unmodified_bindings(lua));
 
 	action_count = 0;
@@ -1162,7 +1162,7 @@ static void test_live_reload(void) {
 	CHECK(write_text(cfg_path, v1));
 	CHECK(tp_lua_reload_file(&lua, cfg_path, &cur, err, sizeof(err)));
 	CHECK(cur.gap_inner == 18 && cur.gap_outer == 24 && cur.repeat_rate == 50);
-	CHECK(tp_lua_binding_count(lua) == 63);
+	CHECK(tp_lua_binding_count(lua) == 67);
 	CHECK(tp_lua_hook_count(lua, TP_EVENT_WINDOW_OPEN) == 1);
 	CHECK(tp_lua_rule_count(lua) == 1);
 
@@ -1191,7 +1191,7 @@ static void test_live_reload(void) {
 	CHECK(cur.gap_inner == 4);
 	CHECK(cur.gap_outer == defs.gap_outer);
 	CHECK(cur.repeat_rate == defs.repeat_rate);
-	CHECK(tp_lua_binding_count(lua) == 62);
+	CHECK(tp_lua_binding_count(lua) == 66);
 	CHECK(!tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_x, false));
 	reset_spawn_log();
 	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_z, false));
@@ -1223,7 +1223,7 @@ static void test_live_reload(void) {
 		CHECK(err[0] != '\0');
 		CHECK(cur.gap_inner == 4);
 		CHECK(cur.gap_outer == defs.gap_outer);
-		CHECK(tp_lua_binding_count(lua) == 62);
+		CHECK(tp_lua_binding_count(lua) == 66);
 		CHECK(tp_lua_rule_count(lua) == 1);
 		CHECK(tp_lua_hook_count(lua, TP_EVENT_WINDOW_OPEN) == 1);
 	}
@@ -1424,6 +1424,86 @@ static void test_capture_launcher(void) {
 	tp_lua_destroy(lua);
 }
 
+static void test_layouts_and_scratchpad(void) {
+	struct tp_lua *lua = tp_lua_create();
+	CHECK(lua != NULL);
+	tp_lua_set_action_fn(lua, mock_action, NULL);
+
+	struct tp_settings base, out;
+	tp_settings_defaults(&base);
+	out = base;
+	char err[256] = {0};
+
+	/* Valid layout config + dispatchers + scratchpad rule */
+	const char *cfg =
+		"tp.config{\n"
+		"  layout = 'scroller',\n"
+		"  master_ratio = 0.65,\n"
+		"  master_count = 2,\n"
+		"  scroller_width = 0.75,\n"
+		"}\n"
+		"tp.bind('Meta+m', tp.dsp.layout('set', 'master'))\n"
+		"tp.bind('Meta+Shift+m', tp.dsp.layout('nmaster', 1))\n"
+		"tp.rule{ match = { app_id = '^notes$' }, scratchpad = true }\n";
+	CHECK(tp_lua_exec_string(lua, cfg, strlen(cfg), "layout_cfg",
+							 TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+							 TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+							 sizeof(err)));
+	CHECK(out.layout == 2); /* TP_LAYOUT_SCROLLER */
+	CHECK(out.master_ratio > 0.64f && out.master_ratio < 0.66f);
+	CHECK(out.master_count == 2);
+	CHECK(out.scroller_width > 0.74f && out.scroller_width < 0.76f);
+
+	/* Default bindings: Meta+Space, Meta+Shift+Space, Meta+minus, Meta+Shift+minus */
+	action_count = 0;
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_space, false));
+	CHECK(action_count == 1 &&
+		  last_action.kind == TP_ACT_LAYOUT_CYCLE && last_action.dir == 1);
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT, XKB_KEY_space,
+							false));
+	CHECK(action_count == 2 &&
+		  last_action.kind == TP_ACT_LAYOUT_CYCLE && last_action.dir == -1);
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_minus, false));
+	CHECK(action_count == 3 &&
+		  last_action.kind == TP_ACT_SCRATCHPAD_TOGGLE);
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT, XKB_KEY_minus,
+							false));
+	CHECK(action_count == 4 &&
+		  last_action.kind == TP_ACT_SCRATCHPAD_MOVE);
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_m, false));
+	CHECK(action_count == 5 &&
+		  last_action.kind == TP_ACT_LAYOUT_SET && last_action.dir == 1);
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT, XKB_KEY_m, false));
+	CHECK(action_count == 6 &&
+		  last_action.kind == TP_ACT_LAYOUT_NMASTER &&
+		  last_action.dir == 1);
+
+	/* Scratchpad rule evaluation */
+	struct tp_rule_result r = {0};
+	CHECK(tp_lua_eval_rules(lua, "notes", "scratch", &r));
+	CHECK(r.matched && r.has_scratchpad && r.scratchpad);
+
+	/* Invalid config and dispatcher arguments rejected */
+	const char *bad[] = {
+		"tp.config{ layout = 'grid' }",
+		"tp.config{ master_ratio = 0.01 }",
+		"tp.config{ master_count = 0 }",
+		"tp.config{ scroller_width = 1.5 }",
+		"tp.dsp.layout('set', 'bogus')",
+		"tp.dsp.layout('nmaster', 0)",
+		"tp.dsp.scratchpad('drop')",
+		"tp.rule{ match = { app_id = 'a' }, scratchpad = 'yes' }",
+	};
+	for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++) {
+		CHECK(!tp_lua_exec_string(lua, bad[i], strlen(bad[i]), "bad_layout",
+								  TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+								  TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+								  sizeof(err)));
+	}
+
+	tp_lua_destroy(lua);
+}
+
 int main(void) {
 	tam_log_set_level(TAM_LOG_ERROR);
 	test_config_and_fallback();
@@ -1440,5 +1520,6 @@ int main(void) {
 	test_live_reload();
 	test_lock_and_binding_gate();
 	test_capture_launcher();
+	test_layouts_and_scratchpad();
 	CHECK_DONE("test_lua");
 }

@@ -3,7 +3,7 @@
 #define TAM_PANE_MONITOR_H
 
 #include "tam-pane/geom.h"
-#include "tam-pane/layout/dwindle.h"
+#include "tam-pane/layout/layout.h"
 #include "tam-pane/tags.h"
 #include <stdbool.h>
 #include <stdint.h>
@@ -29,7 +29,7 @@ struct tp_monitor {
 	struct wl_list layers; /* tp_layer_surface.link */
 	struct tp_tagview view;
 	struct tp_client *focus[TP_TAG_SLOTS]; /* slot 0: combined views */
-	struct tp_dwindle trees[TP_TAG_SLOTS]; /* see tp_tags_slot() */
+	struct tp_layout layouts[TP_TAG_SLOTS]; /* see tp_tags_slot() */
 	struct wl_listener frame;
 	struct wl_listener request_state;
 	struct wl_listener destroy;
@@ -64,13 +64,13 @@ struct tp_monitor *tp_monitor_in_dir(struct tp_server *s, struct tp_monitor *m,
 /* Select `m`, move the pointer onto it if needed, and refresh focus. */
 void tp_monitor_focus(struct tp_server *s, struct tp_monitor *m);
 
-/* The layout tree for the monitor's current view. */
-struct tp_dwindle *tp_monitor_tree(struct tp_monitor *m);
+/* The layout for the monitor's current view. */
+struct tp_layout *tp_monitor_layout(struct tp_monitor *m);
 
-/* Drop a window from every layout tree on the monitor. */
+/* Drop a window from every layout slot on the monitor. */
 void tp_monitor_forget(struct tp_monitor *m, struct tp_client *c);
 
-/* Propagate live dwindle settings to every connected monitor's layout trees. */
+/* Propagate live layout settings to every connected monitor's layout slots. */
 void tp_monitors_apply_settings(struct tp_server *s);
 
 #endif

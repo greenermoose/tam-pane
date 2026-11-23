@@ -213,6 +213,59 @@ static void test_parse_dispatch(void) {
 	CHECK(strcmp(fmt, "spawn foot --title hello world") == 0);
 	tam_str_free(fmt);
 
+	/* Layout and scratchpad dispatches (0.2.5) */
+	CHECK(tp_ipc_parse_dispatch("layout set master", &act, mon, sizeof(mon),
+								err, sizeof(err)));
+	CHECK(act.kind == TP_ACT_LAYOUT_SET && act.dir == 1);
+	fmt = tp_ipc_format_action(tam_str_new(""), &act);
+	CHECK(strcmp(fmt, "layout set master") == 0);
+	tam_str_free(fmt);
+
+	CHECK(tp_ipc_parse_dispatch("layout set scroller", &act, mon, sizeof(mon),
+								err, sizeof(err)));
+	CHECK(act.kind == TP_ACT_LAYOUT_SET && act.dir == 2);
+	CHECK(tp_ipc_parse_dispatch("layout set monocle", &act, mon, sizeof(mon),
+								err, sizeof(err)));
+	CHECK(act.kind == TP_ACT_LAYOUT_SET && act.dir == 3);
+	CHECK(tp_ipc_parse_dispatch("layout next", &act, mon, sizeof(mon), err,
+								sizeof(err)));
+	CHECK(act.kind == TP_ACT_LAYOUT_CYCLE && act.dir == 1);
+	CHECK(tp_ipc_parse_dispatch("layout prev", &act, mon, sizeof(mon), err,
+								sizeof(err)));
+	CHECK(act.kind == TP_ACT_LAYOUT_CYCLE && act.dir == -1);
+	CHECK(tp_ipc_parse_dispatch("layout nmaster inc", &act, mon, sizeof(mon),
+								err, sizeof(err)));
+	CHECK(act.kind == TP_ACT_LAYOUT_NMASTER && act.dir == 1);
+	CHECK(tp_ipc_parse_dispatch("layout nmaster dec", &act, mon, sizeof(mon),
+								err, sizeof(err)));
+	CHECK(act.kind == TP_ACT_LAYOUT_NMASTER && act.dir == -1);
+	CHECK(tp_ipc_parse_dispatch("scratchpad toggle", &act, mon, sizeof(mon),
+								err, sizeof(err)));
+	CHECK(act.kind == TP_ACT_SCRATCHPAD_TOGGLE);
+	fmt = tp_ipc_format_action(tam_str_new(""), &act);
+	CHECK(strcmp(fmt, "scratchpad toggle") == 0);
+	tam_str_free(fmt);
+	CHECK(tp_ipc_parse_dispatch("scratchpad move", &act, mon, sizeof(mon), err,
+								sizeof(err)));
+	CHECK(act.kind == TP_ACT_SCRATCHPAD_MOVE);
+	fmt = tp_ipc_format_action(tam_str_new(""), &act);
+	CHECK(strcmp(fmt, "scratchpad move") == 0);
+	tam_str_free(fmt);
+
+	/* Invalid layout / scratchpad dispatches */
+	CHECK(!tp_ipc_parse_dispatch("layout", &act, mon, sizeof(mon), err,
+								 sizeof(err)));
+	CHECK(!tp_ipc_parse_dispatch("layout set unknown", &act, mon, sizeof(mon),
+								 err, sizeof(err)));
+	CHECK(!tp_ipc_parse_dispatch("layout next extra", &act, mon, sizeof(mon),
+								 err, sizeof(err)));
+	CHECK(!tp_ipc_parse_dispatch("layout nmaster 0", &act, mon, sizeof(mon),
+								 err, sizeof(err)));
+	CHECK(!tp_ipc_parse_dispatch("scratchpad", &act, mon, sizeof(mon), err,
+								 sizeof(err)));
+	CHECK(!tp_ipc_parse_dispatch("scratchpad drop", &act, mon, sizeof(mon), err,
+								 sizeof(err)));
+
 	/* Invalid dispatches */
 	CHECK(!tp_ipc_parse_dispatch("", &act, mon, sizeof(mon), err, sizeof(err)));
 	CHECK(!tp_ipc_parse_dispatch("unknown", &act, mon, sizeof(mon), err,

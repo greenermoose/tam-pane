@@ -7,6 +7,7 @@
  * using the exact same tp.bind / tp.dsp.* API exposed to init.lua.
  */
 #include "lua_internal.h"
+#include "tam-pane/layout/layout.h"
 #include "tam-pane/tags.h"
 #include <ctype.h>
 #include <stdio.h>
@@ -25,6 +26,10 @@ static const char default_bindings_lua[] =
 	"tp.bind('Meta+k', tp.dsp.focus('prev'))\n"
 	"tp.bind('Meta+v', tp.dsp.toggle_float())\n"
 	"tp.bind('Meta+f', tp.dsp.toggle_fullscreen())\n"
+	"tp.bind('Meta+Space', tp.dsp.layout('next'))\n"
+	"tp.bind('Meta+Shift+Space', tp.dsp.layout('prev'))\n"
+	"tp.bind('Meta+minus', tp.dsp.scratchpad('toggle'))\n"
+	"tp.bind('Meta+Shift+minus', tp.dsp.scratchpad('move'))\n"
 	"tp.bind('Meta+Tab', tp.dsp.tag('back'))\n"
 	"tp.bind('Meta+comma', tp.dsp.monitor('focus', 'prev'))\n"
 	"tp.bind('Meta+period', tp.dsp.monitor('focus', 'next'))\n"
@@ -480,6 +485,54 @@ static int l_dsp_reload(lua_State *L) {
 	return push_dispatcher(L, &act);
 }
 
+static int l_dsp_layout(lua_State *L) {
+	const char *op = luaL_checkstring(L, 1);
+	struct tp_action act = {0};
+	if (strcmp(op, "set") == 0) {
+		const char *name = luaL_checkstring(L, 2);
+		enum tp_layout_kind kind;
+		if (!tp_layout_kind_from_name(name, &kind))
+			return luaL_error(
+				L, "tp.dsp.layout: expected 'dwindle', 'master', 'scroller', "
+				   "or 'monocle'");
+		act.kind = TP_ACT_LAYOUT_SET;
+		act.dir = (int)kind;
+		return push_dispatcher(L, &act);
+	}
+	if (strcmp(op, "next") == 0) {
+		act.kind = TP_ACT_LAYOUT_CYCLE;
+		act.dir = 1;
+		return push_dispatcher(L, &act);
+	}
+	if (strcmp(op, "prev") == 0) {
+		act.kind = TP_ACT_LAYOUT_CYCLE;
+		act.dir = -1;
+		return push_dispatcher(L, &act);
+	}
+	if (strcmp(op, "nmaster") == 0) {
+		int32_t d = tp_lua_check_int(L, 2, "tp.dsp.layout", -8, 8);
+		if (d == 0)
+			return luaL_error(L, "tp.dsp.layout: nmaster delta must be non-zero");
+		act.kind = TP_ACT_LAYOUT_NMASTER;
+		act.dir = (int)d;
+		return push_dispatcher(L, &act);
+	}
+	return luaL_error(
+		L, "tp.dsp.layout: expected 'set', 'next', 'prev', or 'nmaster'");
+}
+
+static int l_dsp_scratchpad(lua_State *L) {
+	const char *op = luaL_checkstring(L, 1);
+	struct tp_action act = {0};
+	if (strcmp(op, "toggle") == 0)
+		act.kind = TP_ACT_SCRATCHPAD_TOGGLE;
+	else if (strcmp(op, "move") == 0)
+		act.kind = TP_ACT_SCRATCHPAD_MOVE;
+	else
+		return luaL_error(L, "tp.dsp.scratchpad: expected 'toggle' or 'move'");
+	return push_dispatcher(L, &act);
+}
+
 static int l_dsp_call(lua_State *L) {
 	struct tp_action *act = luaL_checkudata(L, 1, TP_DSP_MT);
 	struct tp_lua *lua = tp_lua_from_state(L);
@@ -596,6 +649,8 @@ static const luaL_Reg dsp_funcs[] = {
 	{"tag", l_dsp_tag},
 	{"monitor", l_dsp_monitor},
 	{"reload", l_dsp_reload},
+	{"layout", l_dsp_layout},
+	{"scratchpad", l_dsp_scratchpad},
 	{NULL, NULL},
 };
 

@@ -202,7 +202,7 @@ static void on_destroy(struct wl_listener *l, void *data) {
 	wl_list_remove(&m->destroy.link);
 	wl_list_remove(&m->link);
 	for (unsigned int i = 0; i < TP_TAG_SLOTS; i++)
-		tp_dwindle_clear(&m->trees[i]);
+		tp_layout_clear(&m->layouts[i]);
 
 	/* Windows move to another monitor, keeping their tags and remembering
 	 * their original output name so they return when it comes back. */
@@ -281,12 +281,8 @@ static void on_new_output(struct wl_listener *l, void *data) {
 	output->data = m;
 	wl_list_init(&m->layers);
 	tp_tagview_init(&m->view, tp_tag_mask(1));
-	for (unsigned int i = 0; i < TP_TAG_SLOTS; i++) {
-		tp_dwindle_init(&m->trees[i]);
-		m->trees[i].width_bias = s->settings.width_bias;
-		m->trees[i].preserve_split = s->settings.preserve_split;
-		m->trees[i].proportional_split = s->settings.proportional_split;
-	}
+	for (unsigned int i = 0; i < TP_TAG_SLOTS; i++)
+		tp_layout_init(&m->layouts[i], &s->settings);
 
 	m->frame.notify = on_frame;
 	wl_signal_add(&output->events.frame, &m->frame);
@@ -426,22 +422,19 @@ void tp_monitor_focus(struct tp_server *s, struct tp_monitor *m) {
 	tp_focus_refresh(s);
 }
 
-struct tp_dwindle *tp_monitor_tree(struct tp_monitor *m) {
-	return &m->trees[tp_tags_slot(tp_tagview_current(&m->view))];
+struct tp_layout *tp_monitor_layout(struct tp_monitor *m) {
+	return &m->layouts[tp_tags_slot(tp_tagview_current(&m->view))];
 }
 
 void tp_monitor_forget(struct tp_monitor *m, struct tp_client *c) {
 	for (unsigned int i = 0; i < TP_TAG_SLOTS; i++)
-		tp_dwindle_remove(&m->trees[i], c);
+		tp_layout_forget(&m->layouts[i], c);
 }
 
 void tp_monitors_apply_settings(struct tp_server *s) {
 	struct tp_monitor *m;
 	wl_list_for_each(m, &s->monitors, link) {
-		for (unsigned int i = 0; i < TP_TAG_SLOTS; i++) {
-			m->trees[i].width_bias = s->settings.width_bias;
-			m->trees[i].preserve_split = s->settings.preserve_split;
-			m->trees[i].proportional_split = s->settings.proportional_split;
-		}
+		for (unsigned int i = 0; i < TP_TAG_SLOTS; i++)
+			tp_layout_apply_settings(&m->layouts[i], &s->settings);
 	}
 }

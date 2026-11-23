@@ -1982,7 +1982,8 @@ int main(void) {
 	struct tp_client *cx = tp_focused(&server);
 	CHECK(cx && cx != c0 && cx != c1 && !cx->floating && cx->mon);
 	if (!cx || !cx->mon) goto fail;
-	struct tp_dwindle_node *xn = tp_dwindle_find(tp_monitor_tree(cx->mon), cx);
+	struct tp_dwindle_node *xn =
+		tp_dwindle_find(&tp_monitor_layout(cx->mon)->dwindle, cx);
 	CHECK(xn && xn->parent);
 	if (!xn || !xn->parent) goto fail;
 	struct tp_dwindle_node *sib = xn->parent->child[xn->parent->child[0] == xn];
@@ -1996,8 +1997,8 @@ int main(void) {
 	emit_button(&server, &pointer, BTN_RIGHT, WL_POINTER_BUTTON_STATE_PRESSED, 142);
 	CHECK(server.grab.mode == TP_GRAB_RESIZE && server.grab.tiled &&
 		server.grab.client == cs);
-	CHECK(server.grab.drag.h_node == xn->parent ||
-		server.grab.drag.v_node == xn->parent);
+	CHECK(server.grab.drag.u.dwindle.h_node == xn->parent ||
+		server.grab.drag.u.dwindle.v_node == xn->parent);
 	destroy_window(&client.windows[2]);
 	for (unsigned int i = 0; i < 100 && wl_list_length(&server.clients) == 3; i++)
 		if (!pump(&client, &server)) goto fail;
@@ -2024,7 +2025,8 @@ int main(void) {
 	struct tp_client *cn = tp_focused(&server);
 	CHECK(cn && cn != c0 && cn != c1 && !cn->floating && cn->mon);
 	if (!cn || !cn->mon) goto fail;
-	struct tp_dwindle_node *nn = tp_dwindle_find(tp_monitor_tree(cn->mon), cn);
+	struct tp_dwindle_node *nn =
+		tp_dwindle_find(&tp_monitor_layout(cn->mon)->dwindle, cn);
 	CHECK(nn && nn->parent);
 	if (!nn || !nn->parent) goto fail;
 	CHECK(nn->parent->child[nn->parent->child[0] == nn]->item == c0);
@@ -2050,7 +2052,7 @@ int main(void) {
 	CHECK(cf->tree->node.parent == server.layer[TP_LAYER_FULLSCREEN]);
 	CHECK(cf->geom.x == cf->mon->area.x && cf->geom.y == cf->mon->area.y &&
 		cf->geom.w == cf->mon->area.w && cf->geom.h == cf->mon->area.h);
-	CHECK(!tp_dwindle_find(tp_monitor_tree(cf->mon), cf));
+	CHECK(!tp_dwindle_find(&tp_monitor_layout(cf->mon)->dwindle, cf));
 
 	/* Ask again while mapped (a no-op once the first half works), so the
 	 * remap below starts from a fullscreen window either way. */
@@ -2073,7 +2075,7 @@ int main(void) {
 	CHECK(wl_list_length(&server.clients) == 3);
 	CHECK(cf->mapped && !cf->fullscreen && !cf->floating);
 	CHECK(cf->tree->node.parent == server.layer[TP_LAYER_TILE]);
-	CHECK(tp_dwindle_find(tp_monitor_tree(cf->mon), cf) != NULL);
+	CHECK(tp_dwindle_find(&tp_monitor_layout(cf->mon)->dwindle, cf) != NULL);
 	destroy_window(&client.windows[2]);
 	for (unsigned int i = 0; i < 100 && wl_list_length(&server.clients) == 3; i++)
 		if (!pump(&client, &server)) goto fail;
@@ -2348,7 +2350,7 @@ int main(void) {
 	CHECK(c0->home_output == NULL);
 	for (unsigned int i = 0; i < TP_TAG_SLOTS; i++) {
 		CHECK(m1->focus[i] != c0);
-		CHECK(!tp_dwindle_find(&m1->trees[i], c0));
+		CHECK(!tp_dwindle_find(&m1->layouts[i].dwindle, c0));
 	}
 	CHECK(m2->focus[tp_tags_slot(tp_tagview_current(&m2->view))] == c0);
 	emit_button(&server, &pointer, BTN_LEFT, WL_POINTER_BUTTON_STATE_RELEASED, 164);
@@ -2365,7 +2367,7 @@ int main(void) {
 	chord(&keyboard, KEY_V, false, false);
 	wl_event_loop_dispatch(server.loop, 0);
 	CHECK(!c0->floating && c0->mon == m1);
-	CHECK(tp_dwindle_find(tp_monitor_tree(m1), c0) != NULL);
+	CHECK(tp_dwindle_find(&tp_monitor_layout(m1)->dwindle, c0) != NULL);
 	tp_monitor_focus(&server, m2);
 	tp_focus(&server, c1);
 	CHECK(server.selmon == m2 && tp_focused(&server) == c1);
@@ -2878,10 +2880,10 @@ int main(void) {
 	CHECK(server.settings.gap_inner == 20 && server.settings.gap_outer == 34);
 	CHECK(c_live->geom.w == mon_primary->usable.w - 68);
 	CHECK(c_live->geom.w != orig_w);
-	CHECK(mon_primary->trees[1].preserve_split == true);
-	CHECK(mon_primary->trees[1].proportional_split == true);
-	CHECK(mon_primary->trees[1].width_bias > 1.49f &&
-		  mon_primary->trees[1].width_bias < 1.51f);
+	CHECK(mon_primary->layouts[1].dwindle.preserve_split == true);
+	CHECK(mon_primary->layouts[1].dwindle.proportional_split == true);
+	CHECK(mon_primary->layouts[1].dwindle.width_bias > 1.49f &&
+		  mon_primary->layouts[1].dwindle.width_bias < 1.51f);
 	CHECK(keyboard.repeat_info.rate == 45 &&
 		  keyboard.repeat_info.delay == 250);
 	hook_event_count = 0;
@@ -2925,7 +2927,7 @@ int main(void) {
 		if (!pump(&client, &server)) goto fail;
 	CHECK(server.settings.gap_outer == 10);
 	CHECK(c_live->geom.w == mon_primary->usable.w - 20);
-	CHECK(mon_primary->trees[1].preserve_split == false);
+	CHECK(mon_primary->layouts[1].dwindle.preserve_split == false);
 	CHECK(keyboard.repeat_info.rate == 25 &&
 		  keyboard.repeat_info.delay == 600);
 	hook_event_count = 0;
@@ -4550,6 +4552,126 @@ int main(void) {
 				wl_event_loop_dispatch(server.loop, 0);
 			}
 			CHECK(fc->geom.x == before_x);
+
+			/* ---- 0.2.5: master-stack, scroller, monocle & scratchpad ---- */
+			if (peer) {
+				struct tp_action a = {0};
+
+				/* Switch to master-stack and check IPC monitors reports it. */
+				a.kind = TP_ACT_LAYOUT_SET;
+				a.dir = TP_LAYOUT_MASTER;
+				tp_action_run(&server, &a);
+				wl_event_loop_dispatch(server.loop, 0);
+				CHECK(tp_monitor_layout(m)->kind == TP_LAYOUT_MASTER);
+				if (ipc_sock_path[0]) {
+					char rep[4096];
+					CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+											"monitors\n", rep, sizeof(rep)));
+					CHECK(strstr(rep, "\tlayout=master\n") != NULL);
+				}
+				/* Resize master wider and verify geometry updates. */
+				int32_t mw_before = fc->geom.w;
+				a.kind = TP_ACT_RESIZE;
+				a.dir = TP_DIR_RIGHT;
+				a.step = 60;
+				tp_action_run(&server, &a);
+				wl_event_loop_dispatch(server.loop, 0);
+				CHECK(fc->geom.w != mw_before);
+
+				/* Switch to scroller: columns sit side by side; focusing
+				 * another window scrolls / keeps it visible. */
+				a.kind = TP_ACT_LAYOUT_SET;
+				a.dir = TP_LAYOUT_SCROLLER;
+				tp_action_run(&server, &a);
+				wl_event_loop_dispatch(server.loop, 0);
+				CHECK(tp_monitor_layout(m)->kind == TP_LAYOUT_SCROLLER);
+				CHECK(fc->tree->node.enabled && peer->tree->node.enabled);
+
+				/* Switch to monocle: only the focused tiled window is enabled
+				 * in the scene, filling usable minus outer gap; cycling focus
+				 * flips which window is enabled. */
+				a.kind = TP_ACT_LAYOUT_SET;
+				a.dir = TP_LAYOUT_MONOCLE;
+				tp_action_run(&server, &a);
+				wl_event_loop_dispatch(server.loop, 0);
+				CHECK(tp_monitor_layout(m)->kind == TP_LAYOUT_MONOCLE);
+				tp_focus(&server, fc);
+				wl_event_loop_dispatch(server.loop, 0);
+				CHECK(fc->tree->node.enabled && !peer->tree->node.enabled);
+				tp_focus(&server, peer);
+				wl_event_loop_dispatch(server.loop, 0);
+				CHECK(peer->tree->node.enabled && !fc->tree->node.enabled);
+
+				/* Per-tag independence: tag 2 keeps its own layout (dwindle). */
+				a.kind = TP_ACT_TAG_VIEW;
+				a.tag = 2;
+				tp_action_run(&server, &a);
+				wl_event_loop_dispatch(server.loop, 0);
+				CHECK(tp_monitor_layout(m)->kind == TP_LAYOUT_DWINDLE);
+				a.kind = TP_ACT_TAG_BACK;
+				tp_action_run(&server, &a);
+				wl_event_loop_dispatch(server.loop, 0);
+				CHECK(tp_monitor_layout(m)->kind == TP_LAYOUT_MONOCLE);
+
+				/* Cycle back to dwindle. */
+				a.kind = TP_ACT_LAYOUT_CYCLE;
+				a.dir = 1;
+				tp_action_run(&server, &a);
+				wl_event_loop_dispatch(server.loop, 0);
+				CHECK(tp_monitor_layout(m)->kind == TP_LAYOUT_DWINDLE);
+				CHECK(fc->tree->node.enabled && peer->tree->node.enabled);
+
+				/* Scratchpad: move focused window (peer) to scratchpad ->
+				 * hidden & floating; toggle shows it and focuses it; tag
+				 * switch keeps it visible; toggle again hides it; release
+				 * returns it to normal tag management. */
+				tp_focus(&server, peer);
+				a.kind = TP_ACT_SCRATCHPAD_MOVE;
+				tp_action_run(&server, &a);
+				wl_event_loop_dispatch(server.loop, 0);
+				CHECK(peer->scratchpad && !peer->scratchpad_visible &&
+					  peer->floating);
+				CHECK(!peer->tree->node.enabled);
+				CHECK(tp_focused(&server) == fc);
+
+				a.kind = TP_ACT_SCRATCHPAD_TOGGLE;
+				tp_action_run(&server, &a);
+				wl_event_loop_dispatch(server.loop, 0);
+				CHECK(peer->scratchpad && peer->scratchpad_visible);
+				CHECK(peer->tree->node.enabled);
+				CHECK(tp_focused(&server) == peer);
+				if (ipc_sock_path[0]) {
+					char rep[4096];
+					CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+											"focused\n", rep, sizeof(rep)));
+					CHECK(strstr(rep, "\tscratchpad=1\t") != NULL);
+				}
+
+				/* Switching tags keeps shown scratchpad visible. */
+				a.kind = TP_ACT_TAG_VIEW;
+				a.tag = 2;
+				tp_action_run(&server, &a);
+				wl_event_loop_dispatch(server.loop, 0);
+				CHECK(tp_client_visible(peer) && peer->tree->node.enabled);
+				a.kind = TP_ACT_TAG_BACK;
+				tp_action_run(&server, &a);
+				wl_event_loop_dispatch(server.loop, 0);
+
+				/* Toggle off hides it again. */
+				a.kind = TP_ACT_SCRATCHPAD_TOGGLE;
+				tp_action_run(&server, &a);
+				wl_event_loop_dispatch(server.loop, 0);
+				CHECK(!peer->scratchpad_visible && !peer->tree->node.enabled);
+
+				/* Toggle back on and release via scratchpad move. */
+				tp_action_run(&server, &a);
+				wl_event_loop_dispatch(server.loop, 0);
+				CHECK(tp_focused(&server) == peer);
+				a.kind = TP_ACT_SCRATCHPAD_MOVE;
+				tp_action_run(&server, &a);
+				wl_event_loop_dispatch(server.loop, 0);
+				CHECK(!peer->scratchpad && !peer->scratchpad_visible);
+			}
 		}
 	}
 

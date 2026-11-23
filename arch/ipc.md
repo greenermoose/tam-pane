@@ -1,4 +1,4 @@
-# IPC protocol (`0.2.3`)
+# IPC protocol (`0.2.3`, updated `0.2.5`)
 
 `tam-pane` serves a line-based IPC protocol over a same-UID Unix domain
 socket, formatted with `libtam`'s `tam_str_*` helpers (no JSON library).
@@ -58,10 +58,10 @@ replaced with a space. Every record is guaranteed to occupy one line.
   - `version\tversion=<ver>\tsocket=<WAYLAND_DISPLAY>`
 - `monitors`
   - One line per connected output:
-    `monitor\tname=<n>\tx=<x>\ty=<y>\tw=<w>\th=<h>\tusable_x=<x>\tusable_y=<y>\tusable_w=<w>\tusable_h=<h>\tscale=<f>\ttags=<mask>\tprev_tags=<mask>\tfocused=<0|1>`
+    `monitor\tname=<n>\tx=<x>\ty=<y>\tw=<w>\th=<h>\tusable_x=<x>\tusable_y=<y>\tusable_w=<w>\tusable_h=<h>\tscale=<f>\ttags=<mask>\tprev_tags=<mask>\tfocused=<0|1>\tlayout=<dwindle|master|scroller|monocle>`
 - `windows`
   - One line per mapped toplevel:
-    `window\tmonitor=<n>\ttags=<mask>\tfocused=<0|1>\tfloating=<0|1>\tfullscreen=<0|1>\tx=<x>\ty=<y>\tw=<w>\th=<h>\tapp_id=<id>\ttitle=<t>`
+    `window\tmonitor=<n>\ttags=<mask>\tfocused=<0|1>\tfloating=<0|1>\tfullscreen=<0|1>\tscratchpad=<0|1>\tx=<x>\ty=<y>\tw=<w>\th=<h>\tapp_id=<id>\ttitle=<t>`
 - `focused`
   - Same `window\t...` record for `tp_focused(s)`, or zero lines if no
     window is focused.
@@ -91,6 +91,10 @@ replaced with a space. Every record is guaranteed to occupy one line.
     - `tag view|toggle_view|move|toggle_client <1..9>`
     - `tag back`
     - `monitor focus|move next|prev|<output-name>`
+    - `layout set dwindle|master|scroller|monocle`
+    - `layout next|prev`
+    - `layout nmaster inc|dec`
+    - `scratchpad toggle|move`
     - `spawn <command...>`
 
 ### Event subscription

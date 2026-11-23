@@ -11,7 +11,7 @@
 #include "tam-pane/focus.h"
 #include "tam-pane/input.h"
 #include "tam-pane/layout/arrange.h"
-#include "tam-pane/layout/dwindle.h"
+#include "tam-pane/layout/layout.h"
 #include "tam-pane/lua.h"
 #include "tam-pane/monitor.h"
 #include "tam-pane/server.h"
@@ -59,8 +59,8 @@ void tp_action_run(struct tp_server *s, const struct tp_action *act) {
 			break;
 		if (c->mon->arrange_dirty)
 			tp_arrange_flush(s);
-		if (tp_dwindle_swap_dir(tp_monitor_tree(c->mon), c,
-								(enum tp_dir)act->dir))
+		if (tp_layout_swap_dir(tp_monitor_layout(c->mon), c,
+							   (enum tp_dir)act->dir))
 			tp_arrange(c->mon);
 		break;
 	}
@@ -70,8 +70,8 @@ void tp_action_run(struct tp_server *s, const struct tp_action *act) {
 			break;
 		if (c->mon->arrange_dirty)
 			tp_arrange_flush(s);
-		if (tp_dwindle_move_dir(tp_monitor_tree(c->mon), c,
-								(enum tp_dir)act->dir, s->settings.split_ratio))
+		if (tp_layout_move_dir(tp_monitor_layout(c->mon), c,
+							   (enum tp_dir)act->dir, s->settings.split_ratio))
 			tp_arrange(c->mon);
 		break;
 	}
@@ -87,7 +87,7 @@ void tp_action_run(struct tp_server *s, const struct tp_action *act) {
 		}
 		if (c->mon->arrange_dirty)
 			tp_arrange_flush(s);
-		if (tp_dwindle_resize(tp_monitor_tree(c->mon), c, dir, step))
+		if (tp_layout_resize(tp_monitor_layout(c->mon), c, dir, step))
 			tp_arrange(c->mon);
 		break;
 	}
@@ -153,6 +153,37 @@ void tp_action_run(struct tp_server *s, const struct tp_action *act) {
 	case TP_ACT_RELOAD:
 		tp_server_request_reload(s);
 		break;
+	case TP_ACT_LAYOUT_SET:
+		if (s->selmon) {
+			tp_pointer_cancel_grab(s, NULL);
+			if (tp_layout_set_kind(tp_monitor_layout(s->selmon),
+								   (enum tp_layout_kind)act->dir))
+				tp_arrange(s->selmon);
+		}
+		break;
+	case TP_ACT_LAYOUT_CYCLE:
+		if (s->selmon) {
+			tp_pointer_cancel_grab(s, NULL);
+			tp_layout_cycle(tp_monitor_layout(s->selmon), act->dir);
+			tp_arrange(s->selmon);
+		}
+		break;
+	case TP_ACT_LAYOUT_NMASTER:
+		if (s->selmon) {
+			if (tp_layout_adjust_nmaster(tp_monitor_layout(s->selmon),
+										 act->dir))
+				tp_arrange(s->selmon);
+		}
+		break;
+	case TP_ACT_SCRATCHPAD_TOGGLE:
+		tp_scratchpad_toggle(s);
+		break;
+	case TP_ACT_SCRATCHPAD_MOVE: {
+		struct tp_client *c = tp_focused(s);
+		if (c)
+			tp_client_scratchpad_move(c);
+		break;
+	}
 	}
 }
 

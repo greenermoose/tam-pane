@@ -56,6 +56,8 @@ struct tp_lua_rule {
 	int32_t y;
 	bool has_monitor;
 	char monitor[TP_RULE_MONITOR_MAX];
+	bool has_scratchpad;
+	bool scratchpad;
 };
 
 struct tp_lua_rule_list {

@@ -167,10 +167,10 @@ static tam_str_t append_window_line(tam_str_t out, const struct tp_server *s,
 	out = tp_ipc_escape_append(out, mon);
 	out = tam_str_cat_printf(
 		out,
-		"\ttags=%u\tfocused=%d\tfloating=%d\tfullscreen=%d"
+		"\ttags=%u\tfocused=%d\tfloating=%d\tfullscreen=%d\tscratchpad=%d"
 		"\tx=%d\ty=%d\tw=%d\th=%d\tapp_id=",
 		c->tags, focused ? 1 : 0, c->floating ? 1 : 0, c->fullscreen ? 1 : 0,
-		c->geom.x, c->geom.y, c->geom.w, c->geom.h);
+		c->scratchpad ? 1 : 0, c->geom.x, c->geom.y, c->geom.w, c->geom.h);
 	out = tp_ipc_escape_append(out, app_id);
 	out = tam_str_cat(out, "\ttitle=");
 	out = tp_ipc_escape_append(out, title);
@@ -200,10 +200,11 @@ static tam_str_t build_monitors(const struct tp_server *s) {
 			out,
 			"\tx=%d\ty=%d\tw=%d\th=%d"
 			"\tusable_x=%d\tusable_y=%d\tusable_w=%d\tusable_h=%d"
-			"\tscale=%.2f\ttags=%u\tprev_tags=%u\tfocused=%d\n",
+			"\tscale=%.2f\ttags=%u\tprev_tags=%u\tfocused=%d\tlayout=%s\n",
 			m->area.x, m->area.y, m->area.w, m->area.h, m->usable.x,
 			m->usable.y, m->usable.w, m->usable.h, scale, cur, prev,
-			s->selmon == m ? 1 : 0);
+			s->selmon == m ? 1 : 0,
+			tp_layout_kind_name(tp_monitor_layout(m)->kind));
 		if (!out)
 			return NULL;
 	}
@@ -238,7 +239,7 @@ static tam_str_t build_tags(const struct tp_server *s) {
 		tp_tags_t occupied = 0;
 		struct tp_client *c;
 		wl_list_for_each(c, &s->clients, link) {
-			if (c->mapped && c->mon == m)
+			if (c->mapped && c->mon == m && !c->scratchpad)
 				occupied |= c->tags;
 		}
 		const char *name =

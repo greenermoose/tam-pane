@@ -15,9 +15,10 @@ Follows the tam-idol 1.1.0 standard.
 
 WHAT IT DOES
 
-  Dynamic tiling, like Hyprland. Windows tile themselves in a binary tree
-  (dwindle): each new window splits the space of the window it opens next
-  to, along that window's longer side.
+  Dynamic tiling with four layouts sharing one interface (0.2.5):
+  dwindle (binary split tree), master-stack, scroller (niri-style
+  horizontal columns), and monocle, remembered per tag, plus a floating
+  scratchpad that stays reachable from any tag.
 
   Tags on windows, like MangoWM and dwm. A window carries one or more of
   nine tags; a monitor shows every window whose tags meet the set it is
@@ -82,6 +83,10 @@ DEFAULT KEYS (CUSTOMIZABLE IN INIT.LUA)
   Meta+Right-drag       resize a floating window or tiled split
   Meta+V                toggle floating
   Meta+F                toggle fullscreen
+  Meta+Space            cycle layout (dwindle, master, scroller, monocle)
+  Meta+Shift+Space      cycle layout backwards
+  Meta+-                toggle the scratchpad
+  Meta+Shift+-          send focused window to/from the scratchpad
   Meta+1 .. Meta+9      view one tag
   Meta+Shift+1 .. 9     move the focused window to a tag
   Meta+Ctrl+1 .. 9      add or remove a tag from the view

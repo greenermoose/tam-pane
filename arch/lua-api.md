@@ -1,6 +1,6 @@
 # tam-pane Lua API (`arch/lua-api.md`)
 
-**Status:** 0.1.0–0.1.19 shipped and accepted (Phase P2 + R1 hardening); 0.2.0 adds `tp.lock(...)` and the `tp.bind(..., { locked = true })` binding gate; 0.2.1 adds `tp.capture(...)`.
+**Status:** 0.1.0–0.1.19 shipped and accepted (Phase P2 + R1 hardening); 0.2.0 adds `tp.lock(...)` and the `tp.bind(..., { locked = true })` binding gate; 0.2.1 adds `tp.capture(...)`; 0.2.5 adds layout settings, `tp.dsp.layout`, `tp.dsp.scratchpad`, and the `scratchpad` window rule.
 
 tam-pane embeds **Lua 5.5.1** statically from `third_party/lua/` with no
 dynamic symbol exports (`lua_*` symbols stay internal to `tam-pane`).
@@ -71,6 +71,10 @@ or out-of-range values raise a Lua error.
 | `preserve_split` | boolean | keep each split's initial orientation | `false` |
 | `smart_split` | boolean | pointer direction picks split edge | `false` |
 | `proportional_split` | boolean | keep same-direction runs proportional | `false` |
+| `layout` | string | `"dwindle"`, `"master"`, `"scroller"`, or `"monocle"` (0.2.5) | `"dwindle"` |
+| `master_ratio` | number | `0.10..0.90` master-stack pane share (0.2.5) | `0.55` |
+| `master_count` | integer | `1..8` master-stack master windows (0.2.5) | `1` |
+| `scroller_width` | number | `0.15..1.0` default scroller column width fraction (0.2.5) | `0.5` |
 | `resize_step` | integer | `1..500` pixels per keyboard resize step | `40` |
 | `terminal` | string | non-empty, max 255 bytes | `$TERMINAL` or `"foot"` |
 | `cursor_theme` | string | max 127 bytes; `""` uses `XCURSOR_THEME` default | `""` |
@@ -220,6 +224,8 @@ callable (`tp.dsp.close()()`) inside plain Lua callbacks (calling one during
 | `tp.dsp.tag(op[, n])` | `"view"`, `"move"`, `"toggle_view"`, `"toggle_client"` with `n` in `1..9`; or `"back"` | Tag view / client tag operations |
 | `tp.dsp.monitor(op, dir)` | `"focus"` \| `"move"`, `"prev"` \| `"next"` | Focus or move focused window to adjacent monitor |
 | `tp.dsp.reload()` | none | Reload the Lua configuration in place (deferred via Wayland idle) |
+| `tp.dsp.layout(op[, arg])` | `"set"` + layout name; `"next"` \| `"prev"`; `"nmaster"` + delta (`-8..8`, non-zero) | Switch or cycle the active tag slot's layout, or adjust master count (0.2.5) |
+| `tp.dsp.scratchpad(op)` | `"toggle"` \| `"move"` | Toggle scratchpad visibility on active monitor, or move focused window to/from scratchpad (0.2.5) |
 
 ## Shipped in 0.1.2
 
@@ -310,6 +316,7 @@ only while loading config.
 | `size` | `{ w, h }` or `{ w = ..., h = ... }` | Floating dimensions in pixels (`64..16384`); remembered even when tiled |
 | `position` | `{ x, y }`, `{ x = ..., y = ... }`, or `"center"` | Floating offset relative to target monitor `usable` area (`-16384..16384`), or centered on `usable` |
 | `monitor` | string (max 127 bytes) | Target output name (e.g. `"DP-2"`); falls back to active monitor with a warning if disconnected |
+| `scratchpad` | boolean | Start matching window hidden in the floating scratchpad without stealing focus (0.2.5) |
 
 When a rule routes a new window to a non-visible tag or a monitor other than
 the active one, it is placed on that tag/monitor without stealing keyboard focus

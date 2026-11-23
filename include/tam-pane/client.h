@@ -33,6 +33,8 @@ struct tp_client {
 	bool mapped;
 	bool floating;
 	bool fullscreen;
+	bool scratchpad;
+	bool scratchpad_visible;
 	struct tp_rect geom;	   /* current placement */
 	struct tp_rect float_geom; /* remembered floating placement */
 	struct wl_listener map;
@@ -66,6 +68,8 @@ void tp_client_toggle_tags(struct tp_client *c, tp_tags_t mask);
 void tp_client_set_tags(struct tp_client *c, tp_tags_t tags);
 void tp_client_set_floating(struct tp_client *c, bool floating);
 void tp_client_set_fullscreen(struct tp_client *c, bool fullscreen);
+void tp_client_scratchpad_move(struct tp_client *c);
+void tp_scratchpad_toggle(struct tp_server *s);
 void tp_client_resize_floating(struct tp_client *c, enum tp_dir dir,
 							   int32_t delta);
 

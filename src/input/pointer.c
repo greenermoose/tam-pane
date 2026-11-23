@@ -108,15 +108,14 @@ static void update_grab(struct tp_server *s) {
 			tp_pointer_cancel_grab(s, NULL);
 			return;
 		}
-		struct tp_dwindle *tree = tp_monitor_tree(c->mon);
-		if (!tp_dwindle_drag_valid(&g->drag, tree)) {
-			/* The tree freed a node since the drag began (another window
-			 * left it), so the splits the drag held may be gone. Carry on
-			 * from here against the tree as it is now. */
+		struct tp_layout *layout = tp_monitor_layout(c->mon);
+		if (!tp_layout_drag_valid(&g->drag, layout)) {
+			/* The layout changed or freed a node since the drag began, so
+			 * restart from here against the layout as it is now. */
 			if (c->mon->arrange_dirty)
 				tp_arrange_flush(s);
-			if (!tp_dwindle_drag_begin(tree, c, s->cursor->x, s->cursor->y,
-									   &g->drag)) {
+			if (!tp_layout_drag_begin(layout, c, s->cursor->x, s->cursor->y,
+									  &g->drag)) {
 				tp_pointer_cancel_grab(s, NULL);
 				return;
 			}
@@ -124,7 +123,7 @@ static void update_grab(struct tp_server *s) {
 			g->start_y = s->cursor->y;
 			return;
 		}
-		if (tp_dwindle_drag_update(&g->drag, dx, dy))
+		if (tp_layout_drag_update(&g->drag, dx, dy))
 			tp_arrange(c->mon);
 		return;
 	}
@@ -227,9 +226,9 @@ static bool try_begin_grab(struct tp_server *s, struct tp_client *c,
 	if (button == BTN_RIGHT && !c->floating && c->mon) {
 		if (c->mon->arrange_dirty)
 			tp_arrange_flush(s);
-		struct tp_dwindle_drag drag;
-		if (!tp_dwindle_drag_begin(tp_monitor_tree(c->mon), c, s->cursor->x,
-								   s->cursor->y, &drag))
+		struct tp_layout_drag drag;
+		if (!tp_layout_drag_begin(tp_monitor_layout(c->mon), c, s->cursor->x,
+								  s->cursor->y, &drag))
 			return false;
 		s->grab = (struct tp_pointer_grab){
 			.mode = TP_GRAB_RESIZE,

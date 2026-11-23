@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "lua_internal.h"
+#include "tam-pane/layout/layout.h"
 #include "tam-pane/spawn.h"
 #include <errno.h>
 #include <fcntl.h>
@@ -365,6 +366,21 @@ static int l_tp_config(lua_State *L) {
 			s->smart_split = check_bool(L, -1, key);
 		} else if (strcmp(key, "proportional_split") == 0) {
 			s->proportional_split = check_bool(L, -1, key);
+		} else if (strcmp(key, "layout") == 0) {
+			if (lua_type(L, -1) != LUA_TSTRING)
+				return luaL_error(L, "tp.config.layout: expected string");
+			enum tp_layout_kind kind;
+			if (!tp_layout_kind_from_name(lua_tostring(L, -1), &kind))
+				return luaL_error(
+					L, "tp.config.layout: expected 'dwindle', 'master', "
+					   "'scroller', or 'monocle'");
+			s->layout = (int)kind;
+		} else if (strcmp(key, "master_ratio") == 0) {
+			s->master_ratio = check_float_range(L, -1, key, 0.10f, 0.90f);
+		} else if (strcmp(key, "master_count") == 0) {
+			s->master_count = check_int_range(L, -1, key, 1, 8);
+		} else if (strcmp(key, "scroller_width") == 0) {
+			s->scroller_width = check_float_range(L, -1, key, 0.15f, 1.0f);
 		} else if (strcmp(key, "resize_step") == 0) {
 			s->resize_step = check_int_range(L, -1, key, 1, 500);
 		} else if (strcmp(key, "terminal") == 0) {

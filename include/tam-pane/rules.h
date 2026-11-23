@@ -38,6 +38,8 @@ struct tp_rule_result {
 	int32_t y;
 	bool has_monitor;
 	char monitor[TP_RULE_MONITOR_MAX];
+	bool has_scratchpad;
+	bool scratchpad;
 };
 
 #endif

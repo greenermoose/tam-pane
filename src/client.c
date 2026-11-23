@@ -219,6 +219,11 @@ static void on_map(struct wl_listener *l, void *data) {
 					   c->toplevel->current.max_height);
 	if (rule.has_floating)
 		c->floating = rule.floating;
+	if (rule.has_scratchpad && rule.scratchpad) {
+		c->scratchpad = true;
+		c->scratchpad_visible = false;
+		c->floating = true;
+	}
 
 	if (rule.has_size) {
 		c->float_geom.w = rule.width;
@@ -270,6 +275,8 @@ static void on_unmap(struct wl_listener *l, void *data) {
 
 	c->mapped = false;
 	c->fullscreen = false;
+	c->scratchpad = false;
+	c->scratchpad_visible = false;
 	tp_foreign_toplevel_unmap(c);
 	if (had_focus)
 		s->focused_client = NULL;
@@ -389,7 +396,11 @@ void tp_clients_finish(struct tp_server *s) {
 /* ---- operations ---- */
 
 bool tp_client_visible(const struct tp_client *c) {
-	return c->mapped && c->mon && tp_tags_visible(c->tags, &c->mon->view);
+	if (!c || !c->mapped || !c->mon)
+		return false;
+	if (c->scratchpad)
+		return c->scratchpad_visible;
+	return tp_tags_visible(c->tags, &c->mon->view);
 }
 
 void tp_client_place(struct tp_client *c, struct tp_rect box) {
@@ -412,8 +423,12 @@ void tp_client_toggle_tags(struct tp_client *c, tp_tags_t mask) {
 
 void tp_client_set_tags(struct tp_client *c, tp_tags_t tags) {
 	tags &= TP_TAG_ALL;
-	if (!tags || tags == c->tags)
+	if (!tags)
 		return;
+	if (!c->scratchpad && tags == c->tags)
+		return;
+	c->scratchpad = false;
+	c->scratchpad_visible = false;
 	c->tags = tags;
 	if (c->mon) {
 		for (unsigned int i = 1; i < TP_TAG_SLOTS; i++)
@@ -432,6 +447,12 @@ void tp_client_set_floating(struct tp_client *c, bool floating) {
 		return;
 	tp_pointer_cancel_grab(c->server, c);
 	c->floating = floating;
+	if (!floating && c->scratchpad) {
+		c->scratchpad = false;
+		c->scratchpad_visible = false;
+		if (c->mon)
+			c->tags = tp_tagview_current(&c->mon->view);
+	}
 	if (floating && c->mon) {
 		if (!float_on_monitor(c)) {
 			/* A window that mapped with no monitor has no floating place
@@ -452,6 +473,97 @@ void tp_client_set_fullscreen(struct tp_client *c, bool fullscreen) {
 	apply_fullscreen(c, fullscreen);
 	if (c->mon)
 		tp_arrange(c->mon);
+}
+
+void tp_client_scratchpad_move(struct tp_client *c) {
+	if (!c || !c->mapped)
+		return;
+	struct tp_server *s = c->server;
+	tp_pointer_cancel_grab(s, c);
+
+	if (c->scratchpad) {
+		c->scratchpad = false;
+		c->scratchpad_visible = false;
+		if (c->mon) {
+			c->tags = tp_tagview_current(&c->mon->view);
+			tp_arrange(c->mon);
+		}
+		tp_focus(s, c);
+		return;
+	}
+
+	if (c->fullscreen)
+		apply_fullscreen(c, false);
+	if (!c->floating) {
+		c->floating = true;
+		if (c->mon) {
+			if (!float_on_monitor(c)) {
+				half_monitor_size(c);
+				center_float(c);
+			} else if (default_float_size(c)) {
+				center_float(c);
+			}
+		}
+		apply_floating(c);
+	}
+	c->scratchpad = true;
+	c->scratchpad_visible = false;
+	if (c->mon) {
+		tp_client_detach(c);
+		tp_arrange(c->mon);
+	}
+	tp_focus_refresh(s);
+}
+
+void tp_scratchpad_toggle(struct tp_server *s) {
+	if (!s || !s->selmon)
+		return;
+	struct tp_monitor *m = s->selmon;
+
+	bool hid_any = false;
+	struct tp_client *c;
+	wl_list_for_each(c, &s->clients, link) {
+		if (c->mapped && c->scratchpad && c->scratchpad_visible && c->mon == m) {
+			tp_pointer_cancel_grab(s, c);
+			c->scratchpad_visible = false;
+			hid_any = true;
+		}
+	}
+	if (hid_any) {
+		tp_arrange(m);
+		tp_focus_refresh(s);
+		return;
+	}
+
+	/* Find the most recently focused scratchpad window. */
+	struct tp_client *pick = NULL;
+	wl_list_for_each(c, &s->focus_stack, flink) {
+		if (c->mapped && c->scratchpad) {
+			pick = c;
+			break;
+		}
+	}
+	if (!pick)
+		return;
+
+	struct tp_monitor *old = pick->mon;
+	if (old != m) {
+		if (old)
+			tp_client_carry_float(pick, old->usable, m->usable);
+		tp_client_attach(pick, m, 0);
+		tp_client_clear_home(pick);
+		if (old)
+			tp_arrange(old);
+	}
+	if (!float_on_monitor(pick)) {
+		half_monitor_size(pick);
+		center_float(pick);
+	} else if (default_float_size(pick)) {
+		center_float(pick);
+	}
+	pick->scratchpad_visible = true;
+	tp_arrange(m);
+	tp_focus(s, pick);
 }
 
 void tp_client_resize_floating(struct tp_client *c, enum tp_dir dir,

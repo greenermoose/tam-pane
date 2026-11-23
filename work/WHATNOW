@@ -3,33 +3,30 @@ WHATNOW
 What tam-pane is doing now and what comes next. Read this first; revise
 it at the end of every session (work/README-work).
 
-Updated: 2026-11-23, with W29
+Updated: 2026-11-23, with W30
 
 
 STATE
 
-  Version 0.2.4 on branch dev, accepted by Fred on 2026-11-23 after his
-  nested sandbox/demo-0.2.4 check (W29). Phase P3 / R1 finding 15: replaces eager
-  tp_arrange() / tp_arrange_all() with a per-monitor arrange_dirty flag
-  (plus arrange_count) and a single server-owned Wayland idle source
-  (tp_server.arrange_idle) that coalesces multiple mutations into one
-  arrange pass per dirty monitor per idle, runs tp_idle_update_inhibit()
-  and tp_pointer_refocus_now() once per batch, and uses a 64-entry stack
-  buffer in sync_tree() to avoid per-arrange heap allocation. Synchronous
-  readers (tiled swap/move/resize/drag-begin, popup unconstrain, IPC
-  windows/focused, and window events with active listeners) flush on
-  demand via tp_arrange_flush().
-  0.2.4 binary SHA-256:
-  bb2daa30f36a3f32f97150e8ebb6708ad1589ff38bc13fa674d0737c2255b092
+  Version 0.2.5 on branch dev, accepted by Fred on 2026-11-23 after his
+  nested sandbox/demo-0.2.5 check (W30). Phase P3: adds a unified per-tag-slot
+  tp_layout interface (include/tam-pane/layout/layout.h) sharing dwindle's
+  interface across master-stack (master.c), scroller (scroller.c), and
+  monocle (monocle.c), plus a floating scratchpad (src/client.c), Lua
+  config/dispatchers/rules, default bindings (Meta+Space, Meta+Shift+Space,
+  Meta+-, Meta+Shift+-), and IPC layout/scratchpad support.
+  0.2.5 binary SHA-256:
+  43a11d39e5dae0f44f9be3f3911b1dc21d51a330b1fa497c3d9684aad29bdbe7
 
-  Prior accepted baseline: 0.2.3 (c97a25f, accepted 2026-11-22, W28).
+  Prior accepted baseline: 0.2.4 (e0c115f, accepted 2026-11-23, W29).
   Review R1 (reviews/R1-code-review-0.1.4.md) findings 1-10, 12-16, and
   finding 17's binding gate and SIGHUP point are done; finding 11 waits
   for P4, and finding 17's remaining smaller points land alongside the P3
   versions that need them.
 
-  Automated checks pass: 28 tag, 143 dwindle, 509 Lua, 84 IPC, 5 smoke,
-  709 headless input, nm -D symbol check, and tests/test_nested_input.py.
+  Automated checks pass: 28 tag, 143 dwindle, 102 layouts, 537 Lua, 111
+  IPC, 5 smoke, 734 headless input, nm -D symbol check, and
+  tests/test_nested_input.py.
 
   Dependencies today: wlroots 0.20, wayland-server, xkbcommon, libtam
   (static), and Lua 5.5.1 (vendored in third_party/lua/, one patch).
@@ -37,9 +34,8 @@ STATE
 
 NEXT
 
-  1. P3 0.2.5 (plans/P3-daily-parity.md): master-stack, scroller, and
-     monocle layouts sharing dwindle's interface, plus a scratchpad,
-     built on top of 0.2.4's deferred arrange. Each change keeps the R1
+  1. P3 0.2.6 (plans/P3-daily-parity.md): XWayland, behind a build option
+     (temporary xcb / xcb-icccm dependency). Each change keeps the R1
      rules: one bumped version, a failing-first test, a sandbox demo
      where the nested window can show it, and every affected doc updated.
 

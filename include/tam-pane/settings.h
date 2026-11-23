@@ -24,6 +24,10 @@ struct tp_settings {
 	bool preserve_split;	 /* dwindle: keep each split's first orientation */
 	bool smart_split;		 /* dwindle: pointer direction picks the edge */
 	bool proportional_split; /* dwindle: keep same-direction runs proportional */
+	int layout;				 /* default enum tp_layout_kind for new tag slots */
+	float master_ratio;		 /* master-stack: initial master pane fraction */
+	int master_count;		 /* master-stack: initial master window count */
+	float scroller_width;	 /* scroller: default column width fraction */
 	int32_t resize_step;	 /* pixels per keyboard resize step */
 	char terminal[TP_SETTINGS_TERMINAL_MAX];
 	char cursor_theme[TP_SETTINGS_CURSOR_THEME_MAX]; /* empty: XCURSOR_THEME */

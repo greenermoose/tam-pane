@@ -16,6 +16,10 @@ void tp_settings_defaults(struct tp_settings *s) {
 		.preserve_split = false,
 		.smart_split = false,
 		.proportional_split = false,
+		.layout = 0, /* TP_LAYOUT_DWINDLE */
+		.master_ratio = 0.55f,
+		.master_count = 1,
+		.scroller_width = 0.5f,
 		.resize_step = 40,
 		.cursor_size = 24,
 		.repeat_rate = 25,
