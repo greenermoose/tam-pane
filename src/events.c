@@ -203,3 +203,21 @@ void tp_events_emit_monitor(struct tp_server *s, enum tp_event_kind kind,
 	ev.monitor.scale = scale;
 	tp_events_emit(s, &ev);
 }
+
+void tp_events_emit_chord(struct tp_server *s, enum tp_event_kind kind,
+						  const char *result, const char *action) {
+	if (!event_has_listeners(s, kind))
+		return;
+
+	struct tp_event ev = {.kind = kind};
+	copy_str(ev.chord.mode, sizeof(ev.chord.mode),
+			 tp_chord_mode_name(s->chord.mode));
+	tp_chord_format(s->chord.mods, s->chord.sym, ev.chord.chord,
+					sizeof(ev.chord.chord));
+	copy_str(ev.chord.filter, sizeof(ev.chord.filter), s->chord.filter);
+	copy_str(ev.chord.result, sizeof(ev.chord.result), result);
+	copy_str(ev.chord.action, sizeof(ev.chord.action), action);
+	ev.chord.matches = s->chord.filtered_len;
+	ev.chord.selected = s->chord.selected;
+	tp_events_emit(s, &ev);
+}

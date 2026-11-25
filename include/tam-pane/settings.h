@@ -14,6 +14,7 @@
 enum {
 	TP_SETTINGS_TERMINAL_MAX = 256,
 	TP_SETTINGS_CURSOR_THEME_MAX = 128,
+	TP_SETTINGS_KEY_MAX = 64,
 };
 
 struct tp_settings {
@@ -34,6 +35,11 @@ struct tp_settings {
 	uint32_t cursor_size;
 	int32_t repeat_rate;  /* keys per second */
 	int32_t repeat_delay; /* milliseconds */
+	bool chord_enabled;
+	bool chord_overlay_builtin;
+	char chord_key[TP_SETTINGS_KEY_MAX];
+	char chord_secondary_key[TP_SETTINGS_KEY_MAX];
+	char chord_cancel_key[TP_SETTINGS_KEY_MAX];
 };
 
 void tp_settings_defaults(struct tp_settings *s);

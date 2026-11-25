@@ -12,6 +12,7 @@
 #include "tam-pane/geom.h"
 #include "tam-pane/tags.h"
 #include <stdbool.h>
+#include <stddef.h>
 
 enum tp_event_kind {
 	TP_EVENT_WINDOW_OPEN,
@@ -20,8 +21,22 @@ enum tp_event_kind {
 	TP_EVENT_TAG_CHANGE,
 	TP_EVENT_MONITOR_ADD,
 	TP_EVENT_MONITOR_REMOVE,
+	TP_EVENT_CHORD_START,
+	TP_EVENT_CHORD_UPDATE,
+	TP_EVENT_CHORD_END,
+	TP_EVENT_CHORD_CANCEL,
 	TP_EVENT_STARTUP, /* once, after the Wayland socket is up */
 	TP_EVENT_COUNT,
+};
+
+struct tp_event_chord {
+	char mode[24];
+	char chord[64];
+	char filter[64];
+	char result[24];
+	char action[128];
+	size_t matches;
+	size_t selected;
 };
 
 struct tp_event_window {
@@ -53,6 +68,7 @@ struct tp_event {
 		struct tp_event_window window;
 		struct tp_event_tag tag;
 		struct tp_event_monitor monitor;
+		struct tp_event_chord chord;
 	};
 };
 

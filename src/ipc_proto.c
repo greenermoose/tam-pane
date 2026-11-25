@@ -19,7 +19,9 @@
 static uint32_t all_subscribable_mask(void) {
 	return (1u << TP_EVENT_WINDOW_OPEN) | (1u << TP_EVENT_WINDOW_CLOSE) |
 		   (1u << TP_EVENT_WINDOW_FOCUS) | (1u << TP_EVENT_TAG_CHANGE) |
-		   (1u << TP_EVENT_MONITOR_ADD) | (1u << TP_EVENT_MONITOR_REMOVE);
+		   (1u << TP_EVENT_MONITOR_ADD) | (1u << TP_EVENT_MONITOR_REMOVE) |
+		   (1u << TP_EVENT_CHORD_START) | (1u << TP_EVENT_CHORD_UPDATE) |
+		   (1u << TP_EVENT_CHORD_END) | (1u << TP_EVENT_CHORD_CANCEL);
 }
 
 bool tp_ipc_socket_path(char *out, size_t out_size, const char *runtime_dir,
@@ -122,6 +124,22 @@ tam_str_t tp_ipc_format_event(tam_str_t s, const struct tp_event *ev) {
 							   ev->monitor.area.w, ev->monitor.area.h,
 							   ev->monitor.scale);
 		return s;
+	case TP_EVENT_CHORD_START:
+	case TP_EVENT_CHORD_UPDATE:
+	case TP_EVENT_CHORD_END:
+	case TP_EVENT_CHORD_CANCEL:
+		s = tam_str_cat_printf(s, "event\t%s\tmode=", name);
+		s = tp_ipc_escape_append(s, ev->chord.mode);
+		s = tam_str_cat(s, "\tchord=");
+		s = tp_ipc_escape_append(s, ev->chord.chord);
+		s = tam_str_cat(s, "\tfilter=");
+		s = tp_ipc_escape_append(s, ev->chord.filter);
+		s = tam_str_cat_printf(s, "\tmatches=%zu\tselected=%zu\tresult=",
+							   ev->chord.matches, ev->chord.selected);
+		s = tp_ipc_escape_append(s, ev->chord.result);
+		s = tam_str_cat(s, "\taction=");
+		s = tp_ipc_escape_append(s, ev->chord.action);
+		return tam_str_cat_len(s, "\n", 1);
 	case TP_EVENT_STARTUP:
 		return tam_str_cat(s, "event\tstartup\n");
 	case TP_EVENT_COUNT:
@@ -174,6 +192,12 @@ bool tp_ipc_parse_subscribe(const char *args, uint32_t *out_mask, char *err,
 	while (next_token(&p, tok, sizeof(tok))) {
 		if (strcmp(tok, "all") == 0) {
 			mask |= all_subscribable_mask();
+			continue;
+		}
+		if (strcmp(tok, "chord") == 0) {
+			mask |= (1u << TP_EVENT_CHORD_START) |
+					(1u << TP_EVENT_CHORD_UPDATE) |
+					(1u << TP_EVENT_CHORD_END) | (1u << TP_EVENT_CHORD_CANCEL);
 			continue;
 		}
 		enum tp_event_kind kind;
@@ -260,7 +284,9 @@ bool tp_ipc_parse_dispatch(const char *args, struct tp_action *out,
 	if (strcmp(verb, "terminal") == 0 || strcmp(verb, "close") == 0 ||
 		strcmp(verb, "quit") == 0 || strcmp(verb, "reload") == 0 ||
 		strcmp(verb, "toggle_float") == 0 ||
-		strcmp(verb, "toggle_fullscreen") == 0) {
+		strcmp(verb, "toggle_fullscreen") == 0 ||
+		strcmp(verb, "chord_toggle") == 0 ||
+		strcmp(verb, "chord_cancel") == 0) {
 		if (has_extra_tokens(p)) {
 			if (err && err_size > 0)
 				snprintf(err, err_size, "%s takes no arguments", verb);
@@ -276,8 +302,12 @@ bool tp_ipc_parse_dispatch(const char *args, struct tp_action *out,
 			out->kind = TP_ACT_RELOAD;
 		else if (strcmp(verb, "toggle_float") == 0)
 			out->kind = TP_ACT_TOGGLE_FLOAT;
-		else
+		else if (strcmp(verb, "toggle_fullscreen") == 0)
 			out->kind = TP_ACT_TOGGLE_FULLSCREEN;
+		else if (strcmp(verb, "chord_toggle") == 0)
+			out->kind = TP_ACT_CHORD_TOGGLE;
+		else
+			out->kind = TP_ACT_CHORD_CANCEL;
 		return true;
 	}
 
@@ -586,6 +616,10 @@ tam_str_t tp_ipc_format_action(tam_str_t s, const struct tp_action *act) {
 		return tam_str_cat(s, "scratchpad toggle");
 	case TP_ACT_SCRATCHPAD_MOVE:
 		return tam_str_cat(s, "scratchpad move");
+	case TP_ACT_CHORD_TOGGLE:
+		return tam_str_cat(s, "chord_toggle");
+	case TP_ACT_CHORD_CANCEL:
+		return tam_str_cat(s, "chord_cancel");
 	}
 	return tam_str_cat(s, "unknown");
 }

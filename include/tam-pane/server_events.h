@@ -59,5 +59,7 @@ void tp_events_emit_tag(struct tp_server *s, const struct tp_monitor *m,
 						tp_tags_t prev_tags, tp_tags_t new_tags);
 void tp_events_emit_monitor(struct tp_server *s, enum tp_event_kind kind,
 							const char *name, struct tp_rect area, float scale);
+void tp_events_emit_chord(struct tp_server *s, enum tp_event_kind kind,
+						  const char *result, const char *action);
 
 #endif

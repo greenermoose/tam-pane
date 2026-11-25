@@ -7,6 +7,8 @@
  * that tp.dsp.* dispatchers invoke.
  */
 #include "tam-pane/bindings.h"
+#include "tam-pane/chord.h"
+#include "tam-pane/chord_overlay.h"
 #include "tam-pane/client.h"
 #include "tam-pane/focus.h"
 #include "tam-pane/input.h"
@@ -184,6 +186,23 @@ void tp_action_run(struct tp_server *s, const struct tp_action *act) {
 			tp_client_scratchpad_move(c);
 		break;
 	}
+	case TP_ACT_CHORD_TOGGLE:
+		if (tp_chord_is_composing(&s->chord)) {
+			if (tp_chord_cancel(&s->chord)) {
+				tp_chord_overlay_update(s);
+				tp_events_emit_chord(s, TP_EVENT_CHORD_CANCEL, NULL, NULL);
+			}
+		} else if (!s->locked && tp_chord_open(&s->chord, s->lua, false)) {
+			tp_chord_overlay_update(s);
+			tp_events_emit_chord(s, TP_EVENT_CHORD_START, NULL, NULL);
+		}
+		break;
+	case TP_ACT_CHORD_CANCEL:
+		if (tp_chord_cancel(&s->chord)) {
+			tp_chord_overlay_update(s);
+			tp_events_emit_chord(s, TP_EVENT_CHORD_CANCEL, NULL, NULL);
+		}
+		break;
 	}
 }
 

@@ -15,6 +15,7 @@ struct tp_lua_binding {
 	bool allow_locked;
 	struct tp_action action;
 	int lua_ref; /* LUA_NOREF when !is_lua */
+	char desc[128];
 };
 
 struct tp_lua_bind_list {

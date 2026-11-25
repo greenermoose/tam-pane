@@ -7,6 +7,7 @@
 #ifndef TAM_PANE_SERVER_H
 #define TAM_PANE_SERVER_H
 
+#include "tam-pane/chord.h"
 #include "tam-pane/geom.h"
 #include "tam-pane/layout/layout.h"
 #include "tam-pane/server_events.h"
@@ -54,6 +55,7 @@ struct wlr_xcursor_manager;
 struct wlr_xdg_shell;
 struct wlr_layer_shell_v1;
 struct wlr_xwayland;
+struct tp_chord_overlay;
 struct tp_client;
 struct tp_ipc_server;
 struct tp_layer_surface;
@@ -95,6 +97,8 @@ enum tp_layer {
 struct tp_server {
 	struct tp_settings settings;
 	struct tp_lua *lua;
+	struct tp_chord_state chord;
+	struct tp_chord_overlay *chord_overlay;
 	char config_path[PATH_MAX];
 	struct tp_event_queue events;
 

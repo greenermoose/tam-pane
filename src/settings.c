@@ -24,7 +24,12 @@ void tp_settings_defaults(struct tp_settings *s) {
 		.cursor_size = 24,
 		.repeat_rate = 25,
 		.repeat_delay = 600,
+		.chord_enabled = true,
+		.chord_overlay_builtin = true,
 	};
 	snprintf(s->terminal, sizeof(s->terminal), "%s", term);
 	s->cursor_theme[0] = '\0';
+	snprintf(s->chord_key, sizeof(s->chord_key), "Caps_Lock");
+	snprintf(s->chord_secondary_key, sizeof(s->chord_secondary_key), "Alt_R");
+	snprintf(s->chord_cancel_key, sizeof(s->chord_cancel_key), "Escape");
 }

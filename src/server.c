@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "tam-pane/server.h"
 #include "tam-pane/capture.h"
+#include "tam-pane/chord_overlay.h"
 #include "tam-pane/client.h"
 #include "tam-pane/decoration.h"
 #include "tam-pane/foreign_toplevel.h"
@@ -86,6 +87,10 @@ bool tp_server_init(struct tp_server *s) {
 	wl_list_init(&s->focus_stack);
 	wl_list_init(&s->keyboards);
 	tp_events_init(s);
+	tp_chord_init(&s->chord);
+	tp_chord_configure(&s->chord, s->settings.chord_enabled,
+					   s->settings.chord_key, s->settings.chord_secondary_key,
+					   s->settings.chord_cancel_key);
 
 	if (!s->lua)
 		s->lua = tp_lua_create();
@@ -159,7 +164,8 @@ bool tp_server_init(struct tp_server *s) {
 	tp_monitors_init(s);
 	tp_layers_init(s);
 	tp_clients_init(s);
-	if (!tp_input_init(s) || !tp_pointer_init(s) || !tp_text_input_init(s))
+	if (!tp_input_init(s) || !tp_pointer_init(s) || !tp_text_input_init(s) ||
+		!tp_chord_overlay_init(s))
 		return false;
 	tp_xwayland_init(s);
 	return true;
@@ -240,6 +246,10 @@ bool tp_server_reload(struct tp_server *s, char *err_buf, size_t err_buf_size) {
 	}
 
 	tp_monitors_apply_settings(s);
+	tp_chord_configure(&s->chord, s->settings.chord_enabled,
+					   s->settings.chord_key, s->settings.chord_secondary_key,
+					   s->settings.chord_cancel_key);
+	tp_chord_overlay_update(s);
 	if (prev.repeat_rate != s->settings.repeat_rate ||
 		prev.repeat_delay != s->settings.repeat_delay) {
 		tp_keyboards_apply_settings(s);
@@ -282,6 +292,8 @@ void tp_server_finish(struct tp_server *s) {
 	tp_xwayland_finish(s);
 	wl_display_destroy_clients(s->display);
 
+	tp_chord_overlay_finish(s);
+	tp_chord_finish(&s->chord);
 	tp_text_input_finish(s);
 	tp_pointer_finish(s);
 	tp_input_finish(s);

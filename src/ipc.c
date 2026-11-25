@@ -339,6 +339,21 @@ static tam_str_t build_binds(const struct tp_server *s) {
 	return tam_str_cat(ctx.out, "END\n");
 }
 
+static tam_str_t build_chord(const struct tp_server *s) {
+	const struct tp_chord_state *st = &s->chord;
+	char cbuf[64];
+	tp_chord_format(st->mods, st->sym, cbuf, sizeof(cbuf));
+	tam_str_t out = tam_str_new("OK\nchord\tmode=");
+	out = tp_ipc_escape_append(out, tp_chord_mode_name(st->mode));
+	out = tam_str_cat(out, "\tchord=");
+	out = tp_ipc_escape_append(out, cbuf);
+	out = tam_str_cat(out, "\tfilter=");
+	out = tp_ipc_escape_append(out, st->filter);
+	out = tam_str_cat_printf(out, "\tmatches=%zu\tselected=%zu\n",
+							 st->filtered_len, st->selected);
+	return tam_str_cat(out, "END\n");
+}
+
 /* ---- Request handling ---- */
 
 static bool handle_line(struct tp_ipc_client *c, char *line) {
@@ -368,7 +383,7 @@ static bool handle_line(struct tp_ipc_client *c, char *line) {
 	if (strcmp(line, "version") == 0 || strcmp(line, "monitors") == 0 ||
 		strcmp(line, "windows") == 0 || strcmp(line, "focused") == 0 ||
 		strcmp(line, "tags") == 0 || strcmp(line, "cursor") == 0 ||
-		strcmp(line, "binds") == 0) {
+		strcmp(line, "binds") == 0 || strcmp(line, "chord") == 0) {
 		if (*args)
 			return ipc_send_err(c, "command takes no arguments");
 		tam_str_t reply = NULL;
@@ -386,8 +401,10 @@ static bool handle_line(struct tp_ipc_client *c, char *line) {
 			reply = build_tags(s);
 		else if (strcmp(line, "cursor") == 0)
 			reply = build_cursor(s);
-		else
+		else if (strcmp(line, "binds") == 0)
 			reply = build_binds(s);
+		else
+			reply = build_chord(s);
 		if (!reply)
 			return ipc_send_err(c, "out of memory");
 		bool ok = ipc_client_queue(c, reply, tam_str_len(reply));

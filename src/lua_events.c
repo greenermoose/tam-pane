@@ -18,6 +18,10 @@ static const char *const event_names[TP_EVENT_COUNT] = {
 	[TP_EVENT_TAG_CHANGE] = "tag.change",
 	[TP_EVENT_MONITOR_ADD] = "monitor.add",
 	[TP_EVENT_MONITOR_REMOVE] = "monitor.remove",
+	[TP_EVENT_CHORD_START] = "chord.start",
+	[TP_EVENT_CHORD_UPDATE] = "chord.update",
+	[TP_EVENT_CHORD_END] = "chord.end",
+	[TP_EVENT_CHORD_CANCEL] = "chord.cancel",
 	[TP_EVENT_STARTUP] = "startup",
 };
 
@@ -174,6 +178,25 @@ static void push_event_table(lua_State *L, const struct tp_event *ev) {
 		lua_setfield(L, -2, "h");
 		lua_pushnumber(L, (lua_Number)ev->monitor.scale);
 		lua_setfield(L, -2, "scale");
+		break;
+	case TP_EVENT_CHORD_START:
+	case TP_EVENT_CHORD_UPDATE:
+	case TP_EVENT_CHORD_END:
+	case TP_EVENT_CHORD_CANCEL:
+		lua_pushstring(L, ev->chord.mode);
+		lua_setfield(L, -2, "mode");
+		lua_pushstring(L, ev->chord.chord);
+		lua_setfield(L, -2, "chord");
+		lua_pushstring(L, ev->chord.filter);
+		lua_setfield(L, -2, "filter");
+		lua_pushstring(L, ev->chord.result);
+		lua_setfield(L, -2, "result");
+		lua_pushstring(L, ev->chord.action);
+		lua_setfield(L, -2, "action");
+		lua_pushinteger(L, (lua_Integer)ev->chord.matches);
+		lua_setfield(L, -2, "matches");
+		lua_pushinteger(L, (lua_Integer)ev->chord.selected);
+		lua_setfield(L, -2, "selected");
 		break;
 	case TP_EVENT_STARTUP:
 	case TP_EVENT_COUNT:

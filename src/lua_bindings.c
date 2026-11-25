@@ -581,6 +581,11 @@ static int l_tp_bind(lua_State *L) {
 				if (lua_type(L, -1) != LUA_TBOOLEAN)
 					return luaL_error(L, "tp.bind: locked must be a boolean");
 				entry.allow_locked = lua_toboolean(L, -1) != 0;
+			} else if (strcmp(k, "desc") == 0) {
+				if (lua_type(L, -1) != LUA_TSTRING)
+					return luaL_error(L, "tp.bind: desc must be a string");
+				snprintf(entry.desc, sizeof(entry.desc), "%s",
+						 lua_tostring(L, -1));
 			} else {
 				tam_log_warn("tp.bind: unknown option '%s' ignored", k);
 			}
@@ -790,8 +795,33 @@ void tp_lua_for_each_bind(const struct tp_lua *lua, tp_lua_bind_iter_fn fn,
 			.is_lua = b->is_lua,
 			.action = b->action,
 		};
+		memcpy(info.desc, b->desc, sizeof(info.desc));
 		fn(&info, userdata);
 	}
+}
+
+bool tp_lua_run_bind_index(struct tp_lua *lua, size_t idx, bool locked) {
+	if (!lua || !lua->L || idx >= lua->active_binds.len)
+		return false;
+	const struct tp_lua_binding *found = &lua->active_binds.items[idx];
+	if (locked && !found->allow_locked)
+		return false;
+	if (!found->is_lua) {
+		if (lua->action_fn)
+			lua->action_fn(&found->action, lua->action_userdata);
+		return true;
+	}
+	lua_State *L = lua->L;
+	int top = lua_gettop(L);
+	lua_rawgeti(L, LUA_REGISTRYINDEX, found->lua_ref);
+	int rc = tp_lua_guarded_pcall(lua, 0, 0, TP_LUA_CALLBACK_MAX_INSTRUCTIONS,
+								  TP_LUA_CALLBACK_TIMEOUT_MS, "binding");
+	if (rc != LUA_OK) {
+		const char *msg = lua_tostring(L, -1);
+		tam_log_error("lua binding failed: %s", msg ? msg : "unknown error");
+	}
+	lua_settop(L, top);
+	return true;
 }
 
 bool tp_lua_has_unmodified_bindings(const struct tp_lua *lua) {

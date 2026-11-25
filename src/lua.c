@@ -395,6 +395,19 @@ static int l_tp_config(lua_State *L) {
 			s->repeat_rate = check_int_range(L, -1, key, 1, 200);
 		} else if (strcmp(key, "repeat_delay") == 0) {
 			s->repeat_delay = check_int_range(L, -1, key, 1, 5000);
+		} else if (strcmp(key, "chord_enabled") == 0) {
+			s->chord_enabled = check_bool(L, -1, key);
+		} else if (strcmp(key, "chord_overlay_builtin") == 0) {
+			s->chord_overlay_builtin = check_bool(L, -1, key);
+		} else if (strcmp(key, "chord_key") == 0) {
+			check_string_buf(L, -1, key, false, s->chord_key,
+							 sizeof(s->chord_key));
+		} else if (strcmp(key, "chord_secondary_key") == 0) {
+			check_string_buf(L, -1, key, false, s->chord_secondary_key,
+							 sizeof(s->chord_secondary_key));
+		} else if (strcmp(key, "chord_cancel_key") == 0) {
+			check_string_buf(L, -1, key, false, s->chord_cancel_key,
+							 sizeof(s->chord_cancel_key));
 		} else {
 			tam_log_warn("lua: unknown setting '%s' ignored", key);
 		}

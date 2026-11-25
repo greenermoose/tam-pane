@@ -129,6 +129,7 @@ struct tp_lua_bind_info {
 	bool allow_locked;
 	bool is_lua;
 	struct tp_action action; /* valid when !is_lua */
+	char desc[128];			 /* optional human-readable description */
 };
 
 typedef void (*tp_lua_bind_iter_fn)(const struct tp_lua_bind_info *info,
@@ -137,6 +138,9 @@ typedef void (*tp_lua_bind_iter_fn)(const struct tp_lua_bind_info *info,
 /* Invoke fn once per active key binding in registration order. */
 void tp_lua_for_each_bind(const struct tp_lua *lua, tp_lua_bind_iter_fn fn,
 						  void *userdata);
+
+/* Execute the active binding at registration index idx (for chord menu). */
+bool tp_lua_run_bind_index(struct tp_lua *lua, size_t idx, bool locked);
 
 /* True when at least one active binding has mods == 0. */
 bool tp_lua_has_unmodified_bindings(const struct tp_lua *lua);

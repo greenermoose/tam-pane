@@ -73,6 +73,9 @@ replaced with a space. Every record is guaranteed to occupy one line.
 - `binds`
   - One line per active key binding:
     `bind\tmods=<Meta+Shift|none>\tkey=<keysym>\tlocked=<0|1>\taction=<desc|lua>`
+- `chord`
+  - Current one-handed chord composer state:
+    `chord\tmode=<idle|pluripotent|building|caps_lock>\tchord=<str>\tfilter=<str>\tmatches=<N>\tselected=<idx>`
 
 ### Actions
 
@@ -95,6 +98,7 @@ replaced with a space. Every record is guaranteed to occupy one line.
     - `layout next|prev`
     - `layout nmaster inc|dec`
     - `scratchpad toggle|move`
+    - `chord_toggle`, `chord_cancel`
     - `spawn <command...>`
 
 ### Event subscription
@@ -108,6 +112,7 @@ replaced with a space. Every record is guaranteed to occupy one line.
     - `tag.change`
     - `monitor.add`
     - `monitor.remove`
+    - `chord.start`, `chord.update`, `chord.end`, `chord.cancel` (or shorthand `chord`)
   - Events are delivered even when Lua has no hooks registered for them.
 
 ## Session-lock policy
