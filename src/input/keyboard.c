@@ -10,7 +10,9 @@
 #include "tam-pane/text_input.h"
 #include <linux/input-event-codes.h>
 #include <stdlib.h>
+#include <string.h>
 #include <tam.h>
+#include <wlr/interfaces/wlr_keyboard.h>
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/types/wlr_keyboard.h>
 #include <wlr/types/wlr_seat.h>
@@ -28,9 +30,29 @@ static struct wlr_keyboard_modifiers sanitized_mods(struct tp_keyboard *k) {
 	return m;
 }
 
+static const char *keyboard_layout_name(struct wlr_keyboard *wlr,
+										uint32_t group) {
+	if (!wlr || !wlr->keymap)
+		return "";
+	xkb_layout_index_t num = xkb_keymap_num_layouts(wlr->keymap);
+	if (num == 0)
+		return "";
+	if (group >= num)
+		group = 0;
+	const char *name = xkb_keymap_layout_get_name(wlr->keymap, group);
+	return name ? name : "";
+}
+
 static void on_modifiers(struct wl_listener *l, void *data) {
 	struct tp_keyboard *k = wl_container_of(l, k, modifiers);
 	tp_idle_notify_activity(k->server);
+	if (k->wlr->modifiers.group != k->last_layout_group) {
+		k->last_layout_group = k->wlr->modifiers.group;
+		tp_events_emit_keyboard_layout(
+			k->server, k->wlr->base.name ? k->wlr->base.name : "",
+			keyboard_layout_name(k->wlr, k->last_layout_group),
+			k->last_layout_group);
+	}
 	if (tp_text_input_forward_modifiers(k->server, k->wlr))
 		return;
 	struct wlr_keyboard_modifiers m = sanitized_mods(k);
@@ -349,4 +371,36 @@ void tp_keyboards_apply_settings(struct tp_server *s) {
 		wlr_keyboard_set_repeat_info(k->wlr, s->settings.repeat_rate,
 									 s->settings.repeat_delay);
 	}
+}
+
+bool tp_keyboard_next_layout(struct tp_server *s, const char *name) {
+	if (!s)
+		return false;
+	struct tp_keyboard *target = NULL;
+	struct wlr_keyboard *seat_kb =
+		s->seat ? wlr_seat_get_keyboard(s->seat) : NULL;
+	struct tp_keyboard *k;
+	wl_list_for_each(k, &s->keyboards, link) {
+		if (name && *name) {
+			if (k->wlr && k->wlr->base.name &&
+				strcmp(k->wlr->base.name, name) == 0) {
+				target = k;
+				break;
+			}
+		} else if (k->wlr == seat_kb || !target) {
+			target = k;
+			if (k->wlr == seat_kb)
+				break;
+		}
+	}
+	if (!target || !target->wlr || !target->wlr->keymap)
+		return false;
+	xkb_layout_index_t num = xkb_keymap_num_layouts(target->wlr->keymap);
+	if (num == 0)
+		return false;
+	uint32_t next = (target->wlr->modifiers.group + 1) % num;
+	wlr_keyboard_notify_modifiers(
+		target->wlr, target->wlr->modifiers.depressed,
+		target->wlr->modifiers.latched, target->wlr->modifiers.locked, next);
+	return true;
 }

@@ -13,6 +13,7 @@
 #include "tam-pane/tags.h"
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 enum tp_event_kind {
 	TP_EVENT_WINDOW_OPEN,
@@ -21,6 +22,10 @@ enum tp_event_kind {
 	TP_EVENT_TAG_CHANGE,
 	TP_EVENT_MONITOR_ADD,
 	TP_EVENT_MONITOR_REMOVE,
+	TP_EVENT_MONITOR_FOCUS,
+	TP_EVENT_OUTPUT_POWER,
+	TP_EVENT_KEYBOARD_LAYOUT,
+	TP_EVENT_CONFIG_RELOAD,
 	TP_EVENT_CHORD_START,
 	TP_EVENT_CHORD_UPDATE,
 	TP_EVENT_CHORD_END,
@@ -62,12 +67,25 @@ struct tp_event_monitor {
 	float scale;
 };
 
+struct tp_event_output_power {
+	char monitor[64];
+	bool dpms;
+};
+
+struct tp_event_keyboard {
+	char name[64];
+	char active_keymap[128];
+	uint32_t active_layout_index;
+};
+
 struct tp_event {
 	enum tp_event_kind kind;
 	union {
 		struct tp_event_window window;
 		struct tp_event_tag tag;
 		struct tp_event_monitor monitor;
+		struct tp_event_output_power output_power;
+		struct tp_event_keyboard keyboard;
 		struct tp_event_chord chord;
 	};
 };

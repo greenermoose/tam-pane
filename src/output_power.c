@@ -2,10 +2,44 @@
 #include "tam-pane/output_power.h"
 #include "tam-pane/output_mgmt.h"
 #include "tam-pane/server.h"
+#include "tam-pane/server_events.h"
 #include <tam.h>
 #include <wlr/backend/wayland.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_power_management_v1.h>
+
+bool tp_output_power_set(struct tp_server *s, struct wlr_output *output,
+						 bool enable) {
+	if (!s || !output || s->stopping)
+		return false;
+
+	if (!enable && wlr_output_is_wl(output)) {
+		/*
+		 * On wlroots's Wayland backend, committing enabled=false unmaps and
+		 * tears down the nested host window, leaving the nested session
+		 * unreachable. Leave the nested output enabled so the locker's
+		 * software black frame blanks the window instead.
+		 */
+		tam_log_info("output-power: ignoring OFF on nested Wayland output %s",
+					 output->name ? output->name : "(unnamed)");
+		return true;
+	}
+	struct wlr_output_state state;
+	wlr_output_state_init(&state);
+	wlr_output_state_set_enabled(&state, enable);
+	bool ok = wlr_output_commit_state(output, &state);
+	wlr_output_state_finish(&state);
+	if (!ok) {
+		tam_log_warn("output-power: cannot set output %s %s",
+					 output->name ? output->name : "(unnamed)",
+					 enable ? "on" : "off");
+		return false;
+	}
+	tp_output_mgmt_update(s);
+	if (output->name)
+		tp_events_emit_output_power(s, output->name, enable);
+	return true;
+}
 
 static void on_set_mode(struct wl_listener *l, void *data) {
 	struct tp_server *s = wl_container_of(l, s, output_power_set_mode);
@@ -14,28 +48,7 @@ static void on_set_mode(struct wl_listener *l, void *data) {
 		return;
 
 	bool enable = ev->mode == ZWLR_OUTPUT_POWER_V1_MODE_ON;
-	if (!enable && wlr_output_is_wl(ev->output)) {
-		/*
-		 * On wlroots's Wayland backend, committing enabled=false unmaps and
-		 * tears down the nested host window, leaving the nested session
-		 * unreachable. Leave the nested output enabled so the locker's
-		 * software black frame blanks the window instead.
-		 */
-		tam_log_info("output-power: ignoring OFF on nested Wayland output %s",
-					 ev->output->name ? ev->output->name : "(unnamed)");
-		return;
-	}
-	struct wlr_output_state state;
-	wlr_output_state_init(&state);
-	wlr_output_state_set_enabled(&state, enable);
-	if (!wlr_output_commit_state(ev->output, &state)) {
-		tam_log_warn("output-power: cannot set output %s %s",
-					 ev->output->name ? ev->output->name : "(unnamed)",
-					 enable ? "on" : "off");
-	} else {
-		tp_output_mgmt_update(s);
-	}
-	wlr_output_state_finish(&state);
+	tp_output_power_set(s, ev->output, enable);
 }
 
 bool tp_output_power_init(struct tp_server *s) {

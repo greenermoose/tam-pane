@@ -89,6 +89,36 @@ static void test_format_event(void) {
 	s = tp_ipc_format_event(s, &mev);
 	CHECK(strcmp(s, "event\tmonitor.add\tname=HDMI-A-1\tx=0\ty=0\tw=1920\t"
 					"h=1080\tscale=1.50\n") == 0);
+	tam_str_clear(s);
+
+	struct tp_event mfev = {.kind = TP_EVENT_MONITOR_FOCUS};
+	snprintf(mfev.monitor.name, sizeof(mfev.monitor.name), "DP-2");
+	s = tp_ipc_format_event(s, &mfev);
+	CHECK(strcmp(s, "event\tmonitor.focus\tmonitor=DP-2\n") == 0);
+	tam_str_clear(s);
+
+	struct tp_event pev = {.kind = TP_EVENT_OUTPUT_POWER};
+	snprintf(pev.output_power.monitor, sizeof(pev.output_power.monitor),
+			 "HDMI-A-1");
+	pev.output_power.dpms = false;
+	s = tp_ipc_format_event(s, &pev);
+	CHECK(strcmp(s, "event\toutput.power\tmonitor=HDMI-A-1\tdpms=0\n") == 0);
+	tam_str_clear(s);
+
+	struct tp_event kev = {.kind = TP_EVENT_KEYBOARD_LAYOUT};
+	snprintf(kev.keyboard.name, sizeof(kev.keyboard.name), "kbd-0");
+	snprintf(kev.keyboard.active_keymap, sizeof(kev.keyboard.active_keymap),
+			 "English (US)");
+	kev.keyboard.active_layout_index = 1;
+	s = tp_ipc_format_event(s, &kev);
+	CHECK(strcmp(s, "event\tkeyboard.layout\tname=kbd-0\t"
+					"active_keymap=English (US)\tactive_layout_index=1\n") ==
+		  0);
+	tam_str_clear(s);
+
+	struct tp_event rev = {.kind = TP_EVENT_CONFIG_RELOAD};
+	s = tp_ipc_format_event(s, &rev);
+	CHECK(strcmp(s, "event\tconfig.reload\n") == 0);
 	tam_str_free(s);
 }
 
@@ -112,6 +142,18 @@ static void test_parse_subscribe(void) {
 
 	CHECK(tp_ipc_parse_subscribe("all", &mask, err, sizeof(err)));
 	CHECK((mask & (1u << TP_EVENT_MONITOR_REMOVE)) != 0);
+	CHECK((mask & (1u << TP_EVENT_MONITOR_FOCUS)) != 0);
+	CHECK((mask & (1u << TP_EVENT_OUTPUT_POWER)) != 0);
+	CHECK((mask & (1u << TP_EVENT_KEYBOARD_LAYOUT)) != 0);
+	CHECK((mask & (1u << TP_EVENT_CONFIG_RELOAD)) != 0);
+
+	CHECK(tp_ipc_parse_subscribe(
+		"monitor.focus output.power keyboard.layout config.reload", &mask, err,
+		sizeof(err)));
+	CHECK(mask == ((1u << TP_EVENT_MONITOR_FOCUS) |
+				   (1u << TP_EVENT_OUTPUT_POWER) |
+				   (1u << TP_EVENT_KEYBOARD_LAYOUT) |
+				   (1u << TP_EVENT_CONFIG_RELOAD)));
 
 	CHECK(!tp_ipc_parse_subscribe("startup", &mask, err, sizeof(err)));
 	CHECK(!tp_ipc_parse_subscribe("bogus.event", &mask, err, sizeof(err)));
@@ -170,11 +212,53 @@ static void test_parse_dispatch(void) {
 
 	CHECK(tp_ipc_parse_dispatch("tag view 3", &act, mon, sizeof(mon), err,
 								sizeof(err)));
-	CHECK(act.kind == TP_ACT_TAG_VIEW && act.tag == 3);
+	CHECK(act.kind == TP_ACT_TAG_VIEW && act.tag == 3 && mon[0] == '\0');
+
+	CHECK(tp_ipc_parse_dispatch("tag view 4 DP-2", &act, mon, sizeof(mon), err,
+								sizeof(err)));
+	CHECK(act.kind == TP_ACT_TAG_VIEW && act.tag == 4 &&
+		  strcmp(mon, "DP-2") == 0);
 
 	CHECK(tp_ipc_parse_dispatch("tag toggle_view 9", &act, mon, sizeof(mon),
 								err, sizeof(err)));
-	CHECK(act.kind == TP_ACT_TAG_TOGGLE_VIEW && act.tag == 9);
+	CHECK(act.kind == TP_ACT_TAG_TOGGLE_VIEW && act.tag == 9 && mon[0] == '\0');
+
+	CHECK(tp_ipc_parse_dispatch("tag toggle_view 2 HDMI-A-1", &act, mon,
+								sizeof(mon), err, sizeof(err)));
+	CHECK(act.kind == TP_ACT_TAG_TOGGLE_VIEW && act.tag == 2 &&
+		  strcmp(mon, "HDMI-A-1") == 0);
+
+	CHECK(tp_ipc_parse_dispatch("dpms off HDMI-A-1", &act, mon, sizeof(mon),
+								err, sizeof(err)));
+	CHECK(act.kind == TP_ACT_DPMS && act.dir == 0 &&
+		  strcmp(mon, "HDMI-A-1") == 0 && strcmp(act.cmd, "HDMI-A-1") == 0);
+
+	CHECK(tp_ipc_parse_dispatch("dpms on DP-1", &act, mon, sizeof(mon), err,
+								sizeof(err)));
+	CHECK(act.kind == TP_ACT_DPMS && act.dir == 1 && strcmp(mon, "DP-1") == 0);
+
+	CHECK(tp_ipc_parse_dispatch("focus_app Google Chrome", &act, mon,
+								sizeof(mon), err, sizeof(err)));
+	CHECK(act.kind == TP_ACT_FOCUS_APP &&
+		  strcmp(act.cmd, "Google Chrome") == 0);
+
+	CHECK(tp_ipc_parse_dispatch("keyboard next", &act, mon, sizeof(mon), err,
+								sizeof(err)));
+	CHECK(act.kind == TP_ACT_KEYBOARD_NEXT && act.cmd[0] == '\0');
+
+	CHECK(tp_ipc_parse_dispatch("keyboard next at-translated-set-2-keyboard",
+								&act, mon, sizeof(mon), err, sizeof(err)));
+	CHECK(act.kind == TP_ACT_KEYBOARD_NEXT &&
+		  strcmp(act.cmd, "at-translated-set-2-keyboard") == 0);
+
+	CHECK(!tp_ipc_parse_dispatch("dpms bogus DP-1", &act, mon, sizeof(mon), err,
+								 sizeof(err)));
+	CHECK(!tp_ipc_parse_dispatch("dpms on", &act, mon, sizeof(mon), err,
+								 sizeof(err)));
+	CHECK(!tp_ipc_parse_dispatch("focus_app   ", &act, mon, sizeof(mon), err,
+								 sizeof(err)));
+	CHECK(!tp_ipc_parse_dispatch("keyboard prev", &act, mon, sizeof(mon), err,
+								 sizeof(err)));
 
 	CHECK(tp_ipc_parse_dispatch("tag move 2", &act, mon, sizeof(mon), err,
 								sizeof(err)));

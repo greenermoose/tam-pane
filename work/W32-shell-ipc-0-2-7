@@ -1,0 +1,32 @@
+W32: Shell IPC and event extensions (0.2.7)
+
+Date: 2026-11-25
+Agent: agy (Gemini)
+Branch: dev
+Version: 0.2.7
+
+SUMMARY
+
+  Extended tam-pane's IPC protocol and event stream to support Tamlinux
+  0.7.0 Milestone 5 (connecting the Quickshell compositor facade to
+  tam-pane):
+  - Bumped VERSION to 0.2.7.
+  - Added `dpms=<0|1>` and `description=<escaped>` fields to `monitors`
+    IPC output.
+  - Added `keyboards` IPC query listing seat keyboards (`name`, `layout`,
+    `active_keymap`, `active_layout_index`, `main`).
+  - Added `dispatch dpms <on|off> <output>` sharing `tp_output_power_set`
+    with `zwlr_output_power_manager_v1` (preserving the nested-Wayland
+    OFF guard).
+  - Added `dispatch focus_app <name>`, `dispatch keyboard next [name]`,
+    and optional `[monitor]` targeting for `dispatch tag view` and
+    `dispatch tag toggle_view`.
+  - Added subscribable events `monitor.focus`, `output.power`,
+    `keyboard.layout`, and `config.reload` (also wired into Lua hooks).
+
+VERIFICATION
+
+  - `make LIBTAM_PREFIX=/tmp/libtam-stage test`: all suites passed
+    (test_tags: 28, test_dwindle: 143, test_layouts: 102, test_lua: 561,
+    test_ipc: 139, test_chord: ok, smoke-headless: 6/6,
+    test_input_headless: 755 checks, 0 failed).

@@ -3,22 +3,25 @@ WHATNOW
 What tam-pane is doing now and what comes next. Read this first; revise
 it at the end of every session (work/README-work).
 
-Updated: 2026-11-23, with W31
+Updated: 2026-11-25, with W32
 
 
 STATE
 
-  Version 0.2.6 on branch dev, accepted by Fred on 2026-11-23 after his
-  nested sandbox/demo-0.2.6 check (W31). Phase P3 complete: adds opt-in
-  XWayland support behind `XWAYLAND=1` (default `XWAYLAND=0` produces a
-  zero-xcb build with `-DTP_XWAYLAND=0`; Tamlinux's goal is no X11 apps).
-  Includes lazy `wlr_xwayland_create`, `xwayland_shell_v1` restricted to
-  `s->xwayland->server->client` in `src/security.c`, unified `tp_client`
-  helpers (`src/client.c`, `src/xwayland.c`), override-redirect popups on
-  `TP_LAYER_OVERLAY`, IPC `xwayland=<0|1>` and `version` `display=<DISPLAY>`,
-  and `sandbox/demo-x11.c` + `sandbox/demo-0.2.6`.
-  0.2.6 XWAYLAND=1 binary SHA-256 (verified by Fred):
-  e028cb874e3e2d414f64aa2f387c45ff7312485ede2d80ae301ab793f2227d42
+  Version 0.2.7 on branch dev (W32): extends IPC and events for Tamlinux
+  0.7.0 Milestone 5 (`monitors` adds `dpms` and `description`; new
+  `keyboards` query; `dispatch dpms <on|off> <output>`, `dispatch
+  focus_app <name>`, `dispatch keyboard next [name]`, optional monitor
+  target on `dispatch tag view|toggle_view`; new subscribable events
+  `monitor.focus`, `output.power`, `keyboard.layout`, and
+  `config.reload`). All automated checks pass (test_tags: 28,
+  test_dwindle: 143, test_layouts: 102, test_lua: 561, test_ipc: 139,
+  test_chord: ok, smoke-headless: 6/6, test_input_headless: 755).
+
+  Prior accepted baseline: 0.2.6 (accepted by Fred on 2026-11-23, W31),
+  including opt-in XWayland support behind `XWAYLAND=1` (default
+  `XWAYLAND=0` produces a zero-xcb build with `-DTP_XWAYLAND=0`),
+  `sandbox/demo-x11.c`, and one-handed chord composer (`7ca46a8`).
 
   Prior accepted baseline: 0.2.5 (1eec348, accepted 2026-11-23, W30).
   Review R1 (reviews/R1-code-review-0.1.4.md) findings 1-10, 12-16, and

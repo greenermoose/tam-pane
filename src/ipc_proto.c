@@ -20,6 +20,8 @@ static uint32_t all_subscribable_mask(void) {
 	return (1u << TP_EVENT_WINDOW_OPEN) | (1u << TP_EVENT_WINDOW_CLOSE) |
 		   (1u << TP_EVENT_WINDOW_FOCUS) | (1u << TP_EVENT_TAG_CHANGE) |
 		   (1u << TP_EVENT_MONITOR_ADD) | (1u << TP_EVENT_MONITOR_REMOVE) |
+		   (1u << TP_EVENT_MONITOR_FOCUS) | (1u << TP_EVENT_OUTPUT_POWER) |
+		   (1u << TP_EVENT_KEYBOARD_LAYOUT) | (1u << TP_EVENT_CONFIG_RELOAD) |
 		   (1u << TP_EVENT_CHORD_START) | (1u << TP_EVENT_CHORD_UPDATE) |
 		   (1u << TP_EVENT_CHORD_END) | (1u << TP_EVENT_CHORD_CANCEL);
 }
@@ -124,6 +126,24 @@ tam_str_t tp_ipc_format_event(tam_str_t s, const struct tp_event *ev) {
 							   ev->monitor.area.w, ev->monitor.area.h,
 							   ev->monitor.scale);
 		return s;
+	case TP_EVENT_MONITOR_FOCUS:
+		s = tam_str_cat(s, "event\tmonitor.focus\tmonitor=");
+		s = tp_ipc_escape_append(s, ev->monitor.name);
+		return tam_str_cat_len(s, "\n", 1);
+	case TP_EVENT_OUTPUT_POWER:
+		s = tam_str_cat(s, "event\toutput.power\tmonitor=");
+		s = tp_ipc_escape_append(s, ev->output_power.monitor);
+		return tam_str_cat_printf(s, "\tdpms=%d\n",
+								  ev->output_power.dpms ? 1 : 0);
+	case TP_EVENT_KEYBOARD_LAYOUT:
+		s = tam_str_cat(s, "event\tkeyboard.layout\tname=");
+		s = tp_ipc_escape_append(s, ev->keyboard.name);
+		s = tam_str_cat(s, "\tactive_keymap=");
+		s = tp_ipc_escape_append(s, ev->keyboard.active_keymap);
+		return tam_str_cat_printf(s, "\tactive_layout_index=%u\n",
+								  ev->keyboard.active_layout_index);
+	case TP_EVENT_CONFIG_RELOAD:
+		return tam_str_cat(s, "event\tconfig.reload\n");
 	case TP_EVENT_CHORD_START:
 	case TP_EVENT_CHORD_UPDATE:
 	case TP_EVENT_CHORD_END:
@@ -407,8 +427,27 @@ bool tp_ipc_parse_dispatch(const char *args, struct tp_action *out,
 		}
 		long tag_n = 0;
 		if (!next_token(&p, num_tok, sizeof(num_tok)) ||
-			!parse_positive_int(num_tok, 1, TP_TAG_COUNT, &tag_n) ||
-			has_extra_tokens(p)) {
+			!parse_positive_int(num_tok, 1, TP_TAG_COUNT, &tag_n)) {
+			if (err && err_size > 0)
+				snprintf(err, err_size, "tag %s expects a tag number 1..%d",
+						 sub, TP_TAG_COUNT);
+			return false;
+		}
+		if (out->kind == TP_ACT_TAG_VIEW ||
+			out->kind == TP_ACT_TAG_TOGGLE_VIEW) {
+			char target[128];
+			if (next_token(&p, target, sizeof(target))) {
+				if (has_extra_tokens(p)) {
+					if (err && err_size > 0)
+						snprintf(err, err_size,
+								 "tag %s takes at most a tag and monitor name",
+								 sub);
+					return false;
+				}
+				if (mon_name && mon_name_size > 0)
+					snprintf(mon_name, mon_name_size, "%s", target);
+			}
+		} else if (has_extra_tokens(p)) {
 			if (err && err_size > 0)
 				snprintf(err, err_size, "tag %s expects a tag number 1..%d",
 						 sub, TP_TAG_COUNT);
@@ -531,6 +570,70 @@ bool tp_ipc_parse_dispatch(const char *args, struct tp_action *out,
 		return false;
 	}
 
+	if (strcmp(verb, "dpms") == 0) {
+		char mode[16], target[128];
+		if (!next_token(&p, mode, sizeof(mode)) ||
+			!next_token(&p, target, sizeof(target)) || has_extra_tokens(p)) {
+			if (err && err_size > 0)
+				snprintf(err, err_size, "dpms expects 'on'|'off' and an output name");
+			return false;
+		}
+		if (strcmp(mode, "on") == 0)
+			out->dir = 1;
+		else if (strcmp(mode, "off") == 0)
+			out->dir = 0;
+		else {
+			if (err && err_size > 0)
+				snprintf(err, err_size, "dpms expects 'on' or 'off'");
+			return false;
+		}
+		out->kind = TP_ACT_DPMS;
+		if (mon_name && mon_name_size > 0)
+			snprintf(mon_name, mon_name_size, "%s", target);
+		snprintf(out->cmd, sizeof(out->cmd), "%s", target);
+		return true;
+	}
+
+	if (strcmp(verb, "focus_app") == 0) {
+		const char *app = skip_ws(p);
+		if (!app || !*app) {
+			if (err && err_size > 0)
+				snprintf(err, err_size, "focus_app requires an app name");
+			return false;
+		}
+		size_t len = strlen(app);
+		while (len > 0 && (app[len - 1] == ' ' || app[len - 1] == '\t'))
+			len--;
+		if (len == 0 || len >= sizeof(out->cmd)) {
+			if (err && err_size > 0)
+				snprintf(err, err_size, "focus_app name too long");
+			return false;
+		}
+		out->kind = TP_ACT_FOCUS_APP;
+		memcpy(out->cmd, app, len);
+		out->cmd[len] = '\0';
+		return true;
+	}
+
+	if (strcmp(verb, "keyboard") == 0) {
+		char sub[32], kbd[128];
+		if (!next_token(&p, sub, sizeof(sub)) || strcmp(sub, "next") != 0) {
+			if (err && err_size > 0)
+				snprintf(err, err_size, "keyboard expects 'next' [name]");
+			return false;
+		}
+		if (next_token(&p, kbd, sizeof(kbd))) {
+			if (has_extra_tokens(p)) {
+				if (err && err_size > 0)
+					snprintf(err, err_size, "keyboard next takes at most one name");
+				return false;
+			}
+			snprintf(out->cmd, sizeof(out->cmd), "%s", kbd);
+		}
+		out->kind = TP_ACT_KEYBOARD_NEXT;
+		return true;
+	}
+
 	if (strcmp(verb, "spawn") == 0) {
 		const char *cmd = skip_ws(p);
 		if (!cmd || !*cmd) {
@@ -620,6 +723,18 @@ tam_str_t tp_ipc_format_action(tam_str_t s, const struct tp_action *act) {
 		return tam_str_cat(s, "chord_toggle");
 	case TP_ACT_CHORD_CANCEL:
 		return tam_str_cat(s, "chord_cancel");
+	case TP_ACT_DPMS:
+		s = tam_str_cat(s, act->dir ? "dpms on " : "dpms off ");
+		return tp_ipc_escape_append(s, act->cmd);
+	case TP_ACT_FOCUS_APP:
+		s = tam_str_cat(s, "focus_app ");
+		return tp_ipc_escape_append(s, act->cmd);
+	case TP_ACT_KEYBOARD_NEXT:
+		if (act->cmd[0]) {
+			s = tam_str_cat(s, "keyboard next ");
+			return tp_ipc_escape_append(s, act->cmd);
+		}
+		return tam_str_cat(s, "keyboard next");
 	}
 	return tam_str_cat(s, "unknown");
 }
@@ -642,6 +757,7 @@ static void msg_usage(FILE *out) {
 		"  tags                       show tag views and occupancy per monitor\n"
 		"  cursor                     show pointer coordinates and monitor\n"
 		"  binds                      list active key bindings\n"
+		"  keyboards                  list seat keyboards and active layouts\n"
 		"  reload                     reload init.lua and report errors\n"
 		"  dispatch <action> [args]   run a compositor dispatcher\n"
 		"  subscribe [events...]      stream events until EOF or signal\n");

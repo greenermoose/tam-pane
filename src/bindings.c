@@ -16,10 +16,72 @@
 #include "tam-pane/layout/layout.h"
 #include "tam-pane/lua.h"
 #include "tam-pane/monitor.h"
+#include "tam-pane/output_power.h"
 #include "tam-pane/server.h"
 #include "tam-pane/server_events.h"
 #include "tam-pane/spawn.h"
 #include "tam-pane/workspace.h"
+#include <ctype.h>
+#include <string.h>
+
+static bool contains_icase(const char *haystack, const char *needle) {
+	if (!haystack || !needle || !*needle)
+		return false;
+	size_t nlen = strlen(needle);
+	for (const char *p = haystack; *p; p++) {
+		size_t i = 0;
+		while (i < nlen && p[i] &&
+			   tolower((unsigned char)p[i]) ==
+				   tolower((unsigned char)needle[i]))
+			i++;
+		if (i == nlen)
+			return true;
+	}
+	return false;
+}
+
+static void focus_app_by_name(struct tp_server *s, const char *name) {
+	if (!s || !name || !*name)
+		return;
+	struct tp_client *match = NULL;
+	struct tp_client *agent_match = NULL;
+	struct tp_client *c;
+	wl_list_for_each(c, &s->focus_stack, flink) {
+		if (!c->mapped)
+			continue;
+		const char *app_id = tp_client_app_id(c);
+		const char *title = tp_client_title(c);
+		if (app_id && contains_icase(app_id, name)) {
+			match = c;
+			break;
+		}
+		if (!agent_match && app_id &&
+			strcmp(app_id, "org.tamlinux.agent") == 0 && title &&
+			contains_icase(title, name)) {
+			agent_match = c;
+		}
+	}
+	if (!match)
+		match = agent_match;
+	if (!match)
+		return;
+	if (match->mon) {
+		if (s->selmon != match->mon)
+			tp_monitor_focus(s, match->mon);
+		if (!tp_client_visible(match) && !match->scratchpad && match->tags) {
+			tp_tags_t prev = tp_tagview_current(&match->mon->view);
+			unsigned int tag = tp_tags_first(match->tags);
+			if (tag && tp_tagview_show(&match->mon->view, tp_tag_mask(tag))) {
+				tp_pointer_cancel_grab(s, NULL);
+				tp_arrange(match->mon);
+				tp_events_emit_tag(s, match->mon, prev,
+								   tp_tagview_current(&match->mon->view));
+				tp_workspace_sync_monitor(match->mon);
+			}
+		}
+	}
+	tp_focus(s, match);
+}
 
 static void view_changed(struct tp_server *s, tp_tags_t prev_tags) {
 	tp_pointer_cancel_grab(s, NULL);
@@ -202,6 +264,18 @@ void tp_action_run(struct tp_server *s, const struct tp_action *act) {
 			tp_chord_overlay_update(s);
 			tp_events_emit_chord(s, TP_EVENT_CHORD_CANCEL, NULL, NULL);
 		}
+		break;
+	case TP_ACT_DPMS: {
+		struct tp_monitor *m = tp_monitor_by_name(s, act->cmd);
+		if (m && m->output)
+			tp_output_power_set(s, m->output, act->dir != 0);
+		break;
+	}
+	case TP_ACT_FOCUS_APP:
+		focus_app_by_name(s, act->cmd);
+		break;
+	case TP_ACT_KEYBOARD_NEXT:
+		tp_keyboard_next_layout(s, act->cmd[0] ? act->cmd : NULL);
 		break;
 	}
 }

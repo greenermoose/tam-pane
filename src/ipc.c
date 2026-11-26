@@ -11,10 +11,14 @@
 #include "tam-pane/ipc.h"
 #include "tam-pane/client.h"
 #include "tam-pane/focus.h"
+#include "tam-pane/input.h"
 #include "tam-pane/layout/arrange.h"
 #include "tam-pane/lua.h"
 #include "tam-pane/monitor.h"
+#include "tam-pane/output_power.h"
 #include "tam-pane/server.h"
+#include "tam-pane/server_events.h"
+#include "tam-pane/workspace.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -27,7 +31,9 @@
 #include <tam.h>
 #include <unistd.h>
 #include <wlr/types/wlr_cursor.h>
+#include <wlr/types/wlr_keyboard.h>
 #include <wlr/types/wlr_output.h>
+#include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <xkbcommon/xkbcommon.h>
 
@@ -197,6 +203,12 @@ static tam_str_t build_monitors(const struct tp_server *s) {
 	wl_list_for_each(m, &s->monitors, link) {
 		const char *name =
 			(m->output && m->output->name) ? m->output->name : "";
+		const char *desc = "";
+		if (m->output && m->output->description && *m->output->description)
+			desc = m->output->description;
+		else if (m->output && m->output->model && *m->output->model)
+			desc = m->output->model;
+		int dpms = (m->output && !m->output->enabled) ? 0 : 1;
 		float scale = m->output ? m->output->scale : 1.0f;
 		tp_tags_t cur = tp_tagview_current(&m->view);
 		tp_tags_t prev = m->view.slot[m->view.cur ^ 1u];
@@ -206,11 +218,13 @@ static tam_str_t build_monitors(const struct tp_server *s) {
 			out,
 			"\tx=%d\ty=%d\tw=%d\th=%d"
 			"\tusable_x=%d\tusable_y=%d\tusable_w=%d\tusable_h=%d"
-			"\tscale=%.2f\ttags=%u\tprev_tags=%u\tfocused=%d\tlayout=%s\n",
+			"\tscale=%.2f\ttags=%u\tprev_tags=%u\tfocused=%d\tlayout=%s\tdpms=%d\tdescription=",
 			m->area.x, m->area.y, m->area.w, m->area.h, m->usable.x,
 			m->usable.y, m->usable.w, m->usable.h, scale, cur, prev,
 			s->selmon == m ? 1 : 0,
-			tp_layout_kind_name(tp_monitor_layout(m)->kind));
+			tp_layout_kind_name(tp_monitor_layout(m)->kind), dpms);
+		out = tp_ipc_escape_append(out, desc);
+		out = tam_str_cat_len(out, "\n", 1);
 		if (!out)
 			return NULL;
 	}
@@ -339,6 +353,51 @@ static tam_str_t build_binds(const struct tp_server *s) {
 	return tam_str_cat(ctx.out, "END\n");
 }
 
+static tam_str_t build_keyboards(const struct tp_server *s) {
+	tam_str_t out = tam_str_new("OK\n");
+	struct wlr_keyboard *seat_kb =
+		s->seat ? wlr_seat_get_keyboard(s->seat) : NULL;
+	struct tp_keyboard *k;
+	wl_list_for_each(k, &s->keyboards, link) {
+		if (!k->wlr)
+			continue;
+		const char *name = k->wlr->base.name ? k->wlr->base.name : "";
+		uint32_t group = k->wlr->modifiers.group;
+		const char *active_keymap = "";
+		tam_str_t layouts = tam_str_new("");
+		if (k->wlr->keymap) {
+			xkb_layout_index_t num = xkb_keymap_num_layouts(k->wlr->keymap);
+			if (num > 0) {
+				if (group >= num)
+					group = 0;
+				const char *ln =
+					xkb_keymap_layout_get_name(k->wlr->keymap, group);
+				if (ln)
+					active_keymap = ln;
+				for (xkb_layout_index_t i = 0; i < num; i++) {
+					if (i > 0)
+						layouts = tam_str_cat_len(layouts, ",", 1);
+					const char *item =
+						xkb_keymap_layout_get_name(k->wlr->keymap, i);
+					layouts = tam_str_cat(layouts, item ? item : "");
+				}
+			}
+		}
+		out = tam_str_cat(out, "keyboard\tname=");
+		out = tp_ipc_escape_append(out, name);
+		out = tam_str_cat(out, "\tlayout=");
+		out = tp_ipc_escape_append(out, layouts ? layouts : "");
+		out = tam_str_cat(out, "\tactive_keymap=");
+		out = tp_ipc_escape_append(out, active_keymap);
+		out = tam_str_cat_printf(out, "\tactive_layout_index=%u\tmain=%d\n",
+								 group, k->wlr == seat_kb ? 1 : 0);
+		tam_str_free(layouts);
+		if (!out)
+			return NULL;
+	}
+	return tam_str_cat(out, "END\n");
+}
+
 static tam_str_t build_chord(const struct tp_server *s) {
 	const struct tp_chord_state *st = &s->chord;
 	char cbuf[64];
@@ -383,7 +442,8 @@ static bool handle_line(struct tp_ipc_client *c, char *line) {
 	if (strcmp(line, "version") == 0 || strcmp(line, "monitors") == 0 ||
 		strcmp(line, "windows") == 0 || strcmp(line, "focused") == 0 ||
 		strcmp(line, "tags") == 0 || strcmp(line, "cursor") == 0 ||
-		strcmp(line, "binds") == 0 || strcmp(line, "chord") == 0) {
+		strcmp(line, "binds") == 0 || strcmp(line, "keyboards") == 0 ||
+		strcmp(line, "chord") == 0) {
 		if (*args)
 			return ipc_send_err(c, "command takes no arguments");
 		tam_str_t reply = NULL;
@@ -403,6 +463,8 @@ static bool handle_line(struct tp_ipc_client *c, char *line) {
 			reply = build_cursor(s);
 		else if (strcmp(line, "binds") == 0)
 			reply = build_binds(s);
+		else if (strcmp(line, "keyboards") == 0)
+			reply = build_keyboards(s);
 		else
 			reply = build_chord(s);
 		if (!reply)
@@ -443,6 +505,37 @@ static bool handle_line(struct tp_ipc_client *c, char *line) {
 				struct tp_client *fc = tp_focused(s);
 				if (fc)
 					tp_client_set_monitor(fc, m, false);
+			}
+			return ipc_client_queue(c, "OK\nEND\n", 7);
+		}
+
+		if (act.kind == TP_ACT_DPMS) {
+			struct tp_monitor *m = tp_monitor_by_name(s, mon_name);
+			if (!m || !m->output)
+				return ipc_send_err(c, "unknown monitor");
+			if (!tp_output_power_set(s, m->output, act.dir != 0))
+				return ipc_send_err(c, "dpms failed");
+			return ipc_client_queue(c, "OK\nEND\n", 7);
+		}
+
+		if ((act.kind == TP_ACT_TAG_VIEW ||
+			 act.kind == TP_ACT_TAG_TOGGLE_VIEW) &&
+			mon_name[0] != '\0') {
+			struct tp_monitor *m = tp_monitor_by_name(s, mon_name);
+			if (!m)
+				return ipc_send_err(c, "unknown monitor");
+			tp_tags_t prev = tp_tagview_current(&m->view);
+			bool changed =
+				act.kind == TP_ACT_TAG_VIEW
+					? tp_tagview_show(&m->view, tp_tag_mask(act.tag))
+					: tp_tagview_toggle(&m->view, tp_tag_mask(act.tag));
+			if (changed) {
+				tp_pointer_cancel_grab(s, NULL);
+				tp_arrange(m);
+				tp_events_emit_tag(s, m, prev, tp_tagview_current(&m->view));
+				tp_workspace_sync_monitor(m);
+				if (s->selmon == m)
+					tp_focus_refresh(s);
 			}
 			return ipc_client_queue(c, "OK\nEND\n", 7);
 		}

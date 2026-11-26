@@ -59,6 +59,13 @@ void tp_events_emit_tag(struct tp_server *s, const struct tp_monitor *m,
 						tp_tags_t prev_tags, tp_tags_t new_tags);
 void tp_events_emit_monitor(struct tp_server *s, enum tp_event_kind kind,
 							const char *name, struct tp_rect area, float scale);
+void tp_events_emit_monitor_focus(struct tp_server *s, const char *name);
+void tp_events_emit_output_power(struct tp_server *s, const char *monitor,
+								 bool dpms);
+void tp_events_emit_keyboard_layout(struct tp_server *s, const char *name,
+									const char *active_keymap,
+									uint32_t active_layout_index);
+void tp_events_emit_config_reload(struct tp_server *s);
 void tp_events_emit_chord(struct tp_server *s, enum tp_event_kind kind,
 						  const char *result, const char *action);
 

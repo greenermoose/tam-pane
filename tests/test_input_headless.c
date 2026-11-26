@@ -4568,7 +4568,30 @@ int main(void) {
 					char rep[4096];
 					CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
 											"monitors\n", rep, sizeof(rep)));
-					CHECK(strstr(rep, "\tlayout=master\n") != NULL);
+					CHECK(strstr(rep, "\tlayout=master\tdpms=1\tdescription=") != NULL);
+
+					/* 0.2.7: keyboards query and dispatch dpms off/on. */
+					CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+											"keyboards\n", rep, sizeof(rep)));
+					CHECK(strncmp(rep, "OK\n", 3) == 0);
+					CHECK(strstr(rep, "keyboard\tname=") != NULL);
+					CHECK(strstr(rep, "\tactive_keymap=") != NULL);
+
+					CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+											"dispatch dpms off HEADLESS-1\n",
+											rep, sizeof(rep)));
+					CHECK(strcmp(rep, "OK\nEND\n") == 0);
+					CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+											"monitors\n", rep, sizeof(rep)));
+					CHECK(strstr(rep, "\tdpms=0\t") != NULL);
+
+					CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+											"dispatch dpms on HEADLESS-1\n",
+											rep, sizeof(rep)));
+					CHECK(strcmp(rep, "OK\nEND\n") == 0);
+					CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+											"monitors\n", rep, sizeof(rep)));
+					CHECK(strstr(rep, "\tdpms=1\t") != NULL);
 				}
 				/* Resize master wider and verify geometry updates. */
 				int32_t mw_before = fc->geom.w;

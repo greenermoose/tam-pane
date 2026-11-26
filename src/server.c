@@ -259,6 +259,7 @@ bool tp_server_reload(struct tp_server *s, char *err_buf, size_t err_buf_size) {
 		tp_pointer_apply_settings(s);
 	}
 	tp_arrange_all(s);
+	tp_events_emit_config_reload(s);
 
 	tam_log_info("reloaded config: %s", path);
 	return true;

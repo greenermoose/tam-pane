@@ -51,6 +51,9 @@ enum tp_action_kind {
 	TP_ACT_SCRATCHPAD_MOVE,
 	TP_ACT_CHORD_TOGGLE,
 	TP_ACT_CHORD_CANCEL,
+	TP_ACT_DPMS,
+	TP_ACT_FOCUS_APP,
+	TP_ACT_KEYBOARD_NEXT,
 };
 
 struct tp_action {

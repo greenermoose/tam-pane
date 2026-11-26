@@ -413,6 +413,7 @@ struct tp_monitor *tp_monitor_in_dir(struct tp_server *s, struct tp_monitor *m,
 void tp_monitor_focus(struct tp_server *s, struct tp_monitor *m) {
 	if (!m)
 		return;
+	bool changed = (s->selmon != m);
 	s->selmon = m;
 	if (s->cursor && tp_monitor_at(s, s->cursor->x, s->cursor->y) != m) {
 		double x = m->usable.x + m->usable.w / 2.0;
@@ -420,6 +421,8 @@ void tp_monitor_focus(struct tp_server *s, struct tp_monitor *m) {
 		wlr_cursor_warp(s->cursor, NULL, x, y);
 	}
 	tp_focus_refresh(s);
+	if (changed && m->output && m->output->name)
+		tp_events_emit_monitor_focus(s, m->output->name);
 }
 
 struct tp_layout *tp_monitor_layout(struct tp_monitor *m) {

@@ -204,6 +204,44 @@ void tp_events_emit_monitor(struct tp_server *s, enum tp_event_kind kind,
 	tp_events_emit(s, &ev);
 }
 
+void tp_events_emit_monitor_focus(struct tp_server *s, const char *name) {
+	if (!event_has_listeners(s, TP_EVENT_MONITOR_FOCUS))
+		return;
+	struct tp_event ev = {.kind = TP_EVENT_MONITOR_FOCUS};
+	copy_str(ev.monitor.name, sizeof(ev.monitor.name), name);
+	tp_events_emit(s, &ev);
+}
+
+void tp_events_emit_output_power(struct tp_server *s, const char *monitor,
+								 bool dpms) {
+	if (!event_has_listeners(s, TP_EVENT_OUTPUT_POWER))
+		return;
+	struct tp_event ev = {.kind = TP_EVENT_OUTPUT_POWER};
+	copy_str(ev.output_power.monitor, sizeof(ev.output_power.monitor), monitor);
+	ev.output_power.dpms = dpms;
+	tp_events_emit(s, &ev);
+}
+
+void tp_events_emit_keyboard_layout(struct tp_server *s, const char *name,
+									const char *active_keymap,
+									uint32_t active_layout_index) {
+	if (!event_has_listeners(s, TP_EVENT_KEYBOARD_LAYOUT))
+		return;
+	struct tp_event ev = {.kind = TP_EVENT_KEYBOARD_LAYOUT};
+	copy_str(ev.keyboard.name, sizeof(ev.keyboard.name), name);
+	copy_str(ev.keyboard.active_keymap, sizeof(ev.keyboard.active_keymap),
+			 active_keymap);
+	ev.keyboard.active_layout_index = active_layout_index;
+	tp_events_emit(s, &ev);
+}
+
+void tp_events_emit_config_reload(struct tp_server *s) {
+	if (!event_has_listeners(s, TP_EVENT_CONFIG_RELOAD))
+		return;
+	struct tp_event ev = {.kind = TP_EVENT_CONFIG_RELOAD};
+	tp_events_emit(s, &ev);
+}
+
 void tp_events_emit_chord(struct tp_server *s, enum tp_event_kind kind,
 						  const char *result, const char *action) {
 	if (!event_has_listeners(s, kind))

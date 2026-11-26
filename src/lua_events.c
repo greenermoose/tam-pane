@@ -18,6 +18,10 @@ static const char *const event_names[TP_EVENT_COUNT] = {
 	[TP_EVENT_TAG_CHANGE] = "tag.change",
 	[TP_EVENT_MONITOR_ADD] = "monitor.add",
 	[TP_EVENT_MONITOR_REMOVE] = "monitor.remove",
+	[TP_EVENT_MONITOR_FOCUS] = "monitor.focus",
+	[TP_EVENT_OUTPUT_POWER] = "output.power",
+	[TP_EVENT_KEYBOARD_LAYOUT] = "keyboard.layout",
+	[TP_EVENT_CONFIG_RELOAD] = "config.reload",
 	[TP_EVENT_CHORD_START] = "chord.start",
 	[TP_EVENT_CHORD_UPDATE] = "chord.update",
 	[TP_EVENT_CHORD_END] = "chord.end",
@@ -198,6 +202,25 @@ static void push_event_table(lua_State *L, const struct tp_event *ev) {
 		lua_pushinteger(L, (lua_Integer)ev->chord.selected);
 		lua_setfield(L, -2, "selected");
 		break;
+	case TP_EVENT_MONITOR_FOCUS:
+		lua_pushstring(L, ev->monitor.name);
+		lua_setfield(L, -2, "monitor");
+		break;
+	case TP_EVENT_OUTPUT_POWER:
+		lua_pushstring(L, ev->output_power.monitor);
+		lua_setfield(L, -2, "monitor");
+		lua_pushboolean(L, ev->output_power.dpms);
+		lua_setfield(L, -2, "dpms");
+		break;
+	case TP_EVENT_KEYBOARD_LAYOUT:
+		lua_pushstring(L, ev->keyboard.name);
+		lua_setfield(L, -2, "name");
+		lua_pushstring(L, ev->keyboard.active_keymap);
+		lua_setfield(L, -2, "active_keymap");
+		lua_pushinteger(L, (lua_Integer)ev->keyboard.active_layout_index);
+		lua_setfield(L, -2, "active_layout_index");
+		break;
+	case TP_EVENT_CONFIG_RELOAD:
 	case TP_EVENT_STARTUP:
 	case TP_EVENT_COUNT:
 		break;

@@ -20,6 +20,7 @@ struct tp_keyboard {
 	struct wl_listener destroy;
 	/* Linux KEY_MAX fits in twelve 64-bit words. */
 	uint64_t consumed_keys[12];
+	uint32_t last_layout_group;
 };
 
 /* Seat, device discovery and seat requests (input.c). */
@@ -31,6 +32,7 @@ void tp_input_update_caps(struct tp_server *s);
 void tp_keyboard_add(struct tp_server *s, struct wlr_input_device *dev);
 void tp_keyboards_finish(struct tp_server *s);
 void tp_keyboards_apply_settings(struct tp_server *s);
+bool tp_keyboard_next_layout(struct tp_server *s, const char *name);
 
 /* Cursor and pointer devices (pointer.c). */
 bool tp_pointer_init(struct tp_server *s);

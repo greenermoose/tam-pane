@@ -8,8 +8,11 @@
 #include <stdbool.h>
 
 struct tp_server;
+struct wlr_output;
 
 bool tp_output_power_init(struct tp_server *s);
 void tp_output_power_finish(struct tp_server *s);
+bool tp_output_power_set(struct tp_server *s, struct wlr_output *output,
+						 bool enable);
 
 #endif
