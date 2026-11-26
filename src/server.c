@@ -246,12 +246,18 @@ bool tp_server_reload(struct tp_server *s, char *err_buf, size_t err_buf_size) {
 	}
 
 	tp_monitors_apply_settings(s);
+	tp_monitors_apply_config(s);
 	tp_chord_configure(&s->chord, s->settings.chord_enabled,
 					   s->settings.chord_key, s->settings.chord_secondary_key,
 					   s->settings.chord_cancel_key);
 	tp_chord_overlay_update(s);
 	if (prev.repeat_rate != s->settings.repeat_rate ||
-		prev.repeat_delay != s->settings.repeat_delay) {
+		prev.repeat_delay != s->settings.repeat_delay ||
+		strcmp(prev.kb_layout, s->settings.kb_layout) != 0 ||
+		strcmp(prev.kb_variant, s->settings.kb_variant) != 0 ||
+		strcmp(prev.kb_model, s->settings.kb_model) != 0 ||
+		strcmp(prev.kb_options, s->settings.kb_options) != 0 ||
+		strcmp(prev.kb_rules, s->settings.kb_rules) != 0) {
 		tp_keyboards_apply_settings(s);
 	}
 	if (prev.cursor_size != s->settings.cursor_size ||

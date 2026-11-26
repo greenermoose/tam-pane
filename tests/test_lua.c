@@ -1504,6 +1504,129 @@ static void test_layouts_and_scratchpad(void) {
 	tp_lua_destroy(lua);
 }
 
+static void test_controls_0_2_8(void) {
+	struct tp_lua *lua = tp_lua_create();
+	CHECK(lua != NULL);
+	tp_lua_set_action_fn(lua, mock_action, NULL);
+
+	struct tp_settings base, out;
+	tp_settings_defaults(&base);
+	char err[256] = {0};
+
+	/* XKB + pointer settings, tp.monitor, code:N, release, mouse_bind, send_key, capture, focus dir */
+	const char *cfg =
+		"assert(type(tp.home) == 'string')\n"
+		"assert(type(tp.config_dir) == 'string')\n"
+		"tp.config{\n"
+		"  kb_layout = 'us,dk',\n"
+		"  kb_options = 'compose:ralt',\n"
+		"  numlock_by_default = true,\n"
+		"  natural_scroll = true,\n"
+		"  scroll_factor = 1.5,\n"
+		"}\n"
+		"tp.monitor{ output = 'DP-2', mode = '1920x1080@60', position = {0, 288}, scale = 1.25, transform = 0 }\n"
+		"tp.monitor{ output = '', mode = 'preferred', position = 'auto', scale = 1.0 }\n"
+		"tp.bind('Meta+code:10', tp.dsp.tag('view', 1), { desc = 'Tag 1' })\n"
+		"tp.bind('F9', tp.dsp.spawn('voxtype record stop'), { release = true, desc = 'Stop' })\n"
+		"tp.bind('Meta+Left', tp.dsp.focus('left'))\n"
+		"tp.bind('Meta+v', tp.dsp.send_key('Ctrl+v'))\n"
+		"tp.bind('Print', tp.dsp.capture('grim /tmp/x.png'))\n"
+		"tp.mouse_bind('Meta+mouse:273', tp.dsp.spawn('tam-menu toggle start'))\n"
+		"tp.mouse_bind('Meta+Alt+mouse:273', tp.dsp.mouse_resize())\n"
+		"tp.mouse_bind('Meta+mouse_up', tp.dsp.tag('back'))\n";
+
+	CHECK(tp_lua_exec_string(lua, cfg, strlen(cfg), "controls_0_2_8",
+							 TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+							 TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+							 sizeof(err)));
+	CHECK(strcmp(out.kb_layout, "us,dk") == 0);
+	CHECK(strcmp(out.kb_options, "compose:ralt") == 0);
+	CHECK(out.numlock_by_default == true);
+	CHECK(out.natural_scroll == true);
+	CHECK(out.scroll_factor > 1.49f && out.scroll_factor < 1.51f);
+	CHECK(tp_lua_monitor_count(lua) == 2);
+
+	struct tp_monitor_config mc = {0};
+	CHECK(tp_lua_monitor_rule(lua, "DP-2", &mc));
+	CHECK(mc.has_mode && mc.mode_w == 1920 && mc.mode_h == 1080 &&
+		  mc.mode_refresh_mhz == 60000);
+	CHECK(mc.has_pos && !mc.pos_auto && mc.pos_x == 0 && mc.pos_y == 288);
+	CHECK(mc.has_scale && mc.scale > 1.24f && mc.scale < 1.26f);
+
+	/* Wildcard fallback */
+	CHECK(tp_lua_monitor_rule(lua, "HDMI-A-9", &mc));
+	CHECK(mc.mode_preferred && mc.pos_auto);
+
+	/* Keycode, release, directional focus, send_key, capture */
+	action_count = 0;
+	CHECK(tp_lua_handle_key_ex(lua, TP_MOD_META, XKB_KEY_NoSymbol, 10, false,
+							   false));
+	CHECK(action_count == 1 && last_action.kind == TP_ACT_TAG_VIEW &&
+		  last_action.tag == 1);
+	CHECK(!tp_lua_handle_key_ex(lua, 0, XKB_KEY_F9, 75, false, false));
+	CHECK(tp_lua_handle_key_ex(lua, 0, XKB_KEY_F9, 75, true, false));
+	CHECK(action_count == 2 && last_action.kind == TP_ACT_SPAWN);
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_Left, false));
+	CHECK(action_count == 3 && last_action.kind == TP_ACT_FOCUS_DIR &&
+		  last_action.dir == TP_DIR_LEFT);
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_v, false));
+	CHECK(action_count == 4 && last_action.kind == TP_ACT_SEND_KEY &&
+		  last_action.mods == TP_MOD_CTRL && last_action.sym == XKB_KEY_v);
+	CHECK(tp_lua_handle_key(lua, 0, XKB_KEY_Print, false));
+	CHECK(action_count == 5 && last_action.kind == TP_ACT_CAPTURE);
+
+	/* Mouse bindings */
+	struct tp_action grab = {0};
+	CHECK(tp_lua_handle_mouse(lua, TP_MOD_META, 273, false, &grab));
+	CHECK(action_count == 6 && last_action.kind == TP_ACT_SPAWN);
+	CHECK(tp_lua_handle_mouse(lua, TP_MOD_META | TP_MOD_ALT, 273, false,
+							  &grab));
+	CHECK(grab.kind == TP_ACT_MOUSE_RESIZE);
+	CHECK(tp_lua_handle_mouse(lua, TP_MOD_META, TP_MOUSE_WHEEL_UP, false,
+							  &grab));
+	CHECK(action_count == 7 && last_action.kind == TP_ACT_TAG_BACK);
+
+	/* tp.include optional missing + real include + atomic rollback on error */
+	char dir_tmpl[] = "/tmp/tam-pane-inc-XXXXXX";
+	char *dir = mkdtemp(dir_tmpl);
+	CHECK(dir != NULL);
+	char inc_path[256], bad_path[256];
+	snprintf(inc_path, sizeof(inc_path), "%s/override.lua", dir);
+	snprintf(bad_path, sizeof(bad_path), "%s/bad.lua", dir);
+	FILE *f = fopen(inc_path, "w");
+	CHECK(f != NULL);
+	fputs("tp.config{ gaps = 14 }\n", f);
+	fclose(f);
+	f = fopen(bad_path, "w");
+	CHECK(f != NULL);
+	fputs("error('boom inside include')\n", f);
+	fclose(f);
+
+	char inc_cfg[512];
+	snprintf(inc_cfg, sizeof(inc_cfg),
+			 "assert(tp.include('%s/missing.lua', true) == false)\n"
+			 "assert(tp.include('%s', true) == true)\n",
+			 dir, inc_path);
+	CHECK(tp_lua_exec_string(lua, inc_cfg, strlen(inc_cfg), "inc_ok",
+							 TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+							 TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+							 sizeof(err)));
+	CHECK(out.gap_inner == 14 && out.gap_outer == 14);
+
+	snprintf(inc_cfg, sizeof(inc_cfg),
+			 "tp.config{ gaps = 20 }\ntp.include('%s')\n", bad_path);
+	CHECK(!tp_lua_exec_string(lua, inc_cfg, strlen(inc_cfg), "inc_bad",
+							  TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+							  TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+							  sizeof(err)));
+	CHECK(out.gap_inner == 14); /* rolled back */
+
+	unlink(inc_path);
+	unlink(bad_path);
+	rmdir(dir);
+	tp_lua_destroy(lua);
+}
+
 int main(void) {
 	tam_log_set_level(TAM_LOG_ERROR);
 	test_config_and_fallback();
@@ -1521,5 +1644,6 @@ int main(void) {
 	test_lock_and_binding_gate();
 	test_capture_launcher();
 	test_layouts_and_scratchpad();
+	test_controls_0_2_8();
 	CHECK_DONE("test_lua");
 }

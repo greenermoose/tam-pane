@@ -395,6 +395,27 @@ static int l_tp_config(lua_State *L) {
 			s->repeat_rate = check_int_range(L, -1, key, 1, 200);
 		} else if (strcmp(key, "repeat_delay") == 0) {
 			s->repeat_delay = check_int_range(L, -1, key, 1, 5000);
+		} else if (strcmp(key, "kb_layout") == 0) {
+			check_string_buf(L, -1, key, true, s->kb_layout,
+							 sizeof(s->kb_layout));
+		} else if (strcmp(key, "kb_variant") == 0) {
+			check_string_buf(L, -1, key, true, s->kb_variant,
+							 sizeof(s->kb_variant));
+		} else if (strcmp(key, "kb_model") == 0) {
+			check_string_buf(L, -1, key, true, s->kb_model,
+							 sizeof(s->kb_model));
+		} else if (strcmp(key, "kb_options") == 0) {
+			check_string_buf(L, -1, key, true, s->kb_options,
+							 sizeof(s->kb_options));
+		} else if (strcmp(key, "kb_rules") == 0) {
+			check_string_buf(L, -1, key, true, s->kb_rules,
+							 sizeof(s->kb_rules));
+		} else if (strcmp(key, "numlock_by_default") == 0) {
+			s->numlock_by_default = check_bool(L, -1, key);
+		} else if (strcmp(key, "natural_scroll") == 0) {
+			s->natural_scroll = check_bool(L, -1, key);
+		} else if (strcmp(key, "scroll_factor") == 0) {
+			s->scroll_factor = check_float_range(L, -1, key, 0.05f, 10.0f);
 		} else if (strcmp(key, "chord_enabled") == 0) {
 			s->chord_enabled = check_bool(L, -1, key);
 		} else if (strcmp(key, "chord_overlay_builtin") == 0) {
@@ -547,6 +568,251 @@ static int l_tp_read_file(lua_State *L) {
 	return 1;
 }
 
+/* ---- tp.include(path[, optional]) ---- */
+
+enum { TP_LUA_INCLUDE_MAX_DEPTH = 8 };
+
+static int l_tp_include(lua_State *L) {
+	struct tp_lua *lua = tp_lua_from_state(L);
+	if (!lua || !lua->staging)
+		return luaL_error(L, "tp.include can only be called while loading config");
+	const char *path = luaL_checkstring(L, 1);
+	bool optional = false;
+	if (!lua_isnoneornil(L, 2)) {
+		if (lua_type(L, 2) != LUA_TBOOLEAN)
+			return luaL_error(L, "tp.include: optional must be a boolean");
+		optional = lua_toboolean(L, 2) != 0;
+	}
+	if (lua->include_depth >= TP_LUA_INCLUDE_MAX_DEPTH)
+		return luaL_error(L, "tp.include: maximum include depth (%d) exceeded",
+						  TP_LUA_INCLUDE_MAX_DEPTH);
+
+	char *buf = NULL;
+	size_t len = 0;
+	int err = 0;
+	if (!read_regular_file(path, TP_LUA_READ_FILE_MAX_CAP, true, &buf, &len,
+						   &err)) {
+		if (optional && err == ENOENT) {
+			lua_pushboolean(L, 0);
+			return 1;
+		}
+		if (err == EINVAL)
+			return luaL_error(L, "tp.include: %s is not a regular file", path);
+		return luaL_error(L, "tp.include: cannot read %s: %s", path,
+						  strerror(err));
+	}
+
+	char chunk_name[512];
+	snprintf(chunk_name, sizeof(chunk_name), "@%s", path);
+	int rc = luaL_loadbufferx(L, buf, len, chunk_name, "t");
+	free(buf);
+	if (rc != LUA_OK)
+		return lua_error(L);
+
+	lua->include_depth++;
+	int call_rc = lua_pcall(L, 0, 0, 0);
+	lua->include_depth--;
+	if (call_rc != LUA_OK)
+		return lua_error(L);
+
+	lua_pushboolean(L, 1);
+	return 1;
+}
+
+/* ---- tp.monitor(spec) / tp.clear_monitors() ---- */
+
+static void monitor_list_clear(struct tp_lua_monitor_list *list) {
+	free(list->items);
+	list->items = NULL;
+	list->len = 0;
+	list->cap = 0;
+}
+
+static bool monitor_list_set(struct tp_lua_monitor_list *list,
+							 const struct tp_monitor_config *cfg) {
+	for (size_t i = 0; i < list->len; i++) {
+		if (strcmp(list->items[i].output, cfg->output) == 0) {
+			list->items[i] = *cfg;
+			return true;
+		}
+	}
+	if (list->len == list->cap) {
+		size_t next = list->cap ? list->cap * 2 : 8;
+		struct tp_monitor_config *grown =
+			realloc(list->items, next * sizeof(*grown));
+		if (!grown)
+			return false;
+		list->items = grown;
+		list->cap = next;
+	}
+	list->items[list->len++] = *cfg;
+	return true;
+}
+
+static bool parse_mode_string(const char *str, struct tp_monitor_config *cfg) {
+	if (!str || !*str)
+		return false;
+	if (strcmp(str, "preferred") == 0) {
+		cfg->has_mode = true;
+		cfg->mode_preferred = true;
+		return true;
+	}
+	int w = 0, h = 0;
+	double hz = 0.0;
+	char extra = 0;
+	int n = sscanf(str, "%dx%d@%lf%c", &w, &h, &hz, &extra);
+	if (n == 3 && w > 0 && h > 0 && hz > 0.0 && hz <= 1000.0) {
+		cfg->has_mode = true;
+		cfg->mode_preferred = false;
+		cfg->mode_w = w;
+		cfg->mode_h = h;
+		cfg->mode_refresh_mhz = (int32_t)(hz * 1000.0 + 0.5);
+		return true;
+	}
+	n = sscanf(str, "%dx%d%c", &w, &h, &extra);
+	if (n == 2 && w > 0 && h > 0) {
+		cfg->has_mode = true;
+		cfg->mode_preferred = false;
+		cfg->mode_w = w;
+		cfg->mode_h = h;
+		cfg->mode_refresh_mhz = 0;
+		return true;
+	}
+	return false;
+}
+
+static int l_tp_monitor(lua_State *L) {
+	struct tp_lua *lua = tp_lua_from_state(L);
+	if (!lua || !lua->staging_monitors)
+		return luaL_error(L, "tp.monitor can only be called while loading config");
+	luaL_checktype(L, 1, LUA_TTABLE);
+
+	struct tp_monitor_config cfg = {0};
+	bool has_output = false;
+
+	lua_pushnil(L);
+	while (lua_next(L, 1) != 0) {
+		if (lua_type(L, -2) != LUA_TSTRING)
+			return luaL_error(L, "tp.monitor: keys must be strings");
+		const char *key = lua_tostring(L, -2);
+		if (strcmp(key, "output") == 0) {
+			check_string_buf(L, -1, "tp.monitor.output", true, cfg.output,
+							 sizeof(cfg.output));
+			has_output = true;
+		} else if (strcmp(key, "mode") == 0) {
+			if (lua_type(L, -1) != LUA_TSTRING)
+				return luaL_error(L, "tp.monitor.mode: expected string");
+			if (!parse_mode_string(lua_tostring(L, -1), &cfg))
+				return luaL_error(
+					L, "tp.monitor.mode: expected 'preferred' or 'WxH[@Hz]'");
+		} else if (strcmp(key, "position") == 0) {
+			if (lua_type(L, -1) == LUA_TSTRING) {
+				const char *ps = lua_tostring(L, -1);
+				if (strcmp(ps, "auto") == 0) {
+					cfg.has_pos = true;
+					cfg.pos_auto = true;
+				} else {
+					int x = 0, y = 0;
+					char extra = 0;
+					if (sscanf(ps, "%dx%d%c", &x, &y, &extra) != 2 &&
+						sscanf(ps, "%d,%d%c", &x, &y, &extra) != 2)
+						return luaL_error(
+							L, "tp.monitor.position: expected 'auto', 'XxY', or {x, y}");
+					cfg.has_pos = true;
+					cfg.pos_auto = false;
+					cfg.pos_x = x;
+					cfg.pos_y = y;
+				}
+			} else if (lua_type(L, -1) == LUA_TTABLE) {
+				lua_getfield(L, -1, "x");
+				if (lua_isnil(L, -1)) {
+					lua_pop(L, 1);
+					lua_geti(L, -1, 1);
+				}
+				int32_t x = tp_lua_check_int(L, -1, "tp.monitor.position.x",
+											 -32768, 32768);
+				lua_pop(L, 1);
+				lua_getfield(L, -1, "y");
+				if (lua_isnil(L, -1)) {
+					lua_pop(L, 1);
+					lua_geti(L, -1, 2);
+				}
+				int32_t y = tp_lua_check_int(L, -1, "tp.monitor.position.y",
+											 -32768, 32768);
+				lua_pop(L, 1);
+				cfg.has_pos = true;
+				cfg.pos_auto = false;
+				cfg.pos_x = x;
+				cfg.pos_y = y;
+			} else {
+				return luaL_error(
+					L, "tp.monitor.position: expected string or table");
+			}
+		} else if (strcmp(key, "scale") == 0) {
+			if (lua_type(L, -1) == LUA_TSTRING &&
+				strcmp(lua_tostring(L, -1), "auto") == 0) {
+				cfg.has_scale = false;
+			} else {
+				cfg.scale = check_float_range(L, -1, "tp.monitor.scale", 0.5f,
+											  8.0f);
+				cfg.has_scale = true;
+			}
+		} else if (strcmp(key, "transform") == 0) {
+			cfg.transform =
+				check_int_range(L, -1, "tp.monitor.transform", 0, 7);
+			cfg.has_transform = true;
+		} else if (strcmp(key, "enabled") == 0) {
+			cfg.enabled = check_bool(L, -1, "tp.monitor.enabled");
+			cfg.has_enabled = true;
+		} else if (strcmp(key, "disabled") == 0) {
+			cfg.enabled = !check_bool(L, -1, "tp.monitor.disabled");
+			cfg.has_enabled = true;
+		} else {
+			tam_log_warn("tp.monitor: unknown key '%s' ignored", key);
+		}
+		lua_pop(L, 1);
+	}
+	if (!has_output)
+		return luaL_error(L, "tp.monitor: 'output' is required");
+	if (!monitor_list_set(&lua->staged_monitors, &cfg))
+		return luaL_error(L, "tp.monitor: out of memory");
+	return 0;
+}
+
+static int l_tp_clear_monitors(lua_State *L) {
+	struct tp_lua *lua = tp_lua_from_state(L);
+	if (!lua || !lua->staging_monitors)
+		return luaL_error(
+			L, "tp.clear_monitors can only be called while loading config");
+	monitor_list_clear(&lua->staged_monitors);
+	return 0;
+}
+
+bool tp_lua_monitor_rule(const struct tp_lua *lua, const char *output_name,
+						 struct tp_monitor_config *out) {
+	if (!lua || !out)
+		return false;
+	const struct tp_monitor_config *wildcard = NULL;
+	for (size_t i = 0; i < lua->active_monitors.len; i++) {
+		const struct tp_monitor_config *m = &lua->active_monitors.items[i];
+		if (output_name && *output_name && strcmp(m->output, output_name) == 0) {
+			*out = *m;
+			return true;
+		}
+		if (m->output[0] == '\0')
+			wildcard = m;
+	}
+	if (wildcard) {
+		*out = *wildcard;
+		return true;
+	}
+	return false;
+}
+
+size_t tp_lua_monitor_count(const struct tp_lua *lua) {
+	return lua ? lua->active_monitors.len : 0;
+}
+
 static const luaL_Reg safe_libs[] = {
 	{LUA_GNAME, luaopen_base},
 	{LUA_COLIBNAME, luaopen_coroutine},
@@ -563,6 +829,9 @@ static const luaL_Reg tp_funcs[] = {
 	{"lock", l_tp_lock},
 	{"capture", l_tp_capture},
 	{"read_file", l_tp_read_file},
+	{"include", l_tp_include},
+	{"monitor", l_tp_monitor},
+	{"clear_monitors", l_tp_clear_monitors},
 	{NULL, NULL},
 };
 
@@ -603,10 +872,24 @@ struct tp_lua *tp_lua_create(void) {
 	lua_pushcfunction(L, l_print);
 	lua_setglobal(L, "print");
 
-	/* Expose the tp table (config, spawn, read_file, bind/unbind/dsp, on/off, rule). */
+	/* Expose the tp table (config, spawn, read_file, include, monitor, bind/unbind/dsp, on/off, rule). */
 	luaL_newlib(L, tp_funcs);
 	lua_pushliteral(L, TP_VERSION);
 	lua_setfield(L, -2, "version");
+	const char *home = getenv("HOME");
+	lua_pushstring(L, (home && *home) ? home : "");
+	lua_setfield(L, -2, "home");
+	const char *xdg_cfg = getenv("XDG_CONFIG_HOME");
+	char cfg_dir[PATH_MAX];
+	if (xdg_cfg && *xdg_cfg) {
+		snprintf(cfg_dir, sizeof(cfg_dir), "%s", xdg_cfg);
+	} else if (home && *home) {
+		snprintf(cfg_dir, sizeof(cfg_dir), "%s/.config", home);
+	} else {
+		cfg_dir[0] = '\0';
+	}
+	lua_pushstring(L, cfg_dir);
+	lua_setfield(L, -2, "config_dir");
 	tp_lua_bindings_open(L);
 	tp_lua_events_open(L);
 	tp_lua_rules_open(L);
@@ -619,6 +902,8 @@ struct tp_lua *tp_lua_create(void) {
 void tp_lua_destroy(struct tp_lua *lua) {
 	if (!lua)
 		return;
+	monitor_list_clear(&lua->staged_monitors);
+	monitor_list_clear(&lua->active_monitors);
 	tp_lua_rules_finish(lua);
 	tp_lua_hooks_finish(lua);
 	tp_lua_bindings_finish(lua);
@@ -719,6 +1004,8 @@ bool tp_lua_exec_string(struct tp_lua *lua, const char *code, size_t code_len,
 	}
 	tp_lua_hooks_stage_begin(lua);
 	tp_lua_rules_stage_begin(lua);
+	monitor_list_clear(&lua->staged_monitors);
+	lua->staging_monitors = true;
 
 	struct tp_settings *prev_staging = lua->staging;
 	lua->staging = &staged;
@@ -733,6 +1020,8 @@ bool tp_lua_exec_string(struct tp_lua *lua, const char *code, size_t code_len,
 					 TP_LUA_MEMORY_MAX >> 20);
 		else if (err_buf && err_buf_size > 0)
 			snprintf(err_buf, err_buf_size, "%s", msg ? msg : "runtime error");
+		lua->staging_monitors = false;
+		monitor_list_clear(&lua->staged_monitors);
 		tp_lua_rules_stage_abort(lua);
 		tp_lua_hooks_stage_abort(lua);
 		tp_lua_bindings_stage_abort(lua);
@@ -740,6 +1029,10 @@ bool tp_lua_exec_string(struct tp_lua *lua, const char *code, size_t code_len,
 		return false;
 	}
 
+	lua->staging_monitors = false;
+	monitor_list_clear(&lua->active_monitors);
+	lua->active_monitors = lua->staged_monitors;
+	lua->staged_monitors = (struct tp_lua_monitor_list){0};
 	tp_lua_rules_stage_commit(lua);
 	tp_lua_hooks_stage_commit(lua);
 	tp_lua_bindings_stage_commit(lua);

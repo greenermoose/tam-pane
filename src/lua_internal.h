@@ -11,6 +11,8 @@
 struct tp_lua_binding {
 	uint32_t mods;
 	xkb_keysym_t sym;
+	uint32_t keycode;
+	bool on_release;
 	bool is_lua;
 	bool allow_locked;
 	struct tp_action action;
@@ -23,6 +25,28 @@ struct tp_lua_bind_list {
 	size_t len;
 	size_t cap;
 	bool has_unmodified;
+};
+
+struct tp_lua_mouse_binding {
+	uint32_t mods;
+	uint32_t button;
+	bool is_lua;
+	bool allow_locked;
+	struct tp_action action;
+	int lua_ref;
+	char desc[128];
+};
+
+struct tp_lua_mouse_list {
+	struct tp_lua_mouse_binding *items;
+	size_t len;
+	size_t cap;
+};
+
+struct tp_lua_monitor_list {
+	struct tp_monitor_config *items;
+	size_t len;
+	size_t cap;
 };
 
 struct tp_lua_hook {
@@ -97,7 +121,15 @@ struct tp_lua {
 
 	struct tp_lua_bind_list active_binds;
 	struct tp_lua_bind_list staged_binds;
+	struct tp_lua_mouse_list active_mouse_binds;
+	struct tp_lua_mouse_list staged_mouse_binds;
 	bool staging_binds;
+
+	struct tp_lua_monitor_list active_monitors;
+	struct tp_lua_monitor_list staged_monitors;
+	bool staging_monitors;
+
+	int include_depth;
 
 	struct tp_lua_hook_list active_hooks;
 	struct tp_lua_hook_list staged_hooks;

@@ -175,11 +175,12 @@ static tam_str_t append_window_line(tam_str_t out, const struct tp_server *s,
 	out = tp_ipc_escape_append(out, mon);
 	out = tam_str_cat_printf(
 		out,
-		"\ttags=%u\tfocused=%d\tfloating=%d\tfullscreen=%d\tscratchpad=%d"
-		"\txwayland=%d\tx=%d\ty=%d\tw=%d\th=%d\tapp_id=",
-		c->tags, focused ? 1 : 0, c->floating ? 1 : 0, c->fullscreen ? 1 : 0,
-		c->scratchpad ? 1 : 0, tp_client_is_xwayland(c) ? 1 : 0, c->geom.x,
-		c->geom.y, c->geom.w, c->geom.h);
+		"\tid=0x%llx\tpid=%d\ttags=%u\tfocused=%d\tfloating=%d\tfullscreen=%d"
+		"\tscratchpad=%d\txwayland=%d\tx=%d\ty=%d\tw=%d\th=%d\tapp_id=",
+		(unsigned long long)c->id, tp_client_pid(c), c->tags, focused ? 1 : 0,
+		c->floating ? 1 : 0, c->fullscreen ? 1 : 0, c->scratchpad ? 1 : 0,
+		tp_client_is_xwayland(c) ? 1 : 0, c->geom.x, c->geom.y, c->geom.w,
+		c->geom.h);
 	out = tp_ipc_escape_append(out, app_id);
 	out = tam_str_cat(out, "\ttitle=");
 	out = tp_ipc_escape_append(out, title);
@@ -210,18 +211,22 @@ static tam_str_t build_monitors(const struct tp_server *s) {
 			desc = m->output->model;
 		int dpms = (m->output && !m->output->enabled) ? 0 : 1;
 		float scale = m->output ? m->output->scale : 1.0f;
+		int phys_w = m->output ? m->output->width : m->area.w;
+		int phys_h = m->output ? m->output->height : m->area.h;
+		int refresh = m->output ? m->output->refresh : 0;
+		int transform = m->output ? (int)m->output->transform : 0;
 		tp_tags_t cur = tp_tagview_current(&m->view);
 		tp_tags_t prev = m->view.slot[m->view.cur ^ 1u];
 		out = tam_str_cat(out, "monitor\tname=");
 		out = tp_ipc_escape_append(out, name);
 		out = tam_str_cat_printf(
 			out,
-			"\tx=%d\ty=%d\tw=%d\th=%d"
+			"\tx=%d\ty=%d\tw=%d\th=%d\tphys_w=%d\tphys_h=%d\trefresh=%d\ttransform=%d"
 			"\tusable_x=%d\tusable_y=%d\tusable_w=%d\tusable_h=%d"
 			"\tscale=%.2f\ttags=%u\tprev_tags=%u\tfocused=%d\tlayout=%s\tdpms=%d\tdescription=",
-			m->area.x, m->area.y, m->area.w, m->area.h, m->usable.x,
-			m->usable.y, m->usable.w, m->usable.h, scale, cur, prev,
-			s->selmon == m ? 1 : 0,
+			m->area.x, m->area.y, m->area.w, m->area.h, phys_w, phys_h, refresh,
+			transform, m->usable.x, m->usable.y, m->usable.w, m->usable.h,
+			scale, cur, prev, s->selmon == m ? 1 : 0,
 			tp_layout_kind_name(tp_monitor_layout(m)->kind), dpms);
 		out = tp_ipc_escape_append(out, desc);
 		out = tam_str_cat_len(out, "\n", 1);
@@ -330,8 +335,11 @@ static void on_each_bind(const struct tp_lua_bind_info *info, void *userdata) {
 	if (!ctx->out)
 		return;
 	char key_name[64];
-	if (xkb_keysym_get_name(info->sym, key_name, sizeof(key_name)) < 0)
+	if (info->keycode > 0) {
+		snprintf(key_name, sizeof(key_name), "code:%u", info->keycode);
+	} else if (xkb_keysym_get_name(info->sym, key_name, sizeof(key_name)) < 0) {
 		snprintf(key_name, sizeof(key_name), "0x%x", (unsigned)info->sym);
+	}
 
 	ctx->out = tam_str_cat(ctx->out, "bind\tmods=");
 	append_mods(&ctx->out, info->mods);
@@ -343,6 +351,10 @@ static void on_each_bind(const struct tp_lua_bind_info *info, void *userdata) {
 		ctx->out = tam_str_cat(ctx->out, "lua");
 	else
 		ctx->out = tp_ipc_format_action(ctx->out, &info->action);
+	if (info->desc[0]) {
+		ctx->out = tam_str_cat(ctx->out, "\tdesc=");
+		ctx->out = tp_ipc_escape_append(ctx->out, info->desc);
+	}
 	ctx->out = tam_str_cat_len(ctx->out, "\n", 1);
 }
 
@@ -506,6 +518,12 @@ static bool handle_line(struct tp_ipc_client *c, char *line) {
 				if (fc)
 					tp_client_set_monitor(fc, m, false);
 			}
+			return ipc_client_queue(c, "OK\nEND\n", 7);
+		}
+
+		if (act.kind == TP_ACT_MONITOR_SCALE) {
+			if (!tp_monitor_set_scale(s, act.cmd, act.scale))
+				return ipc_send_err(c, "monitor scale failed");
 			return ipc_client_queue(c, "OK\nEND\n", 7);
 		}
 

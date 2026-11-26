@@ -188,3 +188,58 @@ void tp_focus_cycle(struct tp_server *s, int dir) {
 		}
 	} while (pos != &cur->link);
 }
+
+void tp_focus_dir(struct tp_server *s, enum tp_dir dir) {
+	struct tp_client *cur = tp_focused(s);
+	if (!cur || !cur->mon) {
+		struct tp_monitor *adj = tp_monitor_in_dir(s, s->selmon, dir);
+		if (adj)
+			tp_monitor_focus(s, adj);
+		return;
+	}
+	int64_t cx = cur->geom.x + cur->geom.w / 2;
+	int64_t cy = cur->geom.y + cur->geom.h / 2;
+	struct tp_client *best = NULL;
+	int64_t best_score = 0;
+
+	struct tp_client *c;
+	wl_list_for_each(c, &s->clients, link) {
+		if (c == cur || c->mon != cur->mon || !tp_client_visible(c))
+			continue;
+		int64_t dx = (c->geom.x + c->geom.w / 2) - cx;
+		int64_t dy = (c->geom.y + c->geom.h / 2) - cy;
+		int64_t primary = 0, cross = 0;
+		switch (dir) {
+		case TP_DIR_LEFT:
+			primary = -dx;
+			cross = dy < 0 ? -dy : dy;
+			break;
+		case TP_DIR_RIGHT:
+			primary = dx;
+			cross = dy < 0 ? -dy : dy;
+			break;
+		case TP_DIR_UP:
+			primary = -dy;
+			cross = dx < 0 ? -dx : dx;
+			break;
+		case TP_DIR_DOWN:
+			primary = dy;
+			cross = dx < 0 ? -dx : dx;
+			break;
+		}
+		if (primary <= 0)
+			continue;
+		int64_t score = primary + cross * 2;
+		if (!best || score < best_score) {
+			best = c;
+			best_score = score;
+		}
+	}
+	if (best) {
+		tp_focus(s, best);
+		return;
+	}
+	struct tp_monitor *adj = tp_monitor_in_dir(s, cur->mon, dir);
+	if (adj)
+		tp_monitor_focus(s, adj);
+}

@@ -118,6 +118,35 @@ void tp_lua_set_capture_argv_fn(struct tp_lua *lua, tp_lua_capture_argv_fn fn,
  */
 bool tp_lua_handle_key(struct tp_lua *lua, uint32_t mods, xkb_keysym_t sym,
 					   bool locked);
+bool tp_lua_handle_key_ex(struct tp_lua *lua, uint32_t mods, xkb_keysym_t sym,
+						  uint32_t keycode, bool released, bool locked);
+bool tp_lua_handle_mouse(struct tp_lua *lua, uint32_t mods, uint32_t button,
+						 bool locked, struct tp_action *out_grab);
+
+/* Monitor configuration rule staged by tp.monitor{...}. */
+struct tp_monitor_config {
+	char output[64]; /* "" = wildcard fallback */
+	bool has_mode;
+	int32_t mode_w;
+	int32_t mode_h;
+	int32_t mode_refresh_mhz; /* 0 = best refresh for WxH */
+	bool mode_preferred;
+	bool has_pos;
+	bool pos_auto;
+	int32_t pos_x;
+	int32_t pos_y;
+	bool has_scale;
+	float scale;
+	bool has_transform;
+	int32_t transform; /* 0..7 */
+	bool has_enabled;
+	bool enabled;
+};
+
+/* Resolve the effective monitor rule for output_name (exact match, else ""). */
+bool tp_lua_monitor_rule(const struct tp_lua *lua, const char *output_name,
+						 struct tp_monitor_config *out);
+size_t tp_lua_monitor_count(const struct tp_lua *lua);
 
 /* Number of currently active key bindings. */
 size_t tp_lua_binding_count(const struct tp_lua *lua);
@@ -126,6 +155,8 @@ size_t tp_lua_binding_count(const struct tp_lua *lua);
 struct tp_lua_bind_info {
 	uint32_t mods;
 	xkb_keysym_t sym;
+	uint32_t keycode;
+	bool on_release;
 	bool allow_locked;
 	bool is_lua;
 	struct tp_action action; /* valid when !is_lua */

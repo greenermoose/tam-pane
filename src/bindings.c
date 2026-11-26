@@ -7,6 +7,7 @@
  * that tp.dsp.* dispatchers invoke.
  */
 #include "tam-pane/bindings.h"
+#include "tam-pane/capture.h"
 #include "tam-pane/chord.h"
 #include "tam-pane/chord_overlay.h"
 #include "tam-pane/client.h"
@@ -277,6 +278,21 @@ void tp_action_run(struct tp_server *s, const struct tp_action *act) {
 	case TP_ACT_KEYBOARD_NEXT:
 		tp_keyboard_next_layout(s, act->cmd[0] ? act->cmd : NULL);
 		break;
+	case TP_ACT_FOCUS_DIR:
+		tp_focus_dir(s, (enum tp_dir)act->dir);
+		break;
+	case TP_ACT_SEND_KEY:
+		tp_keyboard_send_key(s, act->mods, act->sym);
+		break;
+	case TP_ACT_CAPTURE:
+		tp_capture_launch(s, act->cmd);
+		break;
+	case TP_ACT_MONITOR_SCALE:
+		tp_monitor_set_scale(s, act->cmd[0] ? act->cmd : NULL, act->scale);
+		break;
+	case TP_ACT_MOUSE_MOVE:
+	case TP_ACT_MOUSE_RESIZE:
+		break;
 	}
 }
 
@@ -284,4 +300,19 @@ bool tp_bindings_handle(struct tp_server *s, uint32_t mods, xkb_keysym_t sym) {
 	if (!s || !s->lua)
 		return false;
 	return tp_lua_handle_key(s->lua, mods, sym, s->locked);
+}
+
+bool tp_bindings_handle_key(struct tp_server *s, uint32_t mods,
+							xkb_keysym_t sym, uint32_t keycode, bool released) {
+	if (!s || !s->lua)
+		return false;
+	return tp_lua_handle_key_ex(s->lua, mods, sym, keycode, released,
+								s->locked);
+}
+
+bool tp_bindings_handle_mouse(struct tp_server *s, uint32_t mods,
+							  uint32_t button, struct tp_action *out_grab) {
+	if (!s || !s->lua)
+		return false;
+	return tp_lua_handle_mouse(s->lua, mods, button, s->locked, out_grab);
 }

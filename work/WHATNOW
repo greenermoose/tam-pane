@@ -3,20 +3,25 @@ WHATNOW
 What tam-pane is doing now and what comes next. Read this first; revise
 it at the end of every session (work/README-work).
 
-Updated: 2026-11-25, with W32
+Updated: 2026-11-26, with W33
 
 
 STATE
 
-  Version 0.2.7 on branch dev (W32): extends IPC and events for Tamlinux
-  0.7.0 Milestone 5 (`monitors` adds `dpms` and `description`; new
-  `keyboards` query; `dispatch dpms <on|off> <output>`, `dispatch
-  focus_app <name>`, `dispatch keyboard next [name]`, optional monitor
-  target on `dispatch tag view|toggle_view`; new subscribable events
-  `monitor.focus`, `output.power`, `keyboard.layout`, and
-  `config.reload`). All automated checks pass (test_tags: 28,
-  test_dwindle: 143, test_layouts: 102, test_lua: 561, test_ipc: 139,
-  test_chord: ok, smoke-headless: 6/6, test_input_headless: 755).
+  Version 0.2.8 on branch dev (W33): adds configuration and IPC primitives
+  for Tamlinux 0.7.0 Milestone 6 (Port bosgame's controls): `tp.monitor`
+  geometry/mode/scale/transform rules with live reload; XKB (`kb_layout`,
+  `kb_variant`, `kb_model`, `kb_options`, `kb_rules`, `numlock_by_default`)
+  and pointer (`natural_scroll`, `scroll_factor`) config; `tp.home`,
+  `tp.config_dir`, and `tp.include(path[, optional])`; `code:<N>` keycodes,
+  `{ release = true }` binds, `tp.mouse_bind`/`tp.mouse_unbind`,
+  `tp.dsp.focus("left"|"right"|"up"|"down")`, `tp.dsp.send_key`,
+  `tp.dsp.capture`, `tp.dsp.mouse_move`, `tp.dsp.mouse_resize`; IPC
+  `id`/`pid` on windows, `phys_w`/`phys_h`/`refresh`/`transform` on
+  monitors, and `dispatch send_key|capture|monitor scale|focus <dir>`.
+
+  Prior version 0.2.7 (W32, 418bd62): shell IPC queries, DPMS/app/keyboard
+  dispatches, and events for Milestone 5.
 
   Prior accepted baseline: 0.2.6 (accepted by Fred on 2026-11-23, W31),
   including opt-in XWayland support behind `XWAYLAND=1` (default

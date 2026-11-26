@@ -24,6 +24,9 @@ void tp_settings_defaults(struct tp_settings *s) {
 		.cursor_size = 24,
 		.repeat_rate = 25,
 		.repeat_delay = 600,
+		.numlock_by_default = false,
+		.natural_scroll = false,
+		.scroll_factor = 1.0f,
 		.chord_enabled = true,
 		.chord_overlay_builtin = true,
 	};

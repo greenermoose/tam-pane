@@ -373,6 +373,7 @@ static void on_new_toplevel(struct wl_listener *l, void *data) {
 		tam_log_error("new window: out of memory");
 		return;
 	}
+	c->id = ++s->next_client_id;
 	c->server = s;
 	c->toplevel = toplevel;
 	c->tree = wlr_scene_xdg_surface_create(s->layer[TP_LAYER_TILE],
@@ -441,6 +442,20 @@ const char *tp_client_title(const struct tp_client *c) {
 	if (c->kind == TP_CLIENT_XWAYLAND)
 		return tp_xwayland_title(c);
 	return c->toplevel ? c->toplevel->title : NULL;
+}
+
+int tp_client_pid(const struct tp_client *c) {
+	if (!c)
+		return 0;
+	struct wlr_surface *surf = tp_client_surface(c);
+	if (!surf || !surf->resource)
+		return 0;
+	struct wl_client *cl = wl_resource_get_client(surf->resource);
+	if (!cl)
+		return 0;
+	pid_t pid = 0;
+	wl_client_get_credentials(cl, &pid, NULL, NULL);
+	return (int)pid;
 }
 
 bool tp_client_is_xwayland(const struct tp_client *c) {

@@ -350,6 +350,29 @@ static void test_parse_dispatch(void) {
 	CHECK(!tp_ipc_parse_dispatch("scratchpad drop", &act, mon, sizeof(mon), err,
 								 sizeof(err)));
 
+	/* 0.2.8 dispatches: focus dir, send_key, capture, monitor scale */
+	CHECK(tp_ipc_parse_dispatch("focus left", &act, mon, sizeof(mon), err,
+								sizeof(err)));
+	CHECK(act.kind == TP_ACT_FOCUS_DIR && act.dir == TP_DIR_LEFT);
+	CHECK(tp_ipc_parse_dispatch("send_key Ctrl+Shift+v", &act, mon,
+								sizeof(mon), err, sizeof(err)));
+	CHECK(act.kind == TP_ACT_SEND_KEY &&
+		  act.mods == (TP_MOD_CTRL | TP_MOD_SHIFT) && act.sym == XKB_KEY_v);
+	CHECK(tp_ipc_parse_dispatch("capture grim /tmp/shot.png", &act, mon,
+								sizeof(mon), err, sizeof(err)));
+	CHECK(act.kind == TP_ACT_CAPTURE &&
+		  strcmp(act.cmd, "grim /tmp/shot.png") == 0);
+	CHECK(tp_ipc_parse_dispatch("monitor scale DP-1 1.25", &act, mon,
+								sizeof(mon), err, sizeof(err)));
+	CHECK(act.kind == TP_ACT_MONITOR_SCALE && strcmp(act.cmd, "DP-1") == 0 &&
+		  act.scale > 1.24f && act.scale < 1.26f);
+	CHECK(!tp_ipc_parse_dispatch("monitor scale DP-1 99", &act, mon,
+								 sizeof(mon), err, sizeof(err)));
+	CHECK(!tp_ipc_parse_dispatch("send_key   ", &act, mon, sizeof(mon), err,
+								 sizeof(err)));
+	CHECK(!tp_ipc_parse_dispatch("capture   ", &act, mon, sizeof(mon), err,
+								 sizeof(err)));
+
 	/* Invalid dispatches */
 	CHECK(!tp_ipc_parse_dispatch("", &act, mon, sizeof(mon), err, sizeof(err)));
 	CHECK(!tp_ipc_parse_dispatch("unknown", &act, mon, sizeof(mon), err,

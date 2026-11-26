@@ -33,6 +33,8 @@ void tp_keyboard_add(struct tp_server *s, struct wlr_input_device *dev);
 void tp_keyboards_finish(struct tp_server *s);
 void tp_keyboards_apply_settings(struct tp_server *s);
 bool tp_keyboard_next_layout(struct tp_server *s, const char *name);
+bool tp_keyboard_send_key(struct tp_server *s, uint32_t mods,
+						  uint32_t sym);
 
 /* Cursor and pointer devices (pointer.c). */
 bool tp_pointer_init(struct tp_server *s);

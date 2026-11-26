@@ -1,0 +1,27 @@
+W33: Controls, monitors, XKB, mouse binds, include, and IPC (0.2.8)
+
+Date: 2026-11-26
+Agent: agy (Gemini)
+Branch: dev
+
+SUMMARY
+
+  Implemented Tamlinux 0.7.0 Milestone 6 engine primitives in tam-pane 0.2.8:
+  - Added `tp.monitor{ output, mode, position, scale, transform, enabled/disabled }`
+    and `tp.clear_monitors()` with atomic staging/rollback, startup application
+    in `on_new_output`, and live reload application in `tp_monitors_apply_config`.
+  - Added XKB (`kb_layout`, `kb_variant`, `kb_model`, `kb_options`, `kb_rules`,
+    `numlock_by_default`) and pointer (`natural_scroll`, `scroll_factor`)
+    configuration in `tp.config`, applied on attach and live reload.
+  - Added `tp.home`, `tp.config_dir`, and bounded `tp.include(path[, optional])`
+    so packaged defaults can load personal overrides cleanly across reloads.
+  - Extended `tp.bind` with `code:<9..255>` keycodes and `{ release = true }`,
+    added `tp.mouse_bind`/`tp.mouse_unbind` (`mouse:272..279`, `mouse_up`,
+    `mouse_down`) with `tp.dsp.mouse_move()`/`tp.dsp.mouse_resize()`, and
+    added `tp.dsp.focus("left"|"right"|"up"|"down")`, `tp.dsp.send_key`,
+    and `tp.dsp.capture`.
+  - Extended IPC: `id` and `pid` on `windows`/`focused`, `phys_w`/`phys_h`/
+    `refresh`/`transform` on `monitors`, `code:<N>` + `desc` on `binds`, and
+    `dispatch focus <dir>`, `dispatch send_key <chord>`, `dispatch capture <cmd>`,
+    and `dispatch monitor scale <output|focused> <scale>`.
+  - Added unit tests in `tests/test_lua.c` and `tests/test_ipc.c`.

@@ -47,7 +47,9 @@ static const char default_bindings_lua[] =
 	"  tp.bind('Meta+Shift+' .. k, tp.dsp.tag('move', i))\n"
 	"  tp.bind('Meta+Ctrl+' .. k, tp.dsp.tag('toggle_view', i))\n"
 	"  tp.bind('Meta+Shift+Ctrl+' .. k, tp.dsp.tag('toggle_client', i))\n"
-	"end\n";
+	"end\n"
+	"tp.mouse_bind('Meta+mouse:272', tp.dsp.mouse_move())\n"
+	"tp.mouse_bind('Meta+mouse:273', tp.dsp.mouse_resize())\n";
 
 static bool ascii_ieq_n(const char *a, size_t len, const char *b) {
 	for (size_t i = 0; i < len; i++) {
@@ -220,6 +222,30 @@ bool tp_binding_parse_chord(const char *str, struct tp_key_spec *out, char *err,
 			snprintf(err, err_size, "missing key in chord");
 		return false;
 	}
+	if (key_len > 5 && ascii_ieq_n(key_str, 5, "code:")) {
+		char cbuf[16];
+		size_t nlen = key_len - 5;
+		if (nlen == 0 || nlen >= sizeof(cbuf)) {
+			if (err && err_size > 0)
+				snprintf(err, err_size, "invalid keycode '%.*s'", (int)key_len,
+						 key_str);
+			return false;
+		}
+		memcpy(cbuf, key_str + 5, nlen);
+		cbuf[nlen] = '\0';
+		char *end = NULL;
+		long code = strtol(cbuf, &end, 10);
+		if (!end || *end != '\0' || code < 9 || code > 255) {
+			if (err && err_size > 0)
+				snprintf(err, err_size, "keycode out of range [9, 255]: '%s'",
+						 cbuf);
+			return false;
+		}
+		out->mods = mods;
+		out->sym = XKB_KEY_NoSymbol;
+		out->keycode = (uint32_t)code;
+		return true;
+	}
 	xkb_keysym_t sym = parse_keysym(key_str, key_len);
 	if (sym == XKB_KEY_NoSymbol) {
 		if (err && err_size > 0)
@@ -230,6 +256,82 @@ bool tp_binding_parse_chord(const char *str, struct tp_key_spec *out, char *err,
 
 	out->mods = mods;
 	out->sym = sym;
+	out->keycode = 0;
+	return true;
+}
+
+bool tp_binding_parse_mouse(const char *str, struct tp_mouse_spec *out,
+							char *err, size_t err_size) {
+	if (!str || !out)
+		return false;
+	const char *s = str;
+	size_t len = strlen(s);
+	trim_span(&s, &len);
+	if (len == 0) {
+		if (err && err_size > 0)
+			snprintf(err, err_size, "empty mouse chord");
+		return false;
+	}
+	const char *last_plus = NULL;
+	for (size_t i = 0; i < len; i++) {
+		if (s[i] == '+')
+			last_plus = s + i;
+	}
+	uint32_t mods = 0;
+	const char *btn_str = s;
+	size_t btn_len = len;
+	if (last_plus) {
+		const char *p = s;
+		const char *end = last_plus;
+		for (;;) {
+			const char *plus = memchr(p, '+', (size_t)(end - p));
+			const char *tok = p;
+			size_t tlen = plus ? (size_t)(plus - p) : (size_t)(end - p);
+			trim_span(&tok, &tlen);
+			if (tlen == 0 || !parse_modifier(tok, tlen, &mods)) {
+				if (err && err_size > 0)
+					snprintf(err, err_size, "invalid modifier in mouse chord");
+				return false;
+			}
+			if (!plus)
+				break;
+			p = plus + 1;
+		}
+		btn_str = last_plus + 1;
+		btn_len = len - (size_t)(last_plus - s) - 1;
+	}
+	trim_span(&btn_str, &btn_len);
+	uint32_t button = 0;
+	if (ascii_ieq_n(btn_str, btn_len, "mouse_up")) {
+		button = TP_MOUSE_WHEEL_UP;
+	} else if (ascii_ieq_n(btn_str, btn_len, "mouse_down")) {
+		button = TP_MOUSE_WHEEL_DOWN;
+	} else if (btn_len > 6 && ascii_ieq_n(btn_str, 6, "mouse:")) {
+		char bbuf[16];
+		size_t nlen = btn_len - 6;
+		if (nlen == 0 || nlen >= sizeof(bbuf)) {
+			if (err && err_size > 0)
+				snprintf(err, err_size, "invalid mouse button");
+			return false;
+		}
+		memcpy(bbuf, btn_str + 6, nlen);
+		bbuf[nlen] = '\0';
+		char *end = NULL;
+		long b = strtol(bbuf, &end, 10);
+		if (!end || *end != '\0' || b < 272 || b > 279) {
+			if (err && err_size > 0)
+				snprintf(err, err_size, "mouse button out of range [272, 279]");
+			return false;
+		}
+		button = (uint32_t)b;
+	} else {
+		if (err && err_size > 0)
+			snprintf(err, err_size, "unknown mouse target '%.*s'", (int)btn_len,
+					 btn_str);
+		return false;
+	}
+	out->mods = mods;
+	out->button = button;
 	return true;
 }
 
@@ -288,7 +390,9 @@ static bool bind_list_set(lua_State *L, struct tp_lua_bind_list *list,
 						  const struct tp_lua_binding *entry) {
 	for (size_t i = 0; i < list->len; i++) {
 		if (list->items[i].mods == entry->mods &&
-			list->items[i].sym == entry->sym) {
+			list->items[i].sym == entry->sym &&
+			list->items[i].keycode == entry->keycode &&
+			list->items[i].on_release == entry->on_release) {
 			if (list->items[i].is_lua && list->items[i].lua_ref != LUA_NOREF)
 				luaL_unref(L, LUA_REGISTRYINDEX, list->items[i].lua_ref);
 			list->items[i] = *entry;
@@ -314,17 +418,98 @@ static bool bind_list_set(lua_State *L, struct tp_lua_bind_list *list,
 }
 
 static bool bind_list_remove(lua_State *L, struct tp_lua_bind_list *list,
-							 uint32_t mods, xkb_keysym_t sym) {
-	for (size_t i = 0; i < list->len; i++) {
-		if (list->items[i].mods == mods && list->items[i].sym == sym) {
+							 uint32_t mods, xkb_keysym_t sym,
+							 uint32_t keycode) {
+	bool any = false;
+	size_t i = 0;
+	while (i < list->len) {
+		if (list->items[i].mods == mods && list->items[i].sym == sym &&
+			list->items[i].keycode == keycode) {
 			if (list->items[i].is_lua && list->items[i].lua_ref != LUA_NOREF)
 				luaL_unref(L, LUA_REGISTRYINDEX, list->items[i].lua_ref);
 			if (i + 1 < list->len)
 				memmove(&list->items[i], &list->items[i + 1],
 						(list->len - i - 1) * sizeof(*list->items));
 			list->len--;
-			if (mods == 0)
-				bind_list_recalc_unmodified(list);
+			any = true;
+		} else {
+			i++;
+		}
+	}
+	if (any && mods == 0)
+		bind_list_recalc_unmodified(list);
+	return any;
+}
+
+static void mouse_list_clear(lua_State *L, struct tp_lua_mouse_list *list) {
+	if (L && list->items) {
+		for (size_t i = 0; i < list->len; i++) {
+			if (list->items[i].is_lua && list->items[i].lua_ref != LUA_NOREF)
+				luaL_unref(L, LUA_REGISTRYINDEX, list->items[i].lua_ref);
+		}
+	}
+	free(list->items);
+	list->items = NULL;
+	list->len = 0;
+	list->cap = 0;
+}
+
+static bool mouse_list_clone(lua_State *L, const struct tp_lua_mouse_list *src,
+							 struct tp_lua_mouse_list *dst) {
+	mouse_list_clear(L, dst);
+	if (src->len == 0)
+		return true;
+	dst->items = calloc(src->len, sizeof(*dst->items));
+	if (!dst->items)
+		return false;
+	dst->cap = src->len;
+	for (size_t i = 0; i < src->len; i++) {
+		dst->items[i] = src->items[i];
+		if (src->items[i].is_lua && src->items[i].lua_ref != LUA_NOREF) {
+			lua_rawgeti(L, LUA_REGISTRYINDEX, src->items[i].lua_ref);
+			dst->items[i].lua_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+		} else {
+			dst->items[i].lua_ref = LUA_NOREF;
+		}
+		dst->len = i + 1;
+	}
+	return true;
+}
+
+static bool mouse_list_set(lua_State *L, struct tp_lua_mouse_list *list,
+						   const struct tp_lua_mouse_binding *entry) {
+	for (size_t i = 0; i < list->len; i++) {
+		if (list->items[i].mods == entry->mods &&
+			list->items[i].button == entry->button) {
+			if (list->items[i].is_lua && list->items[i].lua_ref != LUA_NOREF)
+				luaL_unref(L, LUA_REGISTRYINDEX, list->items[i].lua_ref);
+			list->items[i] = *entry;
+			return true;
+		}
+	}
+	if (list->len == list->cap) {
+		size_t next_cap = list->cap ? list->cap * 2 : 16;
+		struct tp_lua_mouse_binding *grown =
+			realloc(list->items, next_cap * sizeof(*grown));
+		if (!grown)
+			return false;
+		list->items = grown;
+		list->cap = next_cap;
+	}
+	list->items[list->len++] = *entry;
+	return true;
+}
+
+static bool mouse_list_remove(lua_State *L, struct tp_lua_mouse_list *list,
+							  uint32_t mods, uint32_t button) {
+	for (size_t i = 0; i < list->len; i++) {
+		if (list->items[i].mods == mods && list->items[i].button == button) {
+			if (list->items[i].is_lua && list->items[i].lua_ref != LUA_NOREF)
+				luaL_unref(L, LUA_REGISTRYINDEX, list->items[i].lua_ref);
+			if (i + 1 < list->len)
+				memmove(&list->items[i], &list->items[i + 1],
+						(list->len - i - 1) * sizeof(*list->items));
+			list->len--;
 			return true;
 		}
 	}
@@ -392,10 +577,69 @@ static int l_dsp_quit(lua_State *L) {
 }
 
 static int l_dsp_focus(lua_State *L) {
+	const char *s = luaL_checkstring(L, 1);
+	struct tp_action act = {0};
+	if (strcmp(s, "next") == 0) {
+		act.kind = TP_ACT_FOCUS;
+		act.dir = +1;
+	} else if (strcmp(s, "prev") == 0) {
+		act.kind = TP_ACT_FOCUS;
+		act.dir = -1;
+	} else if (strcmp(s, "left") == 0) {
+		act.kind = TP_ACT_FOCUS_DIR;
+		act.dir = TP_DIR_LEFT;
+	} else if (strcmp(s, "right") == 0) {
+		act.kind = TP_ACT_FOCUS_DIR;
+		act.dir = TP_DIR_RIGHT;
+	} else if (strcmp(s, "up") == 0) {
+		act.kind = TP_ACT_FOCUS_DIR;
+		act.dir = TP_DIR_UP;
+	} else if (strcmp(s, "down") == 0) {
+		act.kind = TP_ACT_FOCUS_DIR;
+		act.dir = TP_DIR_DOWN;
+	} else {
+		return luaL_error(
+			L, "tp.dsp.focus: expected 'next', 'prev', 'left', 'right', 'up', or 'down'");
+	}
+	return push_dispatcher(L, &act);
+}
+
+static int l_dsp_send_key(lua_State *L) {
+	const char *chord = luaL_checkstring(L, 1);
+	struct tp_key_spec spec;
+	char err[128] = {0};
+	if (!tp_binding_parse_chord(chord, &spec, err, sizeof(err)) ||
+		spec.sym == XKB_KEY_NoSymbol)
+		return luaL_error(L, "tp.dsp.send_key: %s",
+						  err[0] ? err : "expected modifier+keysym chord");
 	struct tp_action act = {
-		.kind = TP_ACT_FOCUS,
-		.dir = check_cycle_dir(L, 1, "focus"),
+		.kind = TP_ACT_SEND_KEY,
+		.mods = spec.mods,
+		.sym = spec.sym,
 	};
+	return push_dispatcher(L, &act);
+}
+
+static int l_dsp_capture(lua_State *L) {
+	size_t len = 0;
+	const char *cmd = luaL_checklstring(L, 1, &len);
+	if (len == 0)
+		return luaL_error(L, "tp.dsp.capture: command must not be empty");
+	struct tp_action act = {.kind = TP_ACT_CAPTURE};
+	if (len >= sizeof(act.cmd))
+		return luaL_error(L, "tp.dsp.capture: command too long (max %d bytes)",
+						  (int)(sizeof(act.cmd) - 1));
+	memcpy(act.cmd, cmd, len + 1);
+	return push_dispatcher(L, &act);
+}
+
+static int l_dsp_mouse_move(lua_State *L) {
+	struct tp_action act = {.kind = TP_ACT_MOUSE_MOVE};
+	return push_dispatcher(L, &act);
+}
+
+static int l_dsp_mouse_resize(lua_State *L) {
+	struct tp_action act = {.kind = TP_ACT_MOUSE_RESIZE};
 	return push_dispatcher(L, &act);
 }
 
@@ -566,6 +810,7 @@ static int l_tp_bind(lua_State *L) {
 	struct tp_lua_binding entry = {
 		.mods = spec.mods,
 		.sym = spec.sym,
+		.keycode = spec.keycode,
 		.lua_ref = LUA_NOREF,
 	};
 
@@ -581,6 +826,10 @@ static int l_tp_bind(lua_State *L) {
 				if (lua_type(L, -1) != LUA_TBOOLEAN)
 					return luaL_error(L, "tp.bind: locked must be a boolean");
 				entry.allow_locked = lua_toboolean(L, -1) != 0;
+			} else if (strcmp(k, "release") == 0) {
+				if (lua_type(L, -1) != LUA_TBOOLEAN)
+					return luaL_error(L, "tp.bind: release must be a boolean");
+				entry.on_release = lua_toboolean(L, -1) != 0;
 			} else if (strcmp(k, "desc") == 0) {
 				if (lua_type(L, -1) != LUA_TSTRING)
 					return luaL_error(L, "tp.bind: desc must be a string");
@@ -626,7 +875,86 @@ static int l_tp_unbind(lua_State *L) {
 		return luaL_error(L, "tp.unbind: %s", err);
 
 	bool removed =
-		bind_list_remove(L, &lua->staged_binds, spec.mods, spec.sym);
+		bind_list_remove(L, &lua->staged_binds, spec.mods, spec.sym, spec.keycode);
+	lua_pushboolean(L, removed);
+	return 1;
+}
+
+static int l_tp_mouse_bind(lua_State *L) {
+	struct tp_lua *lua = tp_lua_from_state(L);
+	if (!lua || !lua->staging_binds)
+		return luaL_error(
+			L, "tp.mouse_bind can only be called while loading config");
+
+	const char *chord = luaL_checkstring(L, 1);
+	struct tp_mouse_spec spec;
+	char err[128] = {0};
+	if (!tp_binding_parse_mouse(chord, &spec, err, sizeof(err)))
+		return luaL_error(L, "tp.mouse_bind: %s", err);
+
+	struct tp_lua_mouse_binding entry = {
+		.mods = spec.mods,
+		.button = spec.button,
+		.lua_ref = LUA_NOREF,
+	};
+
+	if (!lua_isnoneornil(L, 3)) {
+		if (lua_type(L, 3) != LUA_TTABLE)
+			return luaL_error(L, "tp.mouse_bind: options must be a table");
+		lua_pushnil(L);
+		while (lua_next(L, 3) != 0) {
+			if (lua_type(L, -2) != LUA_TSTRING)
+				return luaL_error(L, "tp.mouse_bind: option keys must be strings");
+			const char *k = lua_tostring(L, -2);
+			if (strcmp(k, "locked") == 0) {
+				if (lua_type(L, -1) != LUA_TBOOLEAN)
+					return luaL_error(L, "tp.mouse_bind: locked must be a boolean");
+				entry.allow_locked = lua_toboolean(L, -1) != 0;
+			} else if (strcmp(k, "desc") == 0) {
+				if (lua_type(L, -1) != LUA_TSTRING)
+					return luaL_error(L, "tp.mouse_bind: desc must be a string");
+				snprintf(entry.desc, sizeof(entry.desc), "%s",
+						 lua_tostring(L, -1));
+			}
+			lua_pop(L, 1);
+		}
+	}
+
+	struct tp_action *dsp = luaL_testudata(L, 2, TP_DSP_MT);
+	if (dsp) {
+		entry.is_lua = false;
+		entry.action = *dsp;
+	} else if (lua_isfunction(L, 2)) {
+		entry.is_lua = true;
+		lua_pushvalue(L, 2);
+		entry.lua_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+	} else {
+		return luaL_error(
+			L, "tp.mouse_bind: expected a tp.dispatcher or function");
+	}
+
+	if (!mouse_list_set(L, &lua->staged_mouse_binds, &entry)) {
+		if (entry.is_lua && entry.lua_ref != LUA_NOREF)
+			luaL_unref(L, LUA_REGISTRYINDEX, entry.lua_ref);
+		return luaL_error(L, "tp.mouse_bind: out of memory");
+	}
+	return 0;
+}
+
+static int l_tp_mouse_unbind(lua_State *L) {
+	struct tp_lua *lua = tp_lua_from_state(L);
+	if (!lua || !lua->staging_binds)
+		return luaL_error(
+			L, "tp.mouse_unbind can only be called while loading config");
+
+	const char *chord = luaL_checkstring(L, 1);
+	struct tp_mouse_spec spec;
+	char err[128] = {0};
+	if (!tp_binding_parse_mouse(chord, &spec, err, sizeof(err)))
+		return luaL_error(L, "tp.mouse_unbind: %s", err);
+
+	bool removed =
+		mouse_list_remove(L, &lua->staged_mouse_binds, spec.mods, spec.button);
 	lua_pushboolean(L, removed);
 	return 1;
 }
@@ -646,6 +974,10 @@ static const luaL_Reg dsp_funcs[] = {
 	{"close", l_dsp_close},
 	{"quit", l_dsp_quit},
 	{"focus", l_dsp_focus},
+	{"send_key", l_dsp_send_key},
+	{"capture", l_dsp_capture},
+	{"mouse_move", l_dsp_mouse_move},
+	{"mouse_resize", l_dsp_mouse_resize},
 	{"swap", l_dsp_swap},
 	{"move", l_dsp_move},
 	{"resize", l_dsp_resize},
@@ -668,13 +1000,17 @@ void tp_lua_bindings_open(lua_State *L) {
 	lua_setfield(L, -2, "__tostring");
 	lua_pop(L, 1);
 
-	/* tp.bind, tp.unbind, tp.clear_binds, tp.dsp (tp table is at -1). */
+	/* tp.bind, tp.unbind, tp.clear_binds, tp.mouse_bind, tp.mouse_unbind, tp.dsp. */
 	lua_pushcfunction(L, l_tp_bind);
 	lua_setfield(L, -2, "bind");
 	lua_pushcfunction(L, l_tp_unbind);
 	lua_setfield(L, -2, "unbind");
 	lua_pushcfunction(L, l_tp_clear_binds);
 	lua_setfield(L, -2, "clear_binds");
+	lua_pushcfunction(L, l_tp_mouse_bind);
+	lua_setfield(L, -2, "mouse_bind");
+	lua_pushcfunction(L, l_tp_mouse_unbind);
+	lua_setfield(L, -2, "mouse_unbind");
 
 	luaL_newlib(L, dsp_funcs);
 	lua_setfield(L, -2, "dsp");
@@ -683,6 +1019,11 @@ void tp_lua_bindings_open(lua_State *L) {
 bool tp_lua_bindings_stage_begin(struct tp_lua *lua) {
 	if (!bind_list_clone(lua->L, &lua->active_binds, &lua->staged_binds))
 		return false;
+	if (!mouse_list_clone(lua->L, &lua->active_mouse_binds,
+						  &lua->staged_mouse_binds)) {
+		bind_list_clear(lua->L, &lua->staged_binds);
+		return false;
+	}
 	lua->staging_binds = true;
 	return true;
 }
@@ -692,11 +1033,15 @@ void tp_lua_bindings_stage_commit(struct tp_lua *lua) {
 	bind_list_clear(lua->L, &lua->active_binds);
 	lua->active_binds = lua->staged_binds;
 	lua->staged_binds = (struct tp_lua_bind_list){0};
+	mouse_list_clear(lua->L, &lua->active_mouse_binds);
+	lua->active_mouse_binds = lua->staged_mouse_binds;
+	lua->staged_mouse_binds = (struct tp_lua_mouse_list){0};
 }
 
 void tp_lua_bindings_stage_abort(struct tp_lua *lua) {
 	lua->staging_binds = false;
 	bind_list_clear(lua->L, &lua->staged_binds);
+	mouse_list_clear(lua->L, &lua->staged_mouse_binds);
 }
 
 void tp_lua_bindings_finish(struct tp_lua *lua) {
@@ -704,6 +1049,8 @@ void tp_lua_bindings_finish(struct tp_lua *lua) {
 		return;
 	bind_list_clear(lua->L, &lua->staged_binds);
 	bind_list_clear(lua->L, &lua->active_binds);
+	mouse_list_clear(lua->L, &lua->staged_mouse_binds);
+	mouse_list_clear(lua->L, &lua->active_mouse_binds);
 	lua->staging_binds = false;
 }
 
@@ -742,17 +1089,27 @@ void tp_lua_set_action_fn(struct tp_lua *lua, tp_lua_action_fn fn,
 	lua->action_userdata = userdata;
 }
 
-bool tp_lua_handle_key(struct tp_lua *lua, uint32_t mods, xkb_keysym_t sym,
-					   bool locked) {
+bool tp_lua_handle_key_ex(struct tp_lua *lua, uint32_t mods, xkb_keysym_t sym,
+						  uint32_t keycode, bool released, bool locked) {
 	if (!lua || !lua->L)
 		return false;
 
-	xkb_keysym_t key = xkb_keysym_to_lower(sym);
+	xkb_keysym_t key =
+		(sym != XKB_KEY_NoSymbol) ? xkb_keysym_to_lower(sym) : XKB_KEY_NoSymbol;
 	const struct tp_lua_binding *found = NULL;
 	for (size_t i = 0; i < lua->active_binds.len; i++) {
-		if (lua->active_binds.items[i].mods == mods &&
-			lua->active_binds.items[i].sym == key) {
-			found = &lua->active_binds.items[i];
+		const struct tp_lua_binding *b = &lua->active_binds.items[i];
+		if (b->on_release != released)
+			continue;
+		if (b->mods != mods)
+			continue;
+		if (b->keycode > 0) {
+			if (keycode > 0 && b->keycode == keycode) {
+				found = b;
+				break;
+			}
+		} else if (key != XKB_KEY_NoSymbol && b->sym == key) {
+			found = b;
 			break;
 		}
 	}
@@ -778,6 +1135,50 @@ bool tp_lua_handle_key(struct tp_lua *lua, uint32_t mods, xkb_keysym_t sym,
 	return true;
 }
 
+bool tp_lua_handle_key(struct tp_lua *lua, uint32_t mods, xkb_keysym_t sym,
+					   bool locked) {
+	return tp_lua_handle_key_ex(lua, mods, sym, 0, false, locked);
+}
+
+bool tp_lua_handle_mouse(struct tp_lua *lua, uint32_t mods, uint32_t button,
+						 bool locked, struct tp_action *out_grab) {
+	if (!lua || !lua->L)
+		return false;
+	const struct tp_lua_mouse_binding *found = NULL;
+	for (size_t i = 0; i < lua->active_mouse_binds.len; i++) {
+		const struct tp_lua_mouse_binding *b = &lua->active_mouse_binds.items[i];
+		if (b->mods == mods && b->button == button) {
+			found = b;
+			break;
+		}
+	}
+	if (!found || (locked && !found->allow_locked))
+		return false;
+	if (!found->is_lua) {
+		if (found->action.kind == TP_ACT_MOUSE_MOVE ||
+			found->action.kind == TP_ACT_MOUSE_RESIZE) {
+			if (out_grab)
+				*out_grab = found->action;
+			return true;
+		}
+		if (lua->action_fn)
+			lua->action_fn(&found->action, lua->action_userdata);
+		return true;
+	}
+	lua_State *L = lua->L;
+	int top = lua_gettop(L);
+	lua_rawgeti(L, LUA_REGISTRYINDEX, found->lua_ref);
+	int rc = tp_lua_guarded_pcall(lua, 0, 0, TP_LUA_CALLBACK_MAX_INSTRUCTIONS,
+								  TP_LUA_CALLBACK_TIMEOUT_MS, "mouse_binding");
+	if (rc != LUA_OK) {
+		const char *msg = lua_tostring(L, -1);
+		tam_log_error("lua mouse binding failed: %s",
+					  msg ? msg : "unknown error");
+	}
+	lua_settop(L, top);
+	return true;
+}
+
 size_t tp_lua_binding_count(const struct tp_lua *lua) {
 	return lua ? lua->active_binds.len : 0;
 }
@@ -791,6 +1192,8 @@ void tp_lua_for_each_bind(const struct tp_lua *lua, tp_lua_bind_iter_fn fn,
 		struct tp_lua_bind_info info = {
 			.mods = b->mods,
 			.sym = b->sym,
+			.keycode = b->keycode,
+			.on_release = b->on_release,
 			.allow_locked = b->allow_locked,
 			.is_lua = b->is_lua,
 			.action = b->action,

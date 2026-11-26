@@ -30,6 +30,7 @@ enum tp_client_kind {
 struct tp_client {
 	struct wl_list link;  /* tp_server.clients */
 	struct wl_list flink; /* tp_server.focus_stack */
+	uint64_t id;
 	struct tp_server *server;
 	struct tp_monitor *mon;
 	char *home_output; /* original output name when displaced by hot-plug */
@@ -72,6 +73,7 @@ void tp_clients_finish(struct tp_server *s);
 struct wlr_surface *tp_client_surface(const struct tp_client *c);
 const char *tp_client_app_id(const struct tp_client *c);
 const char *tp_client_title(const struct tp_client *c);
+int tp_client_pid(const struct tp_client *c);
 bool tp_client_is_xwayland(const struct tp_client *c);
 void tp_client_set_activated(struct tp_client *c, bool activated);
 

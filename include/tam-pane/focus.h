@@ -2,6 +2,8 @@
 #ifndef TAM_PANE_FOCUS_H
 #define TAM_PANE_FOCUS_H
 
+#include "tam-pane/geom.h"
+
 struct tp_server;
 struct tp_client;
 struct tp_layer_surface;
@@ -24,5 +26,8 @@ void tp_focus_refresh(struct tp_server *s);
 
 /* Focus the next (dir > 0) or previous visible window on the monitor. */
 void tp_focus_cycle(struct tp_server *s, int dir);
+
+/* Focus the nearest visible window in cardinal direction `dir`. */
+void tp_focus_dir(struct tp_server *s, enum tp_dir dir);
 
 #endif

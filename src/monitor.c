@@ -6,6 +6,7 @@
 #include "tam-pane/input.h"
 #include "tam-pane/layer.h"
 #include "tam-pane/layout/arrange.h"
+#include "tam-pane/lua.h"
 #include "tam-pane/output_mgmt.h"
 #include "tam-pane/server.h"
 #include "tam-pane/server_events.h"
@@ -246,6 +247,70 @@ static float requested_scale(void) {
 	return scale;
 }
 
+static struct wlr_output_mode *
+find_matching_mode(struct wlr_output *output, int32_t w, int32_t h,
+				   int32_t refresh_mhz) {
+	struct wlr_output_mode *best = NULL;
+	int32_t best_diff = 0;
+	struct wlr_output_mode *m;
+	wl_list_for_each(m, &output->modes, link) {
+		if (m->width != w || m->height != h)
+			continue;
+		if (refresh_mhz <= 0) {
+			if (!best || m->refresh > best->refresh)
+				best = m;
+		} else {
+			int32_t diff = m->refresh - refresh_mhz;
+			if (diff < 0)
+				diff = -diff;
+			if (!best || diff < best_diff) {
+				best = m;
+				best_diff = diff;
+			}
+		}
+	}
+	return best;
+}
+
+static bool apply_monitor_rule_to_output(struct tp_server *s,
+										 struct wlr_output *output,
+										 const struct tp_monitor_config *rule) {
+	struct wlr_output_state state;
+	wlr_output_state_init(&state);
+	bool enabled = (!rule || !rule->has_enabled) ? true : rule->enabled;
+	wlr_output_state_set_enabled(&state, enabled);
+	if (enabled) {
+		if (rule && rule->has_mode && !rule->mode_preferred) {
+			struct wlr_output_mode *m = find_matching_mode(
+				output, rule->mode_w, rule->mode_h, rule->mode_refresh_mhz);
+			if (m)
+				wlr_output_state_set_mode(&state, m);
+			else
+				wlr_output_state_set_custom_mode(&state, rule->mode_w,
+												 rule->mode_h,
+												 rule->mode_refresh_mhz);
+		} else {
+			struct wlr_output_mode *mode = wlr_output_preferred_mode(output);
+			if (mode)
+				wlr_output_state_set_mode(&state, mode);
+		}
+		if (rule && rule->has_scale) {
+			wlr_output_state_set_scale(&state, rule->scale);
+		} else {
+			float env_scale = requested_scale();
+			if (env_scale > 0.0f)
+				wlr_output_state_set_scale(&state, env_scale);
+		}
+		if (rule && rule->has_transform) {
+			wlr_output_state_set_transform(
+				&state, (enum wl_output_transform)rule->transform);
+		}
+	}
+	bool ok = wlr_output_commit_state(output, &state);
+	wlr_output_state_finish(&state);
+	return ok;
+}
+
 static void on_new_output(struct wl_listener *l, void *data) {
 	struct tp_server *s = wl_container_of(l, s, new_output);
 	struct wlr_output *output = data;
@@ -255,17 +320,15 @@ static void on_new_output(struct wl_listener *l, void *data) {
 		return;
 	}
 
-	struct wlr_output_state state;
-	wlr_output_state_init(&state);
-	wlr_output_state_set_enabled(&state, true);
-	struct wlr_output_mode *mode = wlr_output_preferred_mode(output);
-	if (mode)
-		wlr_output_state_set_mode(&state, mode);
-	float scale = requested_scale();
-	if (scale > 0.0f)
-		wlr_output_state_set_scale(&state, scale);
-	bool ok = wlr_output_commit_state(output, &state);
-	wlr_output_state_finish(&state);
+	struct tp_monitor_config rule = {0};
+	bool has_rule =
+		s->lua && tp_lua_monitor_rule(s->lua, output->name, &rule);
+	bool ok = apply_monitor_rule_to_output(s, output, has_rule ? &rule : NULL);
+	if (!ok && has_rule) {
+		tam_log_warn("output %s: configured mode/state rejected; using default",
+					 output->name);
+		ok = apply_monitor_rule_to_output(s, output, NULL);
+	}
 	if (!ok) {
 		tam_log_error("output %s: cannot enable", output->name);
 		return;
@@ -292,8 +355,13 @@ static void on_new_output(struct wl_listener *l, void *data) {
 	wl_signal_add(&output->events.destroy, &m->destroy);
 	wl_list_insert(s->monitors.prev, &m->link);
 
-	struct wlr_output_layout_output *lo =
-		wlr_output_layout_add_auto(s->output_layout, output);
+	struct wlr_output_layout_output *lo = NULL;
+	if (has_rule && rule.has_pos && !rule.pos_auto) {
+		lo = wlr_output_layout_add(s->output_layout, output, rule.pos_x,
+								   rule.pos_y);
+	} else {
+		lo = wlr_output_layout_add_auto(s->output_layout, output);
+	}
 	m->scene_output = wlr_scene_output_create(s->scene, output);
 	wlr_scene_output_layout_add_output(s->scene_layout, lo, m->scene_output);
 	update_area(m);
@@ -440,4 +508,58 @@ void tp_monitors_apply_settings(struct tp_server *s) {
 		for (unsigned int i = 0; i < TP_TAG_SLOTS; i++)
 			tp_layout_apply_settings(&m->layouts[i], &s->settings);
 	}
+}
+
+void tp_monitors_apply_config(struct tp_server *s) {
+	if (!s || !s->lua)
+		return;
+	struct tp_monitor *m;
+	wl_list_for_each(m, &s->monitors, link) {
+		if (!m->output || !m->output->name)
+			continue;
+		struct tp_monitor_config rule = {0};
+		if (!tp_lua_monitor_rule(s->lua, m->output->name, &rule))
+			continue;
+		if (!apply_monitor_rule_to_output(s, m->output, &rule)) {
+			tam_log_warn("reload: output %s rejected configured mode/state",
+						 m->output->name);
+			continue;
+		}
+		if (rule.has_enabled && !rule.enabled) {
+			wlr_output_layout_remove(s->output_layout, m->output);
+		} else if (rule.has_pos && !rule.pos_auto) {
+			bool was_in =
+				wlr_output_layout_get(s->output_layout, m->output) != NULL;
+			struct wlr_output_layout_output *lo = wlr_output_layout_add(
+				s->output_layout, m->output, rule.pos_x, rule.pos_y);
+			if (!was_in && m->scene_output && lo)
+				wlr_scene_output_layout_add_output(s->scene_layout, lo,
+												   m->scene_output);
+		}
+		update_area(m);
+	}
+	tp_output_mgmt_update(s);
+}
+
+bool tp_monitor_set_scale(struct tp_server *s, const char *name, float scale) {
+	if (!s || !(scale >= 0.5f && scale <= 8.0f))
+		return false;
+	struct tp_monitor *m = NULL;
+	if (!name || !*name || strcmp(name, "focused") == 0)
+		m = s->selmon;
+	else
+		m = tp_monitor_by_name(s, name);
+	if (!m || !m->output)
+		return false;
+	struct wlr_output_state state;
+	wlr_output_state_init(&state);
+	wlr_output_state_set_scale(&state, scale);
+	bool ok = wlr_output_commit_state(m->output, &state);
+	wlr_output_state_finish(&state);
+	if (!ok)
+		return false;
+	update_area(m);
+	tp_arrange_all(s);
+	tp_output_mgmt_update(s);
+	return true;
 }

@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* The cursor: motion, buttons, scrolling, and pointer focus. Keyboard
  * focus follows clicks; focus-follows-mouse becomes a Lua setting. */
+#include "tam-pane/bindings.h"
 #include "tam-pane/client.h"
 #include "tam-pane/focus.h"
 #include "tam-pane/idle.h"
@@ -184,11 +185,11 @@ static void on_motion_absolute(struct wl_listener *l, void *data) {
 }
 
 static bool try_begin_grab(struct tp_server *s, struct tp_client *c,
-						   uint32_t button) {
+						   uint32_t button, enum tp_action_kind kind) {
 	if (!c || c->fullscreen)
 		return false;
 
-	if (button == BTN_LEFT && c->floating) {
+	if (kind == TP_ACT_MOUSE_MOVE && c->floating) {
 		s->grab = (struct tp_pointer_grab){
 			.mode = TP_GRAB_MOVE,
 			.client = c,
@@ -202,7 +203,7 @@ static bool try_begin_grab(struct tp_server *s, struct tp_client *c,
 		return true;
 	}
 
-	if (button == BTN_RIGHT && c->floating) {
+	if (kind == TP_ACT_MOUSE_RESIZE && c->floating) {
 		double cx = c->float_geom.x + c->float_geom.w / 2.0;
 		double cy = c->float_geom.y + c->float_geom.h / 2.0;
 		uint32_t edges = (s->cursor->x < cx ? WLR_EDGE_LEFT : WLR_EDGE_RIGHT) |
@@ -223,7 +224,7 @@ static bool try_begin_grab(struct tp_server *s, struct tp_client *c,
 		return true;
 	}
 
-	if (button == BTN_RIGHT && !c->floating && c->mon) {
+	if (kind == TP_ACT_MOUSE_RESIZE && !c->floating && c->mon) {
 		if (c->mon->arrange_dirty)
 			tp_arrange_flush(s);
 		struct tp_layout_drag drag;
@@ -245,6 +246,19 @@ static bool try_begin_grab(struct tp_server *s, struct tp_client *c,
 	}
 
 	return false;
+}
+
+static uint32_t pointer_mods_to_tp(uint32_t wlr_mods) {
+	uint32_t mods = 0;
+	if (wlr_mods & WLR_MODIFIER_SHIFT)
+		mods |= TP_MOD_SHIFT;
+	if (wlr_mods & WLR_MODIFIER_CTRL)
+		mods |= TP_MOD_CTRL;
+	if (wlr_mods & WLR_MODIFIER_ALT)
+		mods |= TP_MOD_ALT;
+	if (wlr_mods & WLR_MODIFIER_LOGO)
+		mods |= TP_MOD_META;
+	return mods;
 }
 
 static void on_button(struct wl_listener *l, void *data) {
@@ -289,9 +303,20 @@ static void on_button(struct wl_listener *l, void *data) {
 		}
 
 		struct wlr_keyboard *kb = wlr_seat_get_keyboard(s->seat);
-		uint32_t mods = kb ? wlr_keyboard_get_modifiers(kb) : 0;
-		if ((mods & WLR_MODIFIER_LOGO) && try_begin_grab(s, c, ev->button))
-			return;
+		uint32_t tp_mods =
+			kb ? pointer_mods_to_tp(wlr_keyboard_get_modifiers(kb)) : 0;
+		if (tp_mods != 0) {
+			struct tp_action grab = {0};
+			if (tp_bindings_handle_mouse(s, tp_mods, ev->button, &grab)) {
+				if (grab.kind == TP_ACT_MOUSE_MOVE ||
+					grab.kind == TP_ACT_MOUSE_RESIZE) {
+					if (try_begin_grab(s, c, ev->button, grab.kind))
+						return;
+				} else {
+					return;
+				}
+			}
+		}
 	}
 	wlr_seat_pointer_notify_button(s->seat, ev->time_msec, ev->button,
 								   ev->state);
@@ -301,8 +326,27 @@ static void on_axis(struct wl_listener *l, void *data) {
 	struct tp_server *s = wl_container_of(l, s, cursor_axis);
 	struct wlr_pointer_axis_event *ev = data;
 	tp_idle_notify_activity(s);
+	if (!s->locked && ev->orientation == WL_POINTER_AXIS_VERTICAL_SCROLL &&
+		ev->delta != 0.0) {
+		struct wlr_keyboard *kb = wlr_seat_get_keyboard(s->seat);
+		uint32_t tp_mods =
+			kb ? pointer_mods_to_tp(wlr_keyboard_get_modifiers(kb)) : 0;
+		if (tp_mods != 0) {
+			uint32_t btn =
+				ev->delta < 0.0 ? TP_MOUSE_WHEEL_UP : TP_MOUSE_WHEEL_DOWN;
+			struct tp_action grab = {0};
+			if (tp_bindings_handle_mouse(s, tp_mods, btn, &grab))
+				return;
+		}
+	}
+	double delta = ev->delta * (double)s->settings.scroll_factor;
+	int32_t discrete = ev->delta_discrete;
+	if (s->settings.natural_scroll) {
+		delta = -delta;
+		discrete = -discrete;
+	}
 	wlr_seat_pointer_notify_axis(s->seat, ev->time_msec, ev->orientation,
-								 ev->delta, ev->delta_discrete, ev->source,
+								 delta, discrete, ev->source,
 								 ev->relative_direction);
 }
 

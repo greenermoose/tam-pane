@@ -335,7 +335,8 @@ bool tp_ipc_parse_dispatch(const char *args, struct tp_action *out,
 		char arg[32];
 		if (!next_token(&p, arg, sizeof(arg)) || has_extra_tokens(p)) {
 			if (err && err_size > 0)
-				snprintf(err, err_size, "focus expects 'next' or 'prev'");
+				snprintf(err, err_size,
+						 "focus expects 'next', 'prev', 'left', 'right', 'up', or 'down'");
 			return false;
 		}
 		if (strcmp(arg, "next") == 0) {
@@ -348,8 +349,15 @@ bool tp_ipc_parse_dispatch(const char *args, struct tp_action *out,
 			out->dir = -1;
 			return true;
 		}
+		enum tp_dir cdir;
+		if (parse_cardinal_dir(arg, &cdir)) {
+			out->kind = TP_ACT_FOCUS_DIR;
+			out->dir = (int)cdir;
+			return true;
+		}
 		if (err && err_size > 0)
-			snprintf(err, err_size, "focus expects 'next' or 'prev'");
+			snprintf(err, err_size,
+					 "focus expects 'next', 'prev', 'left', 'right', 'up', or 'down'");
 		return false;
 	}
 
@@ -461,8 +469,33 @@ bool tp_ipc_parse_dispatch(const char *args, struct tp_action *out,
 		char sub[32], target[128];
 		if (!next_token(&p, sub, sizeof(sub))) {
 			if (err && err_size > 0)
-				snprintf(err, err_size, "monitor expects 'focus' or 'move'");
+				snprintf(err, err_size,
+						 "monitor expects 'focus', 'move', or 'scale'");
 			return false;
+		}
+		if (strcmp(sub, "scale") == 0) {
+			char scale_tok[32];
+			if (!next_token(&p, target, sizeof(target)) ||
+				!next_token(&p, scale_tok, sizeof(scale_tok)) ||
+				has_extra_tokens(p)) {
+				if (err && err_size > 0)
+					snprintf(err, err_size,
+							 "monitor scale expects <output|focused> <scale>");
+				return false;
+			}
+			char *end = NULL;
+			float sc = strtof(scale_tok, &end);
+			if (!end || *end != '\0' || !(sc >= 0.5f && sc <= 8.0f)) {
+				if (err && err_size > 0)
+					snprintf(err, err_size, "scale out of range [0.5, 8.0]");
+				return false;
+			}
+			out->kind = TP_ACT_MONITOR_SCALE;
+			out->scale = sc;
+			snprintf(out->cmd, sizeof(out->cmd), "%s", target);
+			if (mon_name && mon_name_size > 0)
+				snprintf(mon_name, mon_name_size, "%s", target);
+			return true;
 		}
 		if (strcmp(sub, "focus") == 0)
 			out->kind = TP_ACT_MONITOR_FOCUS;
@@ -470,7 +503,8 @@ bool tp_ipc_parse_dispatch(const char *args, struct tp_action *out,
 			out->kind = TP_ACT_MONITOR_MOVE;
 		else {
 			if (err && err_size > 0)
-				snprintf(err, err_size, "monitor expects 'focus' or 'move'");
+				snprintf(err, err_size,
+						 "monitor expects 'focus', 'move', or 'scale'");
 			return false;
 		}
 		if (!next_token(&p, target, sizeof(target)) || has_extra_tokens(p)) {
@@ -634,6 +668,49 @@ bool tp_ipc_parse_dispatch(const char *args, struct tp_action *out,
 		return true;
 	}
 
+	if (strcmp(verb, "send_key") == 0) {
+		const char *chord = skip_ws(p);
+		if (!chord || !*chord) {
+			if (err && err_size > 0)
+				snprintf(err, err_size, "send_key requires a chord");
+			return false;
+		}
+		struct tp_key_spec spec;
+		char perr[128] = {0};
+		if (!tp_binding_parse_chord(chord, &spec, perr, sizeof(perr)) ||
+			spec.sym == XKB_KEY_NoSymbol) {
+			if (err && err_size > 0)
+				snprintf(err, err_size, "send_key: %s",
+						 perr[0] ? perr : "invalid chord");
+			return false;
+		}
+		out->kind = TP_ACT_SEND_KEY;
+		out->mods = spec.mods;
+		out->sym = spec.sym;
+		return true;
+	}
+
+	if (strcmp(verb, "capture") == 0) {
+		const char *cmd = skip_ws(p);
+		if (!cmd || !*cmd) {
+			if (err && err_size > 0)
+				snprintf(err, err_size, "capture requires a command");
+			return false;
+		}
+		size_t len = strlen(cmd);
+		while (len > 0 && (cmd[len - 1] == ' ' || cmd[len - 1] == '\t'))
+			len--;
+		if (len == 0 || len >= sizeof(out->cmd)) {
+			if (err && err_size > 0)
+				snprintf(err, err_size, "capture command too long");
+			return false;
+		}
+		out->kind = TP_ACT_CAPTURE;
+		memcpy(out->cmd, cmd, len);
+		out->cmd[len] = '\0';
+		return true;
+	}
+
 	if (strcmp(verb, "spawn") == 0) {
 		const char *cmd = skip_ws(p);
 		if (!cmd || !*cmd) {
@@ -735,6 +812,21 @@ tam_str_t tp_ipc_format_action(tam_str_t s, const struct tp_action *act) {
 			return tp_ipc_escape_append(s, act->cmd);
 		}
 		return tam_str_cat(s, "keyboard next");
+	case TP_ACT_FOCUS_DIR:
+		return tam_str_cat_printf(s, "focus %s", cardinal_dir_name(act->dir));
+	case TP_ACT_SEND_KEY:
+		return tam_str_cat(s, "send_key");
+	case TP_ACT_CAPTURE:
+		s = tam_str_cat(s, "capture ");
+		return tp_ipc_escape_append(s, act->cmd);
+	case TP_ACT_MONITOR_SCALE:
+		return tam_str_cat_printf(s, "monitor scale %s %.2f",
+								  act->cmd[0] ? act->cmd : "focused",
+								  act->scale);
+	case TP_ACT_MOUSE_MOVE:
+		return tam_str_cat(s, "mouse_move");
+	case TP_ACT_MOUSE_RESIZE:
+		return tam_str_cat(s, "mouse_resize");
 	}
 	return tam_str_cat(s, "unknown");
 }

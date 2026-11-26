@@ -73,4 +73,10 @@ void tp_monitor_forget(struct tp_monitor *m, struct tp_client *c);
 /* Propagate live layout settings to every connected monitor's layout slots. */
 void tp_monitors_apply_settings(struct tp_server *s);
 
+/* Apply staged tp.monitor rules to all connected monitors (on reload). */
+void tp_monitors_apply_config(struct tp_server *s);
+
+/* Change scale on a connected monitor (NULL or "focused" = s->selmon). */
+bool tp_monitor_set_scale(struct tp_server *s, const char *name, float scale);
+
 #endif
