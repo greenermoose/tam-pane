@@ -1,56 +1,38 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "tam-pane/spawn.h"
 #include <errno.h>
-#include <fcntl.h>
-#include <signal.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-#include <sys/wait.h>
 #include <tam.h>
+
+/* tam_spawn_detached_opts (kept output, WAYLAND_SOCKET) needs 0.14.0. */
+#if TAM_VERSION_MAJOR == 0 && TAM_VERSION_MINOR < 14
+#error "tam-pane needs libtam 0.14.0 or later"
+#endif
 #include <unistd.h>
 
 /*
- * Double fork: the intermediate child exits at once and is reaped here, so
- * the program is adopted by init (or the session's subreaper) and the
- * compositor never has zombies to collect or a child to wait on.
+ * tam_spawn_detached_opts double-forks, so the program is adopted by init
+ * (or the session's subreaper) and the compositor never has zombies to
+ * collect. It starts in a new session with default signal actions and
+ * none of the compositor's descriptors; its output stays on the
+ * compositor's log. A Wayland client given a socket gets it as
+ * WAYLAND_SOCKET.
  */
 static void spawn_detached(const char *const argv[], int wayland_fd) {
-	pid_t pid = fork();
-	if (pid < 0) {
-		tam_log_error("spawn: fork failed for '%s'", argv[0]);
-		if (wayland_fd >= 0)
-			close(wayland_fd);
-		return;
+	char fd_env[48];
+	const char *env[2] = {NULL, NULL};
+	tam_proc_opts_t opts = {.keep_stdio = true};
+	if (wayland_fd >= 0) {
+		snprintf(fd_env, sizeof(fd_env), "WAYLAND_SOCKET=%d", wayland_fd);
+		env[0] = fd_env;
+		opts.keep_fd = wayland_fd;
+		opts.env = env;
 	}
-	if (pid == 0) {
-		setsid();
-		sigset_t none;
-		sigemptyset(&none);
-		sigprocmask(SIG_SETMASK, &none, NULL);
-		signal(SIGPIPE, SIG_DFL);
-		if (fork() == 0) {
-			if (wayland_fd >= 0) {
-				int flags = fcntl(wayland_fd, F_GETFD);
-				if (flags >= 0)
-					fcntl(wayland_fd, F_SETFD, flags & ~FD_CLOEXEC);
-				char fd_buf[32];
-				snprintf(fd_buf, sizeof(fd_buf), "%d", wayland_fd);
-				setenv("WAYLAND_SOCKET", fd_buf, 1);
-			}
-			execvp(argv[0], (char *const *)argv);
-			dprintf(STDERR_FILENO, "tam-pane: cannot run %s: %s\n", argv[0],
-					strerror(errno));
-			_exit(127);
-		}
-		if (wayland_fd >= 0)
-			close(wayland_fd);
-		_exit(0);
-	}
+	if (tam_spawn_detached_opts(argv, &opts) < 0)
+		tam_log_error("spawn: cannot run '%s': %s", argv[0], strerror(errno));
 	if (wayland_fd >= 0)
 		close(wayland_fd);
-	while (waitpid(pid, NULL, 0) < 0 && errno == EINTR)
-		;
 }
 
 void tp_spawn(const char *cmd) {

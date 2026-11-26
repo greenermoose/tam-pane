@@ -129,6 +129,10 @@ rel_ok_rc=$?
 printf 'tp.config{ gaps = \n' >"$cfg"
 rel_bad_out=$("$bin" msg -S "$ipcsock" reload 2>&1)
 rel_bad_rc=$?
+# A subscriber whose reader has gone away exits at once, even with no
+# events coming (it used to wait for the next event, or forever).
+timeout 3 sh -c '"$1" msg -S "$2" subscribe | true' sh "$bin" "$ipcsock"
+sub_rc=$?
 kill -TERM "$pid" 2>/dev/null
 wait "$pid"
 status=$?
@@ -140,10 +144,10 @@ if [ "$ver_rc" -eq 0 ] && printf '%s\n' "$ver_out" | grep -q '^version	' &&
 	[ "$mon_rc" -eq 0 ] && printf '%s\n' "$mon_out" | grep -q '^monitor	' &&
 	[ "$rel_ok_rc" -eq 0 ] && [ "$rel_bad_rc" -ne 0 ] &&
 	[ -n "$rel_bad_out" ] && [ "$sock_gone" = yes ] &&
-	[ "$status" -eq 0 ]; then
+	[ "$sub_rc" -ne 124 ] && [ "$status" -eq 0 ]; then
 	report ok
 else
-	report bad "ver_rc=$ver_rc mon_rc=$mon_rc rel_ok=$rel_ok_rc rel_bad=$rel_bad_rc sock_gone=$sock_gone status=$status"
+	report bad "ver_rc=$ver_rc mon_rc=$mon_rc rel_ok=$rel_ok_rc rel_bad=$rel_bad_rc sub_rc=$sub_rc sock_gone=$sock_gone status=$status"
 fi
 
 # 4. Startup hook: runs once, after tam-pane's own WAYLAND_DISPLAY and

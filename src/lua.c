@@ -18,10 +18,7 @@
 static char tp_lua_registry_key;
 
 static uint64_t now_monotonic_ns(void) {
-	struct timespec ts;
-	if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
-		return 0;
-	return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+	return (uint64_t)tam_monotonic_ns();
 }
 
 struct tp_lua *tp_lua_from_state(lua_State *L) {

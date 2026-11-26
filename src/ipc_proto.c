@@ -7,6 +7,9 @@
 #include "tam-pane/tags.h"
 #include <ctype.h>
 #include <errno.h>
+#include <tam_sock.h>
+#include <sys/time.h>
+#include <poll.h>
 #include <limits.h>
 #include <signal.h>
 #include <stdio.h>
@@ -855,21 +858,6 @@ static void msg_usage(FILE *out) {
 		"  subscribe [events...]      stream events until EOF or signal\n");
 }
 
-static bool write_all(int fd, const char *buf, size_t len) {
-	size_t off = 0;
-	while (off < len) {
-		ssize_t n = write(fd, buf + off, len - off);
-		if (n < 0) {
-			if (errno == EINTR)
-				continue;
-			return false;
-		}
-		if (n == 0)
-			return false;
-		off += (size_t)n;
-	}
-	return true;
-}
 
 int tp_ipc_client_main(int argc, char *argv[]) {
 	const char *sock_override = NULL;
@@ -960,25 +948,21 @@ int tp_ipc_client_main(int argc, char *argv[]) {
 
 	signal(SIGPIPE, SIG_IGN);
 
-	int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+	int fd = tam_sock_connect(sock_path, 5000);
 	if (fd < 0) {
-		fprintf(stderr, "tam-pane msg: socket: %s\n", strerror(errno));
-		tam_str_free(req);
-		return 1;
-	}
-
-	struct sockaddr_un addr = {0};
-	addr.sun_family = AF_UNIX;
-	snprintf(addr.sun_path, sizeof(addr.sun_path), "%s", sock_path);
-	if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
 		fprintf(stderr, "tam-pane msg: connect %s: %s\n", sock_path,
 				strerror(errno));
-		close(fd);
 		tam_str_free(req);
 		return 1;
 	}
+	/* A reply that never comes ends in an error, not a hang; a
+	 * subscription waits for events as long as it takes. */
+	if (!is_subscribe) {
+		struct timeval tv = {.tv_sec = 5};
+		(void)setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+	}
 
-	bool wrote = write_all(fd, req, tam_str_len(req));
+	bool wrote = tam_write_all(fd, req, tam_str_len(req)) == 0;
 	tam_str_free(req);
 	if (!wrote) {
 		fprintf(stderr, "tam-pane msg: write failed: %s\n", strerror(errno));
@@ -992,6 +976,9 @@ int tp_ipc_client_main(int argc, char *argv[]) {
 		close(fd);
 		return 1;
 	}
+	/* Unbuffered for a subscription, so poll sees every pending event. */
+	if (is_subscribe)
+		setvbuf(fp, NULL, _IONBF, 0);
 
 	char *line = NULL;
 	size_t cap = 0;
@@ -1014,10 +1001,28 @@ int tp_ipc_client_main(int argc, char *argv[]) {
 		rc = 1;
 	} else if (strcmp(line, "OK") == 0) {
 		if (is_subscribe) {
+			/* Stop as soon as whoever reads our output goes away (for
+			 * example `| head -1`), even between events. */
 			rc = 0;
-			while ((nread = getline(&line, &cap, fp)) > 0) {
-				fwrite(line, 1, (size_t)nread, stdout);
-				fflush(stdout);
+			for (;;) {
+				struct pollfd pfd[2] = {
+					{.fd = fd, .events = POLLIN},
+					{.fd = STDOUT_FILENO, .events = 0},
+				};
+				if (poll(pfd, 2, -1) < 0) {
+					if (errno == EINTR)
+						continue;
+					break;
+				}
+				if (pfd[1].revents & (POLLERR | POLLHUP | POLLNVAL))
+					break;
+				if (!(pfd[0].revents & (POLLIN | POLLHUP | POLLERR)))
+					continue;
+				if ((nread = getline(&line, &cap, fp)) <= 0)
+					break;
+				if (fwrite(line, 1, (size_t)nread, stdout) != (size_t)nread ||
+					fflush(stdout) != 0)
+					break;
 			}
 		} else {
 			bool got_end = false;

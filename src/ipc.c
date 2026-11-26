@@ -683,10 +683,8 @@ static int on_accept(int fd, uint32_t mask, void *data) {
 			break;
 		}
 
-		struct ucred cred;
-		socklen_t cred_len = sizeof(cred);
-		if (getsockopt(cfd, SOL_SOCKET, SO_PEERCRED, &cred, &cred_len) < 0 ||
-			cred.uid != getuid()) {
+		uid_t peer;
+		if (tam_sock_peer_uid(cfd, &peer) < 0 || peer != getuid()) {
 			tam_log_warn("ipc: rejected peer (uid check failed)");
 			close(cfd);
 			continue;
@@ -731,51 +729,28 @@ bool tp_ipc_start(struct tp_server *s) {
 		return false;
 	}
 
-	char dir_path[PATH_MAX];
-	snprintf(dir_path, sizeof(dir_path), "%s", path);
-	char *slash = strrchr(dir_path, '/');
-	if (!slash)
-		return false;
-	*slash = '\0';
-
-	if (!tam_fs_mkdir_p(dir_path, 0700)) {
-		tam_log_error("ipc: cannot create directory %s", dir_path);
+	/* $XDG_RUNTIME_DIR/tam-pane: created 0700, and refused unless it and
+	 * the runtime directory are real directories owned by us and closed
+	 * to everyone else. */
+	char *dir = tam_runtime_dir("tam-pane");
+	if (!dir) {
+		tam_log_error("ipc: runtime directory: %s", strerror(errno));
 		return false;
 	}
-	struct stat st;
-	if (lstat(dir_path, &st) != 0 || !S_ISDIR(st.st_mode) ||
-		st.st_uid != getuid()) {
-		tam_log_error("ipc: %s is not a directory owned by current user",
-					  dir_path);
-		return false;
-	}
-	chmod(dir_path, 0700);
+	free(dir);
 
-	int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+	/* A socket left by a compositor that died is replaced; a live one, or
+	 * anything that is not a socket, is never removed. */
+	int fd = tam_sock_listen(path, 0600, 16);
 	if (fd < 0) {
-		tam_log_error("ipc: socket: %s", strerror(errno));
+		tam_log_error("ipc: listen %s: %s", path,
+					  errno == EADDRINUSE ? "another compositor is using it"
+										  : strerror(errno));
 		return false;
 	}
-
-	unlink(path);
-
-	struct sockaddr_un addr = {0};
-	addr.sun_family = AF_UNIX;
-	snprintf(addr.sun_path, sizeof(addr.sun_path), "%s", path);
-
-	mode_t old_mask = umask(0177);
-	int brc = bind(fd, (struct sockaddr *)&addr, sizeof(addr));
-	int saved_errno = errno;
-	umask(old_mask);
-	if (brc < 0) {
-		tam_log_error("ipc: bind %s: %s", path, strerror(saved_errno));
-		close(fd);
-		return false;
-	}
-	chmod(path, 0600);
-
-	if (listen(fd, 16) < 0) {
-		tam_log_error("ipc: listen %s: %s", path, strerror(errno));
+	int fl = fcntl(fd, F_GETFL);
+	if (fl < 0 || fcntl(fd, F_SETFL, fl | O_NONBLOCK) < 0) {
+		tam_log_error("ipc: %s: %s", path, strerror(errno));
 		close(fd);
 		unlink(path);
 		return false;

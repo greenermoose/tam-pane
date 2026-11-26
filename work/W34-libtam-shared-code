@@ -1,0 +1,42 @@
+W34 ONTO LIBTAM'S SHARED CODE (TAM-PANE 0.2.9)
+
+Date: 2026-11-26
+AI harness: Claude Code 2.1.332
+AI model: claude-opus-5-5
+Continues: W33
+
+
+GUIDANCE
+
+  Fred: "Move each program onto the shared code."
+
+
+DONE
+
+  - spawn.c: tam_spawn_detached_opts with keep_stdio (children's output
+    stays on the compositor log, as before) and, for the session-lock and
+    capture clients, keep_fd plus WAYLAND_SOCKET. Children no longer
+    inherit the compositor's other descriptors, start with every signal
+    at its default, and a failed exec is logged by the compositor.
+  - IPC server: tam_runtime_dir("tam-pane") (refuses a directory that is
+    not ours or is open to others, instead of chmodding it) and
+    tam_sock_listen (a stale socket is replaced; a live one or a
+    non-socket is never unlinked, ending the unconditional unlink before
+    bind); tam_sock_peer_uid. Reads and writes stay on the event loop.
+  - Client: tam_sock_connect with a 5-second limit, tam_write_all, a
+    5-second receive limit for replies; subscribe reads unbuffered and
+    polls stdout, so it exits as soon as its reader goes away, and checks
+    fwrite and fflush. Smoke test: `msg subscribe | true` returns.
+  - tam_monotonic_ns/ms in lua.c and pointer.c.
+  - Compile-time floor libtam 0.14.0 (spawn.c). make test passes.
+
+
+FAILED
+
+  - Nothing.
+
+
+HANDOFF
+
+  - Left: lua.c's read_regular_file (tp.read_file truncates by design and
+    the callers expect EINVAL for non-regular files).
