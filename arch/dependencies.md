@@ -29,7 +29,7 @@ this file in the same change as any dependency change.
 
 ## Build-time only
 
-- **make, a C11 compiler, pkg-config.** Plain Make; no other build system.
+- **make, a C17 compiler, pkg-config.** Plain Make; no other build system.
 - **wayland-scanner** (from wayland) generates protocol headers.
   - **Planned exit:** P6, 0.6.x, when our own scanner generates them.
 - **wayland-protocols** supplies the XML files.
