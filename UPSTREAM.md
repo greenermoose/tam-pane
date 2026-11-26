@@ -128,7 +128,7 @@ updated with `tools/pull-references` (see `ideas/sources`):
 - **tam-pane file:** `src/lua.c` (`watchdog_hook`, `guarded_pcall`)
 - **Source:** Hyprland `src/config/lua/LuaCaller.cpp` (`guardedPCall`,
   `watchdogHook`), commit `f3e0768`, BSD-3-Clause.
-- **How:** Rewritten in C11 for `struct tp_lua` with no globals, saving
+- **How:** Rewritten in C17 for `struct tp_lua` with no globals, saving
   and restoring hook state across nested calls, and enforcing both an
   instruction budget and a `CLOCK_MONOTONIC` wall-clock deadline. tam-pane
   adds two things of its own:

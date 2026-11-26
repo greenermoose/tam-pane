@@ -56,7 +56,7 @@ HOW IT IS BUILT
 
 BUILDING
 
-  Needs: a C11 compiler, make, pkg-config, wlroots 0.20, wayland,
+  Needs: a C17 compiler, make, pkg-config, wlroots 0.20, wayland,
   wayland-protocols, libxkbcommon, and libtam installed under
   LIBTAM_PREFIX (default $HOME/.local).
 

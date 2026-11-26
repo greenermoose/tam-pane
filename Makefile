@@ -39,7 +39,7 @@ WAYLAND_SCANNER := $(shell $(PKG_CONFIG) --variable=wayland_scanner wayland-scan
 WAYLAND_PROTOCOLS := $(shell $(PKG_CONFIG) --variable=pkgdatadir wayland-protocols)
 
 CFLAGS ?= -O2 -g
-override CFLAGS += -std=c11 -Wall -Wextra -Wpedantic -Wno-unused-parameter \
+override CFLAGS += -std=c17 -Wall -Wextra -Wpedantic -Wno-unused-parameter \
 	-D_POSIX_C_SOURCE=200809L -DWLR_USE_UNSTABLE \
 	-DTP_VERSION='"$(VERSION)"' $(XWAYLAND_CFLAGS) \
 	-Iinclude -Ibuild/protocols -I$(LIBTAM_PREFIX)/include -Ithird_party/lua \
