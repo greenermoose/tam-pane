@@ -1,0 +1,59 @@
+PERF
+
+This folder keeps performance records for tam-pane: one file per report.
+Reports record measured startup timing, memory usage, CPU/GPU overhead,
+and relative comparisons against earlier tam-pane builds or other
+Wayland compositors (such as Hyprland).
+
+A performance record is observed evidence from a specific build and
+measurement method. Keep it unchanged after it is written so later
+reports can be compared against it.
+
+
+NAMING
+
+  PR<nn>-<short-name>.md, for example PR01-hyprland-vs-tam-pane-launch.md.
+  Numbers count up from PR01 and are never reused. The date goes inside
+  the record.
+
+
+RECORD TEMPLATE
+
+  Copy this into a new file:
+
+    # PR<nn>: <title>
+
+    - **Date:** YYYY-MM-DD
+    - **Builds:** tam-pane <version> (<commit>), plus any baseline
+    - **Tool:** command and version used to measure
+    - **Source:** boot ID and UTC time window, or benchmark script
+
+    ## Summary
+
+    Two to five lines: what was measured and the main result.
+
+    ## Results
+
+    Tables and key numbers. Include sample sizes (n) and ranges alongside
+    medians.
+
+    ## Observations
+
+    What accounts for the difference (launch path, phases, shared costs).
+
+    ## Limits
+
+    Sample size caveats, missing metrics, or conditions that differed.
+
+  Keep personal data, credentials, and raw machine logs out of these
+  records. Cite the system journal by boot ID and UTC time window
+  instead.
+
+
+IN THIS REPOSITORY
+
+  Index: one line per report: its file name and what it measured.
+
+    PR01-hyprland-vs-tam-pane-launch.md
+                                      Hyprland vs tam-pane session launch
+                                      startup time and peak memory
