@@ -1,159 +1,110 @@
 # tam-pane roadmap
 
-Each milestone has a version number. A phase (see `plans/`) covers a range
-of versions. Versions follow semantic versioning: during 0.x, the minor
-number marks a phase's big step and the patch number marks each
-milestone inside it.
+`tam-pane` is Tamlinux's tiling Wayland compositor with Lua configuration,
+written in C17 on top of `libtam`.
 
-**Current version:** 0.2.6 (Phase P2 complete at 0.1.4, R1 hardening
-0.1.5–0.1.19 accepted; Phase P3 complete at 0.2.6: 0.2.0–0.2.3 accepted
-by Fred on 2026-11-22, 0.2.4–0.2.6 accepted on 2026-11-23; development
-continues on branch `dev`).
+- **Current version:** `0.2.15` (branch `dev`)
+- **Progress:** 3 of 7 phases done (P1–P3 done; P4 next)
+- **Versioning:** Semantic versioning; during 0.x, minor marks a phase and
+  patch marks milestones or fixes within it.
 
-## Tamlinux timing
+## Phase summary
 
-Fred decided this on 2026-11-17:
+| Phase | Versions | Goal | Plan | Status |
+| --- | --- | --- | --- | --- |
+| **P1** | 0.0.x | Foundation: headless/nested compositor, tags, dwindle tiling, layer-shell, multi-monitor | [P1-foundation.md](plans/P1-foundation.md) | Done |
+| **P2** | 0.1.x | Embedded Lua 5.5 config, bindings, hooks, window rules, live reload, and R1 hardening | [P2-lua.md](plans/P2-lua.md) | Done (2026-11-22) |
+| **P3** | 0.2.x | Daily-driver parity: shell/capture/text protocols, IPC, layouts, chords, monitor/input polish | [P3-daily-parity.md](plans/P3-daily-parity.md) | Done (2026-11-26) |
+| **P4** | 0.3.x | Dogfood in Tamlinux 0.7 with Quickshell, `fred.*` plugins, and headless desktop tests | [P4-dogfood-tamlinux-0.7.md](plans/P4-dogfood-tamlinux-0.7.md) | Planned |
+| **P5** | 0.4.x | Own GLES visuals on Mesa: borders, rounded corners, shadows, blur, animations | [P5-visuals.md](plans/P5-visuals.md) | Planned |
+| **P6** | 0.5.x–0.7.x | Own the stack: replace libinput/xkbcommon, libwayland-server, and wlroots via `libtam` + Mesa | [P6-own-the-stack.md](plans/P6-own-the-stack.md) | Planned |
+| **P7** | 1.0.0 | Retire Hyprland; `tam-pane` becomes Tamlinux's sole compositor (only on Fred's word) | [P7-retire-hyprland.md](plans/P7-retire-hyprland.md) | Planned |
 
-- tam-pane is developed while the workstation runs Tamlinux 0.6.x on
+## Decided
+
+Fred decided these on 2026-11-17:
+
+- `tam-pane` is developed while the workstation runs Tamlinux 0.6.x on
   Hyprland.
-- Dogfooding starts with Tamlinux 0.7.x, using tam-pane 0.3.x.
-- This replaces the earlier plan to move Tamlinux 0.7 to Sway. Fred found
-  that Sway will not meet Tamlinux's needs.
-- Removing dependencies (phase P6) continues while tam-pane is in daily
+- Dogfooding starts with Tamlinux 0.7.x, using `tam-pane` 0.3.x.
+- This replaces the earlier plan to move Tamlinux 0.7 to Sway.
+- Removing dependencies (Phase P6) continues while `tam-pane` is in daily
   use.
 
-## Milestones
+## Phases and milestones
 
-### Phase P1: foundation (0.0.x), `plans/P1-foundation.md`
+### Phase P1: Foundation (0.0.x) — [P1-foundation.md](plans/P1-foundation.md)
 
-- **0.0.1** The framework compiles cleanly with plain Make. It starts and
-  stops on the headless backend, and maps client windows there. The tag
-  and dwindle unit tests pass.
-- **0.0.2** First run nested in a window under Hyprland: windows open,
-  close and take focus, keyboard and pointer work, and the compiled-in
-  Meta bindings work.
-- **0.0.3** Tags work interactively: view a tag, toggle tags, move a
-  window to a tag, go back to the previous view.
-- **0.0.4** Dynamic tiling is complete: dwindle with resizing by keyboard
-  and mouse, floating windows that move and resize, and fullscreen.
-- **0.0.5** layer-shell and multiple monitors, so a Quickshell bar runs
-  and windows move between monitors.
+| Version | Milestone | Status |
+| --- | --- | --- |
+| **0.0.1** | Plain Make build, headless backend, client mapping, tag and dwindle unit tests | Done |
+| **0.0.2** | First nested run under Hyprland: focus, keyboard, pointer, compiled-in Meta bindings | Done |
+| **0.0.3** | Interactive tags: view, toggle, move window to tag, previous view | Done |
+| **0.0.4** | Dynamic dwindle tiling, keyboard/mouse resize, floating windows, fullscreen | Done |
+| **0.0.5** | `layer-shell` and multiple monitors (Quickshell bar and cross-monitor moves) | Done |
 
-### Phase P2: Lua (0.1.x), `plans/P2-lua.md`
+### Phase P2: Lua and R1 hardening (0.1.x) — [P2-lua.md](plans/P2-lua.md)
 
-- **0.1.0** The Lua 5.5 sources are in the tree, built by our Makefile.
-  `~/.config/tam-pane/init.lua` sets the settings, and an instruction
-  budget guards every call.
-- **0.1.1** Key bindings and dispatchers come from Lua, and the
-  compiled-in table goes.
-- **0.1.2** Event hooks: window opened, closed and focused; tag changed;
-  monitor added and removed.
-- **0.1.3** Window rules: match on app id and title, and set tags,
-  floating, size and monitor.
-- **0.1.4** Reload the configuration without restarting, with errors
-  reported and the last good configuration kept.
+| Version | Milestone | Status |
+| --- | --- | --- |
+| **0.1.0** | In-tree Lua 5.5, `~/.config/tam-pane/init.lua` settings, instruction budget guard | Done |
+| **0.1.1** | Key bindings and dispatchers from Lua (compiled-in table removed) | Done |
+| **0.1.2** | Event hooks: window open/close/focus, tag change, monitor add/remove | Done |
+| **0.1.3** | Window rules matching app id and title for tags, floating, size, and monitor | Done |
+| **0.1.4** | Live config reload with error reporting and last-good config preservation | Done |
+| **0.1.5–0.1.19** | Review R1 hardening (`reviews/R1-code-review-0.1.4.md`): B1–B9 fixes, privileged-protocol filter, explicit focused window | Done (2026-11-22) |
 
-After P2, review R1 (`reviews/R1-code-review-0.1.4.md`) found bugs that
-are fixed before P3, one version each:
+### Phase P3: Daily-driver parity (0.2.x) — [P3-daily-parity.md](plans/P3-daily-parity.md)
 
-- **0.1.5** A tiled resize drag no longer uses freed memory when another
-  window leaves the tree (B1).
-- **0.1.6** A hook that re-triggers itself no longer freezes the
-  compositor: hook-caused events drain on a timer and stop after 16
-  rounds (B2).
-- **0.1.7** Autostart goes in `tp.on('startup', ...)`, `tp.spawn` is
-  refused while the config loads, and `tp.spawn{prog, arg, ...}` runs a
-  program with no shell (B3).
-- **0.1.8** Lua memory is capped at 64 MiB, and pattern matching obeys
-  the watchdog deadline (B4).
-- **0.1.9** Keys no config can remove, handled in C before Lua:
-  Ctrl+Alt+F1–F12 switch VT when tam-pane owns a session, and
-  Ctrl+Alt+Shift+Backspace quits (B5). The VT switch is checked on real
-  hardware at the first DRM trial (P4).
-- **0.1.10** One `tp_client_attach` / `tp_client_detach` for every
-  change of a window's monitor, replacing five hand-written copies
-  (R1 finding 13). A floating drag onto another monitor now re-lays out
-  both monitors (finding 6). Checked by the headless tests; Fred deferred
-  his own check to the first run on real hardware (P4).
-- **0.1.11** A new window splits the focused window, as the README says,
-  not the last leaf of the tree (R1 finding 12).
-- **0.1.12** A program that starts fullscreen opens fullscreen, and a
-  window that unmaps and maps again is no longer left marked fullscreen
-  (R1 finding 4).
-- **0.1.13** Menus and other popups near a screen edge flip or slide
-  back onto the monitor instead of opening off-screen (R1 finding 5).
-- **0.1.14** presentation-time, so GTK 4 programs no longer crash on a
-  nested output, which has no refresh rate (B6, found by Fred's 0.1.13
-  check).
-- **0.1.15** A popup the program moves after it appears is kept on the
-  monitor too, so GTK 4 menus no longer run off the edge (B7, found by
-  Fred's 0.1.14 check).
-- **0.1.16** Duplicated code merged (R1 finding 14), and Lua config
-  errors show their numbers instead of C format codes (B8).
-- **0.1.17** Meta+V floats a window that opened tiled at half its
-  monitor, centred on its own monitor, and later returns it to its last
-  floating place (B9, found by Fred's 0.1.16 check).
-- **0.1.18** Privileged-protocol filter (`wl_display_set_global_filter`
-  and `wp_security_context_manager_v1`) denying privileged globals to
-  sandboxed and cross-UID clients, explicit classification in
-  `arch/protocols.md`, and exclusive OVERLAY keyboard focus reserved for
-  the configured shell connection (R1 finding 9).
-- **0.1.19** Explicit focused window (`tp_server.focused_client`) instead
-  of inferring focus from the seat's keyboard surface, so window bindings
-  and unmap focus restoration work across popup grabs (R1 finding 16).
-- R1's fixes are done. Its design points (findings 9, 11 and 15 to 17)
-  are scheduled in the P3 and P4 plans, under "Design work from review
-  R1".
+| Version | Milestone | Status |
+| --- | --- | --- |
+| **0.2.0** | Shell protocols: foreign-toplevel, ext-workspace, session-lock, idle notify/inhibit, output power | Done (2026-11-22) |
+| **0.2.1** | Screens and capture: screencopy, image-copy, output management, gamma, fractional scale, cursor-shape | Done (2026-11-22) |
+| **0.2.2** | Text and activation: text-input, input-method, xdg-activation, primary selection, decorations | Done (2026-11-22) |
+| **0.2.3** | IPC socket, `tam-pane msg` client, and `SIGHUP` shutdown | Done (2026-11-22) |
+| **0.2.4** | Deferred per-monitor arrange on idle (R1 finding 15) | Done (2026-11-23) |
+| **0.2.5** | Master-stack, scroller, monocle layouts, and scratchpad | Done (2026-11-23) |
+| **0.2.6** | Opt-in XWayland behind `XWAYLAND=1` (default `XWAYLAND=0`, zero-`xcb`) | Done (2026-11-23) |
+| **0.2.7** | One-handed chord composer/overlay, shell IPC queries, DPMS/app/keyboard dispatches and events | Done (2026-11-25) |
+| **0.2.8** | Monitor, XKB, include, mouse/keycode/release bind, `send_key`, and capture support | Done (2026-11-26) |
+| **0.2.9** | Start programs and serve IPC through `libtam` | Done (2026-11-26) |
+| **0.2.10** | Recover from GPU renderer loss (R1 finding 11) | Done (2026-11-26) |
+| **0.2.11** | Draw focused window border and launch configured locker | Done (2026-11-26) |
+| **0.2.12** | Log per-phase startup timings and explicit keyboard chords with exact modifiers | Done (2026-11-26) |
+| **0.2.13** | Restore monitor configuration after suspend (B10) | Done (2026-11-26) |
+| **0.2.14** | Dispatch monitor mode and log every modeset | Done (2026-11-26) |
+| **0.2.15** | Pointer focus, cross-display drag, and guarded macro paste | Done (2026-11-26) |
 
-### Phase P3: daily-driver parity (0.2.x), `plans/P3-daily-parity.md`
+### Phase P4: Dogfood in Tamlinux 0.7 (0.3.x) — [P4-dogfood-tamlinux-0.7.md](plans/P4-dogfood-tamlinux-0.7.md)
 
-- **0.2.0** The protocols the desktop shell needs: foreign-toplevel,
-  ext-workspace (for tags), session-lock, idle notify and inhibit, output
-  power.
-- **0.2.1** Screens and capture: screencopy and image-copy, output
-  management, gamma, fractional scale, cursor-shape.
-- **0.2.2** Text and activation: text-input and input-method, xdg-activation,
-  primary selection, decorations.
-- **0.2.3** An IPC socket and a `tam-pane msg` client.
-- **0.2.4** Deferred per-monitor arrange on idle (R1 finding 15): a
-  per-monitor dirty flag and one coalesced arrange per idle, with
-  stack-buffered tree sync and on-demand flush for synchronous readers.
-- **0.2.5** More layouts (master-stack, scroller, monocle) and a
-  scratchpad.
-- **0.2.6** Opt-in XWayland behind `XWAYLAND=1` (default `XWAYLAND=0`,
-  zero-`xcb`), with a temporary `xcb` / `xcb-icccm` dependency.
+| Version | Milestone | Status |
+| --- | --- | --- |
+| **0.3.0** | Packaged with login session entry; Hyprland kept as fallback | Planned |
+| **0.3.1** | Quickshell and `fred.*` plugins operate through `tam-pane` IPC; headless desktop tests switch from Sway | Planned |
+| **0.3.x** | Fixes from daily use, recorded in `bugs/` | Planned |
 
-### Phase P4: dogfood in Tamlinux 0.7 (0.3.x), `plans/P4-dogfood-tamlinux-0.7.md`
+### Phase P5: Visuals (0.4.x) — [P5-visuals.md](plans/P5-visuals.md)
 
-- **0.3.0** Packaged in `tamlinux-packages` with a login session entry.
-  Hyprland stays installed as the fallback session.
-- **0.3.1** Quickshell and the `fred.*` plugins work through tam-pane's
-  IPC in place of Hyprland's.
-- **0.3.x** Fixes from daily use, recorded in `bugs/`.
-- Tamlinux's desktop tests switch their offscreen compositor from headless
-  Sway to tam-pane once tam-pane's headless mode can serve them (Tamlinux
-  D268).
+| Version | Milestone | Status |
+| --- | --- | --- |
+| **0.4.x** | Own GLES drawing on Mesa: borders, rounded corners, shadows, blur, and animations (no scenefx) | Planned |
 
-### Phase P5: visuals (0.4.x), `plans/P5-visuals.md`
+### Phase P6: Own the stack (0.5.x–0.7.x) — [P6-own-the-stack.md](plans/P6-own-the-stack.md)
 
-- **0.4.x** Our own GLES drawing on Mesa: borders, rounded corners,
-  shadows, blur and animations. No scenefx.
+| Version | Milestone | Status |
+| --- | --- | --- |
+| **0.5.x** | `libtam` input (evdev and keymaps) replaces libinput and xkbcommon | Planned |
+| **0.6.x** | `libtam` Wayland wire protocol replaces libwayland-server | Planned |
+| **0.7.x** | `libtam` KMS/session backend plus Mesa GBM/EGL replaces wlroots (goal: libc, `libtam`, Mesa) | Planned |
 
-### Phase P6: own the stack (0.5.x to 0.7.x), `plans/P6-own-the-stack.md`
+### Phase P7: Retire Hyprland (1.0.0) — [P7-retire-hyprland.md](plans/P7-retire-hyprland.md)
 
-- **0.5.x** libtam input (evdev and keymaps) replaces libinput and
-  xkbcommon.
-- **0.6.x** A libtam Wayland wire protocol replaces libwayland-server.
-- **0.7.x** A libtam KMS and session backend, plus Mesa GBM and EGL,
-  replaces wlroots. This reaches the goal: libc, libtam and Mesa.
-
-### Phase P7: retire Hyprland (1.0.0), `plans/P7-retire-hyprland.md`
-
-- **1.0.0** tam-pane becomes the only Tamlinux compositor and Hyprland is
-  removed. This happens only on Fred's Test, Run and Release words.
+| Version | Milestone | Status |
+| --- | --- | --- |
+| **1.0.0** | `tam-pane` becomes the only Tamlinux compositor and Hyprland is removed (only on Fred's word) | Planned |
 
 ## How a milestone is done
 
 A milestone is done when its acceptance checks in the phase plan pass and
-Fred has tried the build. When a milestone lands, bump `VERSION` in the
-same change and update the current version here.
+Fred has tried the build. When a milestone lands, bump `VERSION`, update
+the phase plan's status, and update this roadmap in the same change.
