@@ -356,6 +356,7 @@ bool tp_server_reload(struct tp_server *s, char *err_buf, size_t err_buf_size) {
 		return false;
 	}
 
+	tp_keyboard_cancel_pending_releases(s);
 	tp_monitors_apply_settings(s);
 	tp_monitors_apply_config(s);
 	tp_chord_configure(&s->chord, s->settings.chord_enabled,

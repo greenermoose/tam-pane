@@ -90,8 +90,9 @@ Fred decided these on 2026-11-17:
 | Version | Milestone | Status |
 | --- | --- | --- |
 | **0.4.0** | Own Mesa GLES2 visuals module (`src/visuals.c`): rounded corners, rounded borders, and analytical SDF drop shadows (plain scene path when off, zero idle frames; scene-rect borders already landed in `0.2.11`/`0.2.17`) | Done (2026-11-27) |
-| **0.4.1** | Blur behind transparent windows and panels, with damage tracking | Planned |
-| **0.4.2** | Animations for open, close, move, and tag change, off by default on battery | Planned |
+| **0.4.1** | Keep release-bound shortcut keys out of client input (B11) | Fix available |
+| **0.4.2** | Blur behind transparent windows and panels, with damage tracking | Planned |
+| **0.4.3** | Animations for open, close, move, and tag change, off by default on battery | Planned |
 
 ### Phase P6: Own the stack (0.5.x–0.7.x) — [P6-own-the-stack.md](plans/P6-own-the-stack.md)
 

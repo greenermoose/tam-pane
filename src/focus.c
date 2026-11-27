@@ -3,6 +3,7 @@
 #include "tam-pane/client.h"
 #include "tam-pane/foreign_toplevel.h"
 #include "tam-pane/layer.h"
+#include "tam-pane/input.h"
 #include "tam-pane/layout/arrange.h"
 #include "tam-pane/layout/layout.h"
 #include "tam-pane/monitor.h"
@@ -14,15 +15,6 @@
 #include <wlr/types/wlr_layer_shell_v1.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_seat.h>
-
-static void enter_keyboard(struct tp_server *s, struct wlr_surface *surface) {
-	struct wlr_keyboard *kb = wlr_seat_get_keyboard(s->seat);
-	if (kb)
-		wlr_seat_keyboard_notify_enter(s->seat, surface, kb->keycodes,
-									   kb->num_keycodes, &kb->modifiers);
-	else
-		wlr_seat_keyboard_notify_enter(s->seat, surface, NULL, 0, NULL);
-}
 
 static struct tp_layer_surface *
 exclusive_on_monitor(struct tp_server *s, struct tp_monitor *m,
@@ -85,7 +77,7 @@ void tp_focus_layer(struct tp_server *s, struct tp_layer_surface *ls) {
 	s->focused_layer = ls;
 	if (ls->mon)
 		s->selmon = ls->mon;
-	enter_keyboard(s, ls->layer_surface->surface);
+	tp_keyboard_enter(s, ls->layer_surface->surface);
 	tp_text_input_set_focus(s, ls->layer_surface->surface);
 	if (old)
 		tp_events_emit_window(s, TP_EVENT_WINDOW_FOCUS, NULL, false);
@@ -135,7 +127,7 @@ void tp_focus(struct tp_server *s, struct tp_client *c) {
 
 	struct wlr_surface *surf = tp_client_surface(c);
 	if (surf && (!tp_client_is_xwayland(c) || tp_xwayland_accepts_keyboard(c))) {
-		enter_keyboard(s, surf);
+		tp_keyboard_enter(s, surf);
 		tp_text_input_set_focus(s, surf);
 	} else {
 		wlr_seat_keyboard_notify_clear_focus(s->seat);

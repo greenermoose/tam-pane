@@ -6,6 +6,7 @@
  * windows become ordinary tp_client windows; override-redirect surfaces
  * (menus, tooltips, popups) live on TP_LAYER_OVERLAY outside s->clients.
  */
+#include "tam-pane/input.h"
 #include "tam-pane/xwayland.h"
 #include "tam-pane/capture.h"
 #include "tam-pane/client.h"
@@ -314,12 +315,7 @@ static void unmanaged_on_map(struct wl_listener *l, void *data) {
 	if (!s->locked && s->seat &&
 		wlr_xwayland_surface_override_redirect_wants_focus(xs)) {
 		wlr_xwayland_surface_activate(xs, true);
-		struct wlr_keyboard *kb = wlr_seat_get_keyboard(s->seat);
-		if (kb)
-			wlr_seat_keyboard_notify_enter(s->seat, xs->surface, kb->keycodes,
-										   kb->num_keycodes, &kb->modifiers);
-		else
-			wlr_seat_keyboard_notify_enter(s->seat, xs->surface, NULL, 0, NULL);
+		tp_keyboard_enter(s, xs->surface);
 	}
 }
 

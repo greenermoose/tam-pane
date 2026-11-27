@@ -69,30 +69,18 @@ static void rebuild_bg_covers(struct tp_server *s) {
 	}
 }
 
-static void enter_lock_keyboard(struct tp_server *s,
-								struct wlr_surface *surface) {
-	if (!s || !s->seat || !surface)
-		return;
-	struct wlr_keyboard *kb = wlr_seat_get_keyboard(s->seat);
-	if (kb)
-		wlr_seat_keyboard_notify_enter(s->seat, surface, kb->keycodes,
-									   kb->num_keycodes, &kb->modifiers);
-	else
-		wlr_seat_keyboard_notify_enter(s->seat, surface, NULL, 0, NULL);
-}
-
 static void focus_any_lock_surface(struct tp_server *s) {
 	struct tp_lock_surface *ls;
 	wl_list_for_each(ls, &s->lock_surfaces, link) {
 		if (ls->lock_surface && ls->lock_surface->surface->mapped &&
 			ls->mon == s->selmon) {
-			enter_lock_keyboard(s, ls->lock_surface->surface);
+			tp_keyboard_enter(s, ls->lock_surface->surface);
 			return;
 		}
 	}
 	wl_list_for_each(ls, &s->lock_surfaces, link) {
 		if (ls->lock_surface && ls->lock_surface->surface->mapped) {
-			enter_lock_keyboard(s, ls->lock_surface->surface);
+			tp_keyboard_enter(s, ls->lock_surface->surface);
 			return;
 		}
 	}
@@ -121,7 +109,7 @@ static void on_lock_surface_map(struct wl_listener *l, void *data) {
 	if (!s->locked || s->stopping)
 		return;
 	if (!s->seat->keyboard_state.focused_surface || ls->mon == s->selmon)
-		enter_lock_keyboard(s, ls->lock_surface->surface);
+		tp_keyboard_enter(s, ls->lock_surface->surface);
 	tp_idle_update_inhibit(s);
 }
 
@@ -181,6 +169,7 @@ static void on_lock_unlock(struct wl_listener *l, void *data) {
 	detach_active_lock_listeners(s);
 	s->active_lock = NULL;
 	s->locked = false;
+	tp_keyboard_cancel_pending_releases(s);
 
 	if (s->stopping)
 		return;
@@ -224,6 +213,7 @@ static void on_new_lock(struct wl_listener *l, void *data) {
 	}
 
 	s->locked = true;
+	tp_keyboard_cancel_pending_releases(s);
 	s->active_lock = lock;
 	tp_capture_unfreeze(s);
 	tp_pointer_cancel_grab(s, NULL);
@@ -318,7 +308,7 @@ void tp_session_lock_focus_surface(struct tp_server *s,
 		return;
 	if (!wlr_session_lock_surface_v1_try_from_wlr_surface(surface))
 		return;
-	enter_lock_keyboard(s, surface);
+	tp_keyboard_enter(s, surface);
 }
 
 bool tp_session_lock_launch_argv(struct tp_server *s, const char *const argv[]) {

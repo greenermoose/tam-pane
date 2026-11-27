@@ -117,3 +117,6 @@ IN THIS REPOSITORY
                                       a display that returns after a
                                       suspend forgets its tags and
                                       layout
+    B11-release-binding-stuck-key.md
+                                      a release binding leaks a held
+                                      shortcut key to the client

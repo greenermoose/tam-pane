@@ -158,6 +158,7 @@ struct test_client {
 	struct wl_surface *keyboard_focus;
 	unsigned int key_events, pointer_enters, pointer_motions, pointer_buttons;
 	uint32_t keys[8], key_states[8];
+	bool slash_on_enter;
 	uint32_t depressed, key_mods[8];
 	int shm_fd;
 	void *shm_data;
@@ -210,7 +211,13 @@ static void keyboard_keymap(void *data, struct wl_keyboard *keyboard,
 
 static void keyboard_enter(void *data, struct wl_keyboard *keyboard,
 		uint32_t serial, struct wl_surface *surface, struct wl_array *keys) {
-	((struct test_client *)data)->keyboard_focus = surface;
+	struct test_client *client = data;
+	client->keyboard_focus = surface;
+	client->slash_on_enter = false;
+	uint32_t *key;
+	wl_array_for_each(key, keys)
+		if (*key == KEY_SLASH)
+			client->slash_on_enter = true;
 }
 
 static void keyboard_leave(void *data, struct wl_keyboard *keyboard,
@@ -1792,6 +1799,84 @@ int main(void) {
 	CHECK(client.key_events == 8 && client.depressed == 0);
 	CHECK(client.keys[6] == KEY_X && client.key_mods[6] == 0);
 
+	/* Macro-style release bindings keep the whole physical key pair and
+	 * send exactly one paste pair, regardless of modifier release order. */
+	const char macro_binds[] =
+		"tp.bind('Meta+Alt+slash', tp.dsp.send_key('Ctrl+Shift+v'), { release = true })\n"
+		"tp.bind('F9', function() tp.spawn('dictation-start') end)\n"
+		"tp.bind('F9', function() tp.spawn('dictation-stop') end, { release = true })";
+	CHECK(tp_lua_exec_string(server.lua, macro_binds, sizeof(macro_binds) - 1,
+							 "macro-binds", 100000, 100, &server.settings,
+							 &server.settings, NULL, 0));
+	for (int modifiers_first = 0; modifiers_first < 2; modifiers_first++) {
+		client.key_events = 0;
+		send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_PRESSED, 60);
+		send_key(&keyboard, KEY_LEFTALT, WL_KEYBOARD_KEY_STATE_PRESSED, 61);
+		send_key(&keyboard, KEY_SLASH, WL_KEYBOARD_KEY_STATE_PRESSED, 62);
+		CHECK(key_consumed(&server, KEY_SLASH));
+		for (unsigned int i = 0; i < 10; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(client.key_events == 2);
+		if (modifiers_first) {
+			tp_focus(&server, right_tile);
+			for (unsigned int i = 0; i < 10; i++)
+				if (!pump(&client, &server)) goto fail;
+			CHECK(client.keyboard_focus == client.windows[1].surface);
+			CHECK(!client.slash_on_enter);
+		} else {
+			send_key(&keyboard, KEY_SLASH, WL_KEYBOARD_KEY_STATE_RELEASED, 63);
+		}
+		send_key(&keyboard, KEY_LEFTALT, WL_KEYBOARD_KEY_STATE_RELEASED, 64);
+		send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_RELEASED, 65);
+		if (modifiers_first)
+			send_key(&keyboard, KEY_SLASH, WL_KEYBOARD_KEY_STATE_RELEASED, 66);
+		for (unsigned int i = 0; i < 10; i++)
+			if (!pump(&client, &server)) goto fail;
+		int paste = modifiers_first ? 4 : 2;
+		CHECK(client.key_events == 6 && client.depressed == 0);
+		CHECK(client.keys[paste] == KEY_V &&
+			  client.key_states[paste] == WL_KEYBOARD_KEY_STATE_PRESSED);
+		CHECK(client.keys[paste + 1] == KEY_V &&
+			  client.key_states[paste + 1] == WL_KEYBOARD_KEY_STATE_RELEASED);
+		CHECK(client.key_mods[paste] == (WLR_MODIFIER_CTRL | WLR_MODIFIER_SHIFT));
+		CHECK(!key_consumed(&server, KEY_SLASH));
+	}
+	tp_focus(&server, split_target);
+
+	/* Both plain slash and slash pressed before the modifiers pass through. */
+	for (int late_modifiers = 0; late_modifiers < 2; late_modifiers++) {
+		client.key_events = 0;
+		send_key(&keyboard, KEY_SLASH, WL_KEYBOARD_KEY_STATE_PRESSED, 67);
+		if (late_modifiers) {
+			send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_PRESSED, 68);
+			send_key(&keyboard, KEY_LEFTALT, WL_KEYBOARD_KEY_STATE_PRESSED, 69);
+		}
+		send_key(&keyboard, KEY_SLASH, WL_KEYBOARD_KEY_STATE_RELEASED, 70);
+		if (late_modifiers) {
+			send_key(&keyboard, KEY_LEFTALT, WL_KEYBOARD_KEY_STATE_RELEASED, 71);
+			send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_RELEASED, 72);
+		}
+		for (unsigned int i = 0; i < 10; i++)
+			if (!pump(&client, &server)) goto fail;
+		int release = late_modifiers ? 3 : 1;
+		CHECK(client.key_events == (late_modifiers ? 6u : 2u));
+		CHECK(client.keys[0] == KEY_SLASH &&
+			  client.key_states[0] == WL_KEYBOARD_KEY_STATE_PRESSED);
+		CHECK(client.keys[release] == KEY_SLASH &&
+			  client.key_states[release] == WL_KEYBOARD_KEY_STATE_RELEASED);
+	}
+
+	tp_lua_set_spawn_fn(server.lua, record_hook_spawn);
+	hook_event_count = 0;
+	client.key_events = 0;
+	send_key(&keyboard, KEY_F9, WL_KEYBOARD_KEY_STATE_PRESSED, 73);
+	CHECK(hook_event_count == 1 && has_hook_event("dictation-start"));
+	send_key(&keyboard, KEY_F9, WL_KEYBOARD_KEY_STATE_RELEASED, 74);
+	CHECK(hook_event_count == 2 && has_hook_event("dictation-stop"));
+	for (unsigned int i = 0; i < 10; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(client.key_events == 0);
+
 	/* The pointer starts over the headless output. Motion and a button must
 	 * be delivered to the surface underneath it. */
 	struct tp_client *first = wl_container_of(server.clients.next, first, link);
@@ -3050,6 +3135,14 @@ int main(void) {
 	CHECK(c_live != NULL && !c_live->floating);
 	int32_t orig_w = c_live->geom.w;
 
+	const char pending_reload[] =
+		"tp.bind('F9', function() tp.spawn('obsolete-release') end, { release = true })";
+	CHECK(tp_lua_exec_string(server.lua, pending_reload, sizeof(pending_reload) - 1,
+							 "pending-reload", 100000, 100, &server.settings,
+							 &server.settings, NULL, 0));
+	send_key(&keyboard, KEY_F9, WL_KEYBOARD_KEY_STATE_PRESSED, 290);
+	CHECK(key_consumed(&server, KEY_F9));
+
 	/* 1) Write updated config and trigger Meta+Shift+R (default reload bind). */
 	lf = fopen(lua_cfg, "wb");
 	CHECK(lf != NULL);
@@ -3072,6 +3165,14 @@ int main(void) {
 	chord(&keyboard, KEY_R, true, false);
 	for (unsigned int i = 0; i < 15; i++)
 		if (!pump(&client, &server)) goto fail;
+
+	hook_event_count = 0;
+	client.key_events = 0;
+	send_key(&keyboard, KEY_F9, WL_KEYBOARD_KEY_STATE_RELEASED, 291);
+	for (unsigned int i = 0; i < 10; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(hook_event_count == 0 && client.key_events == 0);
+	CHECK(!key_consumed(&server, KEY_F9));
 
 	CHECK(server.settings.gap_inner == 20 && server.settings.gap_outer == 34);
 	CHECK(c_live->geom.w == mon_primary->usable.w - 68);
@@ -3589,6 +3690,15 @@ int main(void) {
 			wl_display_disconnect(rogue.display);
 		}
 
+		const char pending_lock[] =
+			"tp.bind('F9', function() tp.spawn('held-across-lock') end,"
+			" { release = true, locked = true })";
+		CHECK(tp_lua_exec_string(server.lua, pending_lock, sizeof(pending_lock) - 1,
+								 "pending-lock", 100000, 100, &server.settings,
+								 &server.settings, NULL, 0));
+		send_key(&keyboard, KEY_F9, WL_KEYBOARD_KEY_STATE_PRESSED, 390);
+		CHECK(key_consumed(&server, KEY_F9));
+
 		/* Lock the session and map a lock surface. */
 		struct test_lock_state ls1 = {0};
 		struct ext_session_lock_v1 *lock1 =
@@ -3611,6 +3721,14 @@ int main(void) {
 			if (!pump(&lk1, &server)) break;
 		CHECK(lss.configured && lss.width == 1280 && lss.height == 720);
 		CHECK(lk1.keyboard_focus == ls_wl);
+
+		hook_event_count = 0;
+		lk1.key_events = 0;
+		send_key(&keyboard, KEY_F9, WL_KEYBOARD_KEY_STATE_RELEASED, 391);
+		for (unsigned int i = 0; i < 10; i++)
+			if (!pump(&lk1, &server)) break;
+		CHECK(hook_event_count == 0 && lk1.key_events == 0);
+		CHECK(!key_consumed(&server, KEY_F9));
 
 		/* While locked: normal Meta+n is gated and passes to locker;
 		 * Meta+k ({ locked = true }) runs; emergency quit is gated;
@@ -3645,6 +3763,8 @@ int main(void) {
 		send_key(&keyboard, KEY_LEFTALT, WL_KEYBOARD_KEY_STATE_RELEASED, 408);
 		send_key(&keyboard, KEY_LEFTCTRL, WL_KEYBOARD_KEY_STATE_RELEASED, 409);
 
+		send_key(&keyboard, KEY_F9, WL_KEYBOARD_KEY_STATE_PRESSED, 410);
+		CHECK(key_consumed(&server, KEY_F9));
 		/* Unlock restores layers and normal bindings. */
 		ext_session_lock_surface_v1_destroy(lsurf);
 		wl_surface_destroy(ls_wl);
@@ -3653,6 +3773,10 @@ int main(void) {
 			if (!pump(&lk1, &server)) break;
 		CHECK(!server.locked);
 		CHECK(server.layer[TP_LAYER_TILE]->node.enabled);
+
+		hook_event_count = 0;
+		send_key(&keyboard, KEY_F9, WL_KEYBOARD_KEY_STATE_RELEASED, 411);
+		CHECK(hook_event_count == 0 && !key_consumed(&server, KEY_F9));
 
 		hook_event_count = 0;
 		chord(&keyboard, KEY_N, false, false);

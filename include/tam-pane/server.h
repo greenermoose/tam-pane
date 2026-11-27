@@ -7,6 +7,7 @@
 #ifndef TAM_PANE_SERVER_H
 #define TAM_PANE_SERVER_H
 
+#include <linux/input-event-codes.h>
 #include "tam-pane/chord.h"
 #include "tam-pane/geom.h"
 #include "tam-pane/layout/layout.h"
@@ -215,7 +216,9 @@ struct tp_server {
 	struct wl_listener kb_group_key;
 	struct wl_listener kb_group_modifiers;
 	/* Linux KEY_MAX fits in twelve 64-bit words. */
-	uint64_t kb_consumed_keys[12];
+	uint64_t kb_consumed_keys[(KEY_CNT + 63) / 64];
+	/* Lua binding index plus one, or zero when no release is pending. */
+	size_t kb_release_bindings[KEY_CNT];
 	uint32_t kb_last_layout_group;
 	struct wl_list keyboards;     /* tp_keyboard.link */
 	struct wl_list input_devices; /* tp_input_device.link */

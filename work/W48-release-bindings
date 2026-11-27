@@ -1,0 +1,33 @@
+W48 RELEASE-BOUND SHORTCUTS
+
+Date: 2026-11-27
+AI harness: Codex CLI 0.172.0
+AI model: gpt-6.2-sol
+Commits: Same commit as this record.
+Transcript: Retained privately by the author.
+
+GUIDANCE
+
+  Fred: "Find and fix root cause of macro bug when using tam-pane. For
+  example, Meta + / instead of pasting in /exit, starts pasting a
+  repeating ///////."
+  Fred: "Keep current shortcuts (Recommended)"
+  Fred: "Implement the plan."
+
+DONE
+
+  - Reproduced one slash press without its release in a Wayland client.
+  - Reserved release-bound keys on press and filtered them on focus.
+    Kept one paste dispatch for either order of key and modifier release.
+  - Full compositor suite passed, including 1032 headless input checks.
+    All 25 tam-macro tests passed in a clean session environment.
+
+FAILED
+
+  - The first suite run exposed a misplaced key-up in the reload
+    regression fixture. Moved it after the reload and reran the suite.
+
+HANDOFF
+
+  - In the next authorized Tamlinux Test, verify Meta+Alt+slash pastes
+    one /exit in tam-last and leaves no repeating slash.

@@ -161,6 +161,12 @@ action type.
   binding to run while the session is locked (`ext-session-lock-v1`). By
   default (`locked = false`), bindings are gated while locked so keystrokes
   reach the lock screen instead of invoking compositor actions.
+- **Release actions:** `{ release = true }` reserves the physical key
+  when the chord matches on press and runs the action on that key's
+  release, even if the modifiers were lifted earlier. The focused client
+  receives neither event for the reserved key. Press and release bindings
+  can coexist on the same chord. A successful reload or lock transition
+  cancels a pending release action.
 - **Modifiers (case-insensitive):** `Meta` (`Super`, `Logo`, `Mod4`),
   `Shift`, `Ctrl` (`Control`), `Alt` (`Mod1`). Unmodified keys (e.g.
   `"XF86AudioRaiseVolume"`) are allowed.

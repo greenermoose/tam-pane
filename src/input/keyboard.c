@@ -207,21 +207,28 @@ static bool run_compositor_key(struct tp_server *s, struct wlr_keyboard *wlr,
 	return false;
 }
 
-static bool run_binding(struct tp_server *s, struct wlr_keyboard *wlr,
-						uint32_t keycode, bool released) {
+static size_t find_binding(struct tp_server *s, struct wlr_keyboard *wlr,
+						   uint32_t keycode, bool released) {
 	uint32_t mods = wlr_mods_to_tp(wlr_keyboard_get_modifiers(wlr));
 	if (!mods && !tp_lua_has_unmodified_bindings(s->lua))
-		return false;
+		return SIZE_MAX;
 	uint32_t xkb_code = keycode + 8;
 	const xkb_keysym_t *syms = NULL;
 	int n = level0_syms(wlr, keycode, &syms);
 	if (n <= 0)
-		return tp_bindings_handle_key(s, mods, XKB_KEY_NoSymbol, xkb_code,
-									  released);
-	for (int i = 0; i < n; i++)
-		if (tp_bindings_handle_key(s, mods, syms[i], xkb_code, released))
-			return true;
-	return false;
+		return tp_lua_find_key_binding(s->lua, mods, XKB_KEY_NoSymbol, xkb_code,
+									   released, s->locked);
+	for (int i = 0; i < n; i++) {
+		size_t idx = tp_lua_find_key_binding(s->lua, mods, syms[i], xkb_code,
+											 released, s->locked);
+		if (idx != SIZE_MAX)
+			return idx;
+	}
+	return SIZE_MAX;
+}
+
+void tp_keyboard_cancel_pending_releases(struct tp_server *s) {
+	memset(s->kb_release_bindings, 0, sizeof(s->kb_release_bindings));
 }
 
 static void on_key(struct wl_listener *l, void *data) {
@@ -239,6 +246,18 @@ static void on_key(struct wl_listener *l, void *data) {
 		if (word < consumed_words)
 			s->kb_consumed_keys[word] |= mask;
 		return;
+	}
+
+	/* A release binding owns the physical key from the instant it matches.
+	 * The key-up may arrive with different modifiers or layout. */
+	if (ev->keycode < KEY_CNT) {
+		size_t pending = s->kb_release_bindings[ev->keycode];
+		s->kb_release_bindings[ev->keycode] = 0;
+		if (!pressed && pending) {
+			tp_lua_run_bind_index(s->lua, pending - 1, s->locked);
+			s->kb_consumed_keys[word] &= ~mask;
+			return;
+		}
 	}
 
 	/* Route through one-handed chord composer when unlocked. */
@@ -305,20 +324,24 @@ static void on_key(struct wl_listener *l, void *data) {
 	}
 
 	if (pressed) {
-		if (run_binding(s, wlr, ev->keycode, false)) {
+		size_t press = find_binding(s, wlr, ev->keycode, false);
+		size_t release = ev->keycode < KEY_CNT
+							 ? find_binding(s, wlr, ev->keycode, true)
+							 : SIZE_MAX;
+		if (release != SIZE_MAX)
+			s->kb_release_bindings[ev->keycode] = release + 1;
+		if (press != SIZE_MAX || release != SIZE_MAX) {
 			if (word < consumed_words)
 				s->kb_consumed_keys[word] |= mask;
+			if (press != SIZE_MAX)
+				tp_lua_run_bind_index(s->lua, press, s->locked);
 			return;
 		}
-	} else {
-		bool had_release = run_binding(s, wlr, ev->keycode, true);
-		if (word < consumed_words && (s->kb_consumed_keys[word] & mask)) {
-			s->kb_consumed_keys[word] &= ~mask;
-			return;
-		}
-		if (had_release)
-			return;
+	} else if (word < consumed_words && (s->kb_consumed_keys[word] & mask)) {
+		s->kb_consumed_keys[word] &= ~mask;
+		return;
 	}
+
 	if (tp_text_input_forward_key(s, wlr, ev))
 		return;
 	wlr_seat_set_keyboard(s->seat, wlr);
@@ -553,4 +576,19 @@ bool tp_keyboard_key_consumed(const struct tp_server *s, uint32_t code) {
 	if (word >= sizeof(s->kb_consumed_keys) / sizeof(s->kb_consumed_keys[0]))
 		return false;
 	return (s->kb_consumed_keys[word] & (UINT64_C(1) << (code % 64))) != 0;
+}
+
+void tp_keyboard_enter(struct tp_server *s, struct wlr_surface *surface) {
+	struct wlr_keyboard *kb = wlr_seat_get_keyboard(s->seat);
+	if (!kb) {
+		wlr_seat_keyboard_notify_enter(s->seat, surface, NULL, 0, NULL);
+		return;
+	}
+	uint32_t keys[WLR_KEYBOARD_KEYS_CAP];
+	size_t n = 0;
+	for (size_t i = 0; i < kb->num_keycodes; i++) {
+		if (!tp_keyboard_key_consumed(s, kb->keycodes[i]))
+			keys[n++] = kb->keycodes[i];
+	}
+	wlr_seat_keyboard_notify_enter(s->seat, surface, keys, n, &kb->modifiers);
 }

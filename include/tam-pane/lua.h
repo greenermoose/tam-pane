@@ -120,6 +120,11 @@ bool tp_lua_handle_key(struct tp_lua *lua, uint32_t mods, xkb_keysym_t sym,
 					   bool locked);
 bool tp_lua_handle_key_ex(struct tp_lua *lua, uint32_t mods, xkb_keysym_t sym,
 						  uint32_t keycode, bool released, bool locked);
+/* Read-only match using the same precedence as tp_lua_handle_key_ex.
+ * Returns SIZE_MAX when no eligible binding matches. */
+size_t tp_lua_find_key_binding(const struct tp_lua *lua, uint32_t mods,
+							   xkb_keysym_t sym, uint32_t keycode,
+							   bool released, bool locked);
 bool tp_lua_handle_mouse(struct tp_lua *lua, uint32_t mods, uint32_t button,
 						 bool locked, struct tp_action *out_grab);
 

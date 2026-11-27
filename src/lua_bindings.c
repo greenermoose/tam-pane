@@ -1173,50 +1173,29 @@ void tp_lua_set_action_fn(struct tp_lua *lua, tp_lua_action_fn fn,
 	lua->action_userdata = userdata;
 }
 
-bool tp_lua_handle_key_ex(struct tp_lua *lua, uint32_t mods, xkb_keysym_t sym,
-						  uint32_t keycode, bool released, bool locked) {
+size_t tp_lua_find_key_binding(const struct tp_lua *lua, uint32_t mods,
+							   xkb_keysym_t sym, uint32_t keycode,
+							   bool released, bool locked) {
 	if (!lua || !lua->L)
-		return false;
+		return SIZE_MAX;
 
-	xkb_keysym_t key =
-		(sym != XKB_KEY_NoSymbol) ? xkb_keysym_to_lower(sym) : XKB_KEY_NoSymbol;
-	const struct tp_lua_binding *found = NULL;
+	xkb_keysym_t key = xkb_keysym_to_lower(sym);
 	for (size_t i = 0; i < lua->active_binds.len; i++) {
 		const struct tp_lua_binding *b = &lua->active_binds.items[i];
-		if (b->on_release != released)
+		if (b->on_release != released || b->mods != mods)
 			continue;
-		if (b->mods != mods)
-			continue;
-		if (b->keycode > 0) {
-			if (keycode > 0 && b->keycode == keycode) {
-				found = b;
-				break;
-			}
-		} else if (key != XKB_KEY_NoSymbol && b->sym == key) {
-			found = b;
-			break;
-		}
+		bool matches = b->keycode ? b->keycode == keycode
+								   : key != XKB_KEY_NoSymbol && b->sym == key;
+		if (matches)
+			return !locked || b->allow_locked ? i : SIZE_MAX;
 	}
-	if (!found || (locked && !found->allow_locked))
-		return false;
+	return SIZE_MAX;
+}
 
-	if (!found->is_lua) {
-		if (lua->action_fn)
-			lua->action_fn(&found->action, lua->action_userdata);
-		return true;
-	}
-
-	lua_State *L = lua->L;
-	int top = lua_gettop(L);
-	lua_rawgeti(L, LUA_REGISTRYINDEX, found->lua_ref);
-	int rc = tp_lua_guarded_pcall(lua, 0, 0, TP_LUA_CALLBACK_MAX_INSTRUCTIONS,
-								  TP_LUA_CALLBACK_TIMEOUT_MS, "binding");
-	if (rc != LUA_OK) {
-		const char *msg = lua_tostring(L, -1);
-		tam_log_error("lua binding failed: %s", msg ? msg : "unknown error");
-	}
-	lua_settop(L, top);
-	return true;
+bool tp_lua_handle_key_ex(struct tp_lua *lua, uint32_t mods, xkb_keysym_t sym,
+						  uint32_t keycode, bool released, bool locked) {
+	size_t idx = tp_lua_find_key_binding(lua, mods, sym, keycode, released, locked);
+	return tp_lua_run_bind_index(lua, idx, locked);
 }
 
 bool tp_lua_handle_key(struct tp_lua *lua, uint32_t mods, xkb_keysym_t sym,

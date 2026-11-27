@@ -3,10 +3,14 @@ WHATNOW
 What tam-pane is doing now and what comes next. Read this first; revise
 it at the end of every session (work/README-work).
 
-Updated: 2026-11-27, with W47
+Updated: 2026-11-27, with W48
 
 
 STATE
+
+  Version 0.4.1 keeps release-bound shortcut keys out of client input
+  (B11, W48). Meta+Alt+slash sends one paste chord in the headless test
+  with either release order. Physical verification awaits Tamlinux Test.
 
   Default Dwindle opens to the right or below within 8 logical pixels
   of the tile midpoint on the split axis (W47). Unit and headless
@@ -152,8 +156,8 @@ STATE
 
 NEXT
 
-  1. Phase P5 (plans/P5-visuals.md): 0.4.1 blur behind transparent windows
-     and panels with damage tracking, then 0.4.2 frame-clock animations
+  1. Phase P5 (plans/P5-visuals.md): 0.4.2 blur behind transparent windows
+     and panels with damage tracking, then 0.4.3 frame-clock animations
      (off by default on battery).
   2. Phase P4 (plans/P4-dogfood-tamlinux-0.7.md): complete physical-hardware
      acceptance checks during Fred's Tamlinux 0.7 Test/Run, and record any

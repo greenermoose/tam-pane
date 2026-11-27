@@ -15,9 +15,9 @@ own small renderer module on Mesa, without scenefx.
   are off and zero frames rendered when idle. (Focused and unfocused
   scene-rectangle window borders already landed early in `0.2.11` and
   `0.2.17`.) — **Done (2026-11-27).**
-- **0.4.1** Blur behind transparent windows and panels, with damage
+- **0.4.2** Blur behind transparent windows and panels, with damage
   tracking so idle screens cost nothing.
-- **0.4.2** Animations for open, close, move and tag change, driven by
+- **0.4.3** Animations for open, close, move and tag change, driven by
   the frame clock and off by default on battery.
 
 ## Acceptance
