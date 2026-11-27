@@ -1688,6 +1688,14 @@ int main(void) {
 		if (!pump(&client, &server)) goto fail;
 	CHECK(!wl_list_empty(&server.clients));
 	CHECK(client.windows[0].width > 0 && client.windows[0].height > 0);
+	struct tp_client *split_target = tp_focused(&server);
+	if (!split_target) goto fail;
+	tp_arrange_flush(&server);
+	struct tp_rect target_box = split_target->geom;
+	CHECK(target_box.w > target_box.h);
+	CHECK(wlr_cursor_warp(server.cursor, &pointer.base,
+		target_box.x + target_box.w / 2.0 - 8.0,
+		target_box.y + target_box.h / 2.0));
 
 	/* The test xdg-surface configure handler attaches its first buffer. */
 	client.windows[1].surface = wl_compositor_create_surface(client.compositor);
@@ -1708,6 +1716,32 @@ int main(void) {
 		if (!pump(&client, &server)) goto fail;
 	CHECK(wl_list_length(&server.clients) == 2);
 	CHECK(client.windows[1].width > 0 && client.windows[1].height > 0);
+
+	/* The two tiles now stand tall. Split the new right-hand tile from
+	 * just above its midpoint, where the next window should land below. */
+	tp_arrange_flush(&server);
+	struct tp_client *right_tile = tp_focused(&server);
+	if (!right_tile || right_tile == split_target) goto fail;
+	CHECK(right_tile->geom.x > split_target->geom.x);
+	target_box = right_tile->geom;
+	CHECK(target_box.h > target_box.w);
+	CHECK(wlr_cursor_warp(server.cursor, &pointer.base,
+		target_box.x + target_box.w / 2.0,
+		target_box.y + target_box.h / 2.0 - 8.0));
+	configure_window(&client, &client.windows[2], "split-below-center");
+	for (unsigned int i = 0; i < 1000 && wl_list_length(&server.clients) < 3; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(wl_list_length(&server.clients) == 3);
+	tp_arrange_flush(&server);
+	struct tp_client *bottom_tile = tp_focused(&server);
+	if (!bottom_tile || bottom_tile == right_tile) goto fail;
+	CHECK(bottom_tile->geom.x == right_tile->geom.x &&
+		bottom_tile->geom.y > right_tile->geom.y);
+	destroy_window(&client.windows[2]);
+	for (unsigned int i = 0; i < 100 && wl_list_length(&server.clients) == 3; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(wl_list_length(&server.clients) == 2);
+	tp_focus(&server, right_tile);
 
 	/* Meta+j cycles focus. The binding's J press and release must both stay
 	 * inside the compositor, while the ordinary X pair reaches the client. */

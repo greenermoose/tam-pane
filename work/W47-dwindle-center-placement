@@ -1,0 +1,33 @@
+W47 DWINDLE CENTER PLACEMENT
+
+Date: 2026-11-27
+AI harness: Codex 0.172.0
+AI model: gpt-6.2-sol
+Commits: Same commit as this record.
+
+GUIDANCE
+
+  Fred: "Change the default direction for new windows being created.
+  If mouse is in middle, have new windows appear to right or below.
+  Only have new window appear above or to the left if the mouse is
+  above center or left of center. If mouse is in center or to right,
+  have new window open to the right. If mouse is in center or below
+  center, have new window open below."
+  Fred: "8-pixel center band"
+  Fred: "Implement the plan."
+
+DONE
+
+  - Applied the 8 logical pixel threshold to the default Dwindle split
+    against the midpoint of the tile being split.
+  - Passed 151 Dwindle unit checks and 996 headless input checks, with
+    real client mapping at the new boundary on both split axes.
+
+FAILED
+
+  - The sandbox blocked the temporary Wayland socket. The headless
+    suite passed with socket access.
+
+HANDOFF
+
+  - Live verification awaits a Tamlinux Test candidate with this change.

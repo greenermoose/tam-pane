@@ -69,9 +69,9 @@ typedef void (*tp_dwindle_place_fn)(void *item, struct tp_rect box,
 void tp_dwindle_init(struct tp_dwindle *t);
 void tp_dwindle_clear(struct tp_dwindle *t);
 
-/* Hyprland's default rule: split along the longer side (biased by
- * width_bias); with a pointer position, the new window goes on the half the
- * pointer is in, otherwise after the target. */
+/* Split along the longer side (biased by width_bias). Insert before the
+ * target if the pointer is more than 8 logical pixels left of or above its
+ * midpoint on that axis. Otherwise insert after the target. */
 struct tp_dwindle_split tp_dwindle_auto_split(const struct tp_dwindle *t,
 											  struct tp_rect target,
 											  bool have_point, double px,

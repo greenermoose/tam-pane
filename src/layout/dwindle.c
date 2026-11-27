@@ -70,9 +70,10 @@ struct tp_dwindle_split tp_dwindle_auto_split(const struct tp_dwindle *t,
 	struct tp_dwindle_split s = {0};
 	s.split_h = (float)target.w > (float)target.h * t->width_bias;
 	s.ratio = ratio;
+	const double center_band = 8.0;
 	if (have_point)
-		s.before = s.split_h ? px < target.x + target.w / 2.0
-							 : py < target.y + target.h / 2.0;
+		s.before = s.split_h ? px < target.x + target.w / 2.0 - center_band
+							 : py < target.y + target.h / 2.0 - center_band;
 	return s;
 }
 

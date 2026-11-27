@@ -129,7 +129,7 @@ int main(void) {
 	run_layout(&t, (struct tp_rect){0, 0, 3, 1}, 10);
 	CHECK(placed[1].w >= 1 && placed[2].w >= 1);
 
-	/* Split choice: Hyprland's default and smart rules. */
+	/* Split choice: default center band and optional smart split. */
 	struct tp_rect wide = {0, 0, 800, 400}, tall = {0, 0, 400, 800};
 	struct tp_dwindle_split s;
 	s = tp_dwindle_auto_split(&t, wide, false, 0, 0, 0.5f);
@@ -140,6 +140,16 @@ int main(void) {
 	CHECK(s.split_h && s.before);
 	s = tp_dwindle_auto_split(&t, tall, true, 100, 700, 0.5f);
 	CHECK(!s.split_h && !s.before);
+	struct tp_rect odd_wide = {-100, 30, 801, 400};
+	struct tp_rect odd_tall = {30, -100, 400, 801};
+	/* The midpoint is 300.5, so 292.5 counts as centered. */
+	const double points[] = {292.25, 292.5, 300.5, 308.5};
+	for (size_t i = 0; i < sizeof(points) / sizeof(points[0]); i++) {
+		s = tp_dwindle_auto_split(&t, odd_wide, true, points[i], 40, 0.5f);
+		CHECK(s.split_h && s.before == (i == 0));
+		s = tp_dwindle_auto_split(&t, odd_tall, true, 40, points[i], 0.5f);
+		CHECK(!s.split_h && s.before == (i == 0));
+	}
 	s = tp_dwindle_smart_split(wide, 790, 200, 0.5f); /* right edge */
 	CHECK(s.split_h && !s.before && s.lock);
 	s = tp_dwindle_smart_split(wide, 400, 10, 0.5f); /* top edge */

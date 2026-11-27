@@ -3,10 +3,14 @@ WHATNOW
 What tam-pane is doing now and what comes next. Read this first; revise
 it at the end of every session (work/README-work).
 
-Updated: 2026-11-27, with W46
+Updated: 2026-11-27, with W47
 
 
 STATE
+
+  Default Dwindle opens to the right or below within 8 logical pixels
+  of the tile midpoint on the split axis (W47). Unit and headless
+  input tests passed. Desktop verification awaits a Tamlinux Test.
 
   PR02 (W46) records four desktop launches on one boot. tam-pane 0.2.14
   reached the desktop in a median of 1,567 ms versus 2,591 ms for
