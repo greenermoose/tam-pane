@@ -76,6 +76,20 @@ replaced with a space. Every record is guaranteed to occupy one line.
 - `chord`
   - Current one-handed chord composer state:
     `chord\tmode=<idle|pluripotent|building|caps_lock>\tchord=<str>\tfilter=<str>\tmatches=<N>\tselected=<idx>`
+- `lock_state` (0.2.16)
+  - Current session-lock state:
+    `lock\tlocked=<0|1>\tactive=<0|1>\tlocker_running=<0|1>\tsurfaces=<N>\toutputs=<M>`
+- `gamma` (0.2.16)
+  - Current compositor color temperature:
+    `gamma\ttemperature=<K>\tenabled=<0|1>` (`6500` and `enabled=0` at identity)
+- `freeze` (0.2.16)
+  - Whether native screen freeze is active:
+    `freeze\tactive=<0|1>`
+- `pixel [x y]` (0.2.16)
+  - Samples the rendered RGB pixel at layout coordinates `(x, y)` (defaulting to
+    the current pointer coordinates). Refused with `ERR session is locked` while
+    locked:
+    `pixel\tx=<x>\ty=<y>\tr=<0..255>\tg=<0..255>\tb=<0..255>\thex=#rrggbb`
 
 ### Actions
 
@@ -106,6 +120,12 @@ replaced with a space. Every record is guaranteed to occupy one line.
     - `layout nmaster inc|dec`
     - `scratchpad toggle|move`
     - `chord_toggle`, `chord_cancel`
+    - `gamma <1000..25000|reset|off>` (0.2.16): sets the compositor's native
+      color temperature LUT (`6500`, `reset`, or `off` restores identity).
+    - `freeze on|off` (0.2.16): snapshots all enabled outputs onto a freeze
+      layer below `TP_LAYER_OVERLAY` (so `slurp` renders on top and `grim`
+      captures the frozen frame), or clears the freeze. Automatically cleared on
+      session lock, output removal, or GPU renderer loss.
     - `spawn <command...>`
 
 ### Event subscription
@@ -120,6 +140,8 @@ replaced with a space. Every record is guaranteed to occupy one line.
     - `tag.change`
     - `monitor.add`
     - `monitor.remove`
+    - `session.lock`, `session.unlock` (0.2.16; `locked=<0|1>`)
+    - `gamma.change` (0.2.16; `temperature=<K>\tenabled=<0|1>`)
     - `chord.start`, `chord.update`, `chord.end`, `chord.cancel` (or shorthand `chord`)
   - Events are delivered even when Lua has no hooks registered for them.
 
@@ -128,8 +150,12 @@ replaced with a space. Every record is guaranteed to occupy one line.
 While `s->locked` is true (`ext-session-lock-v1` / `tam-hide`):
 
 - Read-only queries (`version`, `monitors`, `windows`, `focused`, `tags`,
-  `cursor`, `binds`), `subscribe`, and `reload` remain allowed.
-- `dispatch` is refused with `ERR session is locked`.
+  `cursor`, `binds`, `keyboards`, `chord`, `lock_state`, `gamma`, `freeze`),
+  `subscribe`, and `reload` remain allowed.
+- `pixel` is refused with `ERR session is locked`.
+- `dispatch dpms on|off <output>` remains allowed while locked (matching
+  `zwlr_output_power_manager_v1`); all other `dispatch` actions are refused with
+  `ERR session is locked`.
 
 ## `tam-pane msg` client
 

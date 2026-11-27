@@ -12,12 +12,16 @@
 #define TAM_PANE_SESSION_LOCK_H
 
 #include <stdbool.h>
+#include <stddef.h>
 
 struct tp_server;
 struct wlr_surface;
 
 bool tp_session_lock_init(struct tp_server *s);
 void tp_session_lock_finish(struct tp_server *s);
+
+/* Number of currently mapped ext-session-lock-v1 lock surfaces. */
+size_t tp_session_lock_mapped_surface_count(const struct tp_server *s);
 
 /* Resize black cover rects and reconfigure lock surfaces on output changes. */
 void tp_session_lock_arrange(struct tp_server *s);

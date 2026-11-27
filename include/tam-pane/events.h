@@ -32,6 +32,9 @@ enum tp_event_kind {
 	TP_EVENT_CHORD_CANCEL,
 	TP_EVENT_STARTUP, /* once, after the Wayland socket is up */
 	TP_EVENT_WINDOW_CHANGE,
+	TP_EVENT_SESSION_LOCK,
+	TP_EVENT_SESSION_UNLOCK,
+	TP_EVENT_GAMMA_CHANGE,
 	TP_EVENT_COUNT,
 };
 
@@ -79,6 +82,15 @@ struct tp_event_keyboard {
 	uint32_t active_layout_index;
 };
 
+struct tp_event_session_lock {
+	bool locked;
+};
+
+struct tp_event_gamma {
+	uint32_t temperature;
+	bool enabled;
+};
+
 struct tp_event {
 	enum tp_event_kind kind;
 	union {
@@ -88,6 +100,8 @@ struct tp_event {
 		struct tp_event_output_power output_power;
 		struct tp_event_keyboard keyboard;
 		struct tp_event_chord chord;
+		struct tp_event_session_lock session_lock;
+		struct tp_event_gamma gamma;
 	};
 };
 

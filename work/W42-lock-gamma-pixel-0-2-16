@@ -1,0 +1,41 @@
+W42 LOCK STATE, NATIVE GAMMA, SCREEN FREEZE, AND PIXEL SAMPLING (0.2.16)
+
+Date: 2026-11-27
+AI harness: agy 1.5.18
+AI model: gemini-4-neon-medium
+
+GUIDANCE
+
+  Fred: "/plan Do the next work slice of tam-pane"
+  Fred selected Tamlinux 0.7.x Milestone 11 & 12 primitives in tam-pane and
+  approved the implementation plan after reviewing it in tam-view.
+
+DONE
+
+  - Bumped VERSION to 0.2.16.
+  - Added `lock_state` IPC query, `session.lock` / `session.unlock` events
+    (IPC + Lua), and permitted `dispatch dpms` while the session is locked.
+  - Added pure color-temperature math (`src/gamma_math.c`, `tests/test_gamma.c`)
+    and compositor-owned `wlr_color_transform` gamma LUT control (`src/gamma.c`)
+    with `gamma` query, `dispatch gamma <K|reset|off>`, `tp.dsp.gamma`, and
+    `gamma.change` event.
+  - Added native screen freeze (`TP_LAYER_FREEZE`, `freeze` query,
+    `dispatch freeze on|off`, `tp.dsp.freeze`, auto-unfrozen on lock, output
+    removal, and GPU renderer recovery) and `pixel [x y]` RGB sampling
+    (gated while locked) in `src/capture.c`.
+  - Updated `arch/ipc.md`, `arch/lua-api.md`, and `work/WHATNOW`.
+  - Full test suite passed: `test_tags` (28), `test_gamma` (1235),
+    `test_dwindle` (143), `test_layouts` (102), `test_lua` (626),
+    `test_ipc` (187), `test_chord`, `nm -D` symbol check, `smoke-headless.sh`
+    (6/6), and `test_input_headless` (913/913), with zero `libxcb` NEEDED.
+
+FAILED
+
+  - Nothing.
+
+HANDOFF
+
+  - Wire Tamlinux Milestone 11 & 12 scripts (`tam-system-sleep-lock`,
+    `tam-toggle-nightlight`, `tam-capture-region`, and the color picker) to
+    use `tam-pane 0.2.16`'s `lock_state`, `gamma`, `freeze`, and `pixel` IPC
+    primitives and retire `hyprlock`/`hypridle`/`hyprsunset`/`hyprpicker`.

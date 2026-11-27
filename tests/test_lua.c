@@ -1627,6 +1627,74 @@ static void test_controls_0_2_8(void) {
 	tp_lua_destroy(lua);
 }
 
+static void test_gamma_freeze_and_lock_events_0_2_16(void) {
+	struct tp_lua *lua = tp_lua_create();
+	CHECK(lua != NULL);
+	struct tp_settings base, out;
+	tp_settings_defaults(&base);
+	char err[256] = {0};
+
+	last_action = (struct tp_action){0};
+	action_count = 0;
+	tp_lua_set_action_fn(lua, mock_action, NULL);
+
+	const char *cfg =
+		"tp.bind('Meta+Shift+G', tp.dsp.gamma(4000))\n"
+		"tp.bind('Meta+Shift+H', tp.dsp.gamma('reset'))\n"
+		"tp.bind('Meta+Shift+Z', tp.dsp.freeze('on'))\n"
+		"tp.bind('Meta+Shift+X', tp.dsp.freeze('off'))\n"
+		"tp.on('session.lock', function(ev) assert(ev.locked == true) end)\n"
+		"tp.on('session.unlock', function(ev) assert(ev.locked == false) end)\n"
+		"tp.on('gamma.change', function(ev)\n"
+		"  assert(ev.temperature == 4000 and ev.enabled == true)\n"
+		"end)\n";
+	CHECK(tp_lua_exec_string(lua, cfg, strlen(cfg), "test_0_2_16",
+							 TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+							 TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+							 sizeof(err)));
+
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT, XKB_KEY_g, false));
+	CHECK(action_count == 1 && last_action.kind == TP_ACT_GAMMA &&
+		  last_action.gamma_temp == 4000);
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT, XKB_KEY_h, false));
+	CHECK(action_count == 2 && last_action.kind == TP_ACT_GAMMA &&
+		  last_action.gamma_temp == 6500);
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT, XKB_KEY_z, false));
+	CHECK(action_count == 3 && last_action.kind == TP_ACT_FREEZE &&
+		  last_action.dir == 1);
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT, XKB_KEY_x, false));
+	CHECK(action_count == 4 && last_action.kind == TP_ACT_FREEZE &&
+		  last_action.dir == 0);
+
+	CHECK(tp_lua_has_hooks(lua, TP_EVENT_SESSION_LOCK));
+	CHECK(tp_lua_has_hooks(lua, TP_EVENT_SESSION_UNLOCK));
+	CHECK(tp_lua_has_hooks(lua, TP_EVENT_GAMMA_CHANGE));
+
+	struct tp_event ev = {.kind = TP_EVENT_SESSION_LOCK};
+	ev.session_lock.locked = true;
+	tp_lua_emit_event(lua, &ev);
+	ev = (struct tp_event){.kind = TP_EVENT_SESSION_UNLOCK};
+	ev.session_lock.locked = false;
+	tp_lua_emit_event(lua, &ev);
+	ev = (struct tp_event){.kind = TP_EVENT_GAMMA_CHANGE};
+	ev.gamma.temperature = 4000;
+	ev.gamma.enabled = true;
+	tp_lua_emit_event(lua, &ev);
+
+	const char *bad_gamma = "tp.bind('Meta+g', tp.dsp.gamma(100))\n";
+	CHECK(!tp_lua_exec_string(lua, bad_gamma, strlen(bad_gamma), "bad_gamma",
+							  TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+							  TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+							  sizeof(err)));
+	const char *bad_freeze = "tp.bind('Meta+z', tp.dsp.freeze('maybe'))\n";
+	CHECK(!tp_lua_exec_string(lua, bad_freeze, strlen(bad_freeze), "bad_freeze",
+							  TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+							  TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+							  sizeof(err)));
+
+	tp_lua_destroy(lua);
+}
+
 int main(void) {
 	tam_log_set_level(TAM_LOG_ERROR);
 	test_config_and_fallback();
@@ -1645,5 +1713,6 @@ int main(void) {
 	test_capture_launcher();
 	test_layouts_and_scratchpad();
 	test_controls_0_2_8();
+	test_gamma_freeze_and_lock_events_0_2_16();
 	CHECK_DONE("test_lua");
 }

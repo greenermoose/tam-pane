@@ -28,6 +28,9 @@ static const char *const event_names[TP_EVENT_COUNT] = {
 	[TP_EVENT_CHORD_END] = "chord.end",
 	[TP_EVENT_CHORD_CANCEL] = "chord.cancel",
 	[TP_EVENT_STARTUP] = "startup",
+	[TP_EVENT_SESSION_LOCK] = "session.lock",
+	[TP_EVENT_SESSION_UNLOCK] = "session.unlock",
+	[TP_EVENT_GAMMA_CHANGE] = "gamma.change",
 };
 
 const char *tp_event_kind_name(enum tp_event_kind kind) {
@@ -221,6 +224,17 @@ static void push_event_table(lua_State *L, const struct tp_event *ev) {
 		lua_setfield(L, -2, "active_keymap");
 		lua_pushinteger(L, (lua_Integer)ev->keyboard.active_layout_index);
 		lua_setfield(L, -2, "active_layout_index");
+		break;
+	case TP_EVENT_SESSION_LOCK:
+	case TP_EVENT_SESSION_UNLOCK:
+		lua_pushboolean(L, ev->session_lock.locked);
+		lua_setfield(L, -2, "locked");
+		break;
+	case TP_EVENT_GAMMA_CHANGE:
+		lua_pushinteger(L, (lua_Integer)ev->gamma.temperature);
+		lua_setfield(L, -2, "temperature");
+		lua_pushboolean(L, ev->gamma.enabled);
+		lua_setfield(L, -2, "enabled");
 		break;
 	case TP_EVENT_CONFIG_RELOAD:
 	case TP_EVENT_STARTUP:

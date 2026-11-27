@@ -68,5 +68,8 @@ void tp_events_emit_keyboard_layout(struct tp_server *s, const char *name,
 void tp_events_emit_config_reload(struct tp_server *s);
 void tp_events_emit_chord(struct tp_server *s, enum tp_event_kind kind,
 						  const char *result, const char *action);
+void tp_events_emit_session_lock(struct tp_server *s, bool locked);
+void tp_events_emit_gamma(struct tp_server *s, uint32_t temperature,
+						  bool enabled);
 
 #endif

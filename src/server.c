@@ -5,6 +5,7 @@
 #include "tam-pane/client.h"
 #include "tam-pane/decoration.h"
 #include "tam-pane/foreign_toplevel.h"
+#include "tam-pane/gamma.h"
 #include "tam-pane/idle.h"
 #include "tam-pane/input.h"
 #include "tam-pane/ipc.h"
@@ -78,6 +79,7 @@ static void on_renderer_lost_idle(void *data) {
 	if (s->compositor)
 		wlr_compositor_set_renderer(s->compositor, s->renderer);
 
+	tp_capture_unfreeze(s);
 	tp_capture_reset_sources(s);
 
 	struct tp_monitor *m;
@@ -160,6 +162,7 @@ bool tp_server_init(struct tp_server *s) {
 	wl_list_init(&s->focus_stack);
 	wl_list_init(&s->keyboards);
 	tp_events_init(s);
+	tp_gamma_init(s);
 	tp_chord_init(&s->chord);
 	tp_chord_configure(&s->chord, s->settings.chord_enabled,
 					   s->settings.chord_key, s->settings.chord_secondary_key,
@@ -389,7 +392,9 @@ void tp_server_finish(struct tp_server *s) {
 	tp_decoration_finish(s);
 	tp_xdg_activation_finish(s);
 	tp_output_mgmt_finish(s);
+	tp_capture_unfreeze(s);
 	tp_capture_finish(s);
+	tp_gamma_finish(s);
 	tp_output_power_finish(s);
 	tp_idle_finish(s);
 	tp_session_lock_finish(s);

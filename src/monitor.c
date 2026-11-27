@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "tam-pane/monitor.h"
 #include "fractional-scale-v1-client-protocol.h"
+#include "tam-pane/capture.h"
 #include "tam-pane/client.h"
 #include "tam-pane/focus.h"
 #include "tam-pane/input.h"
@@ -37,8 +38,25 @@ static void update_area(struct tp_monitor *m) {
 
 static void on_frame(struct wl_listener *l, void *data) {
 	struct tp_monitor *m = wl_container_of(l, m, frame);
+	struct tp_server *s = m->server;
 	struct timespec now;
-	wlr_scene_output_commit(m->scene_output, NULL);
+	if (s && s->gamma_transform) {
+		struct wlr_scene_output_state_options opts = {
+			.color_transform = s->gamma_transform,
+		};
+		if (!wlr_scene_output_commit(m->scene_output, &opts)) {
+			if (!s->gamma_fallback_warned) {
+				tam_log_warn("gamma: output %s rejected color transform; "
+							 "falling back to plain scene commit",
+							 m->output && m->output->name ? m->output->name
+														  : "(unnamed)");
+				s->gamma_fallback_warned = true;
+			}
+			wlr_scene_output_commit(m->scene_output, NULL);
+		}
+	} else {
+		wlr_scene_output_commit(m->scene_output, NULL);
+	}
 	clock_gettime(CLOCK_MONOTONIC, &now);
 	wlr_scene_output_send_frame_done(m->scene_output, &now);
 }
@@ -293,6 +311,8 @@ static void on_destroy(struct wl_listener *l, void *data) {
 
 	if (s->grab.client && s->grab.client->mon == m)
 		tp_pointer_cancel_grab(s, NULL);
+	if (s->frozen)
+		tp_capture_unfreeze(s);
 	tp_workspace_monitor_finish(m);
 	tp_layers_monitor_destroy(m);
 

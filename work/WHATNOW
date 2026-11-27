@@ -3,10 +3,21 @@ WHATNOW
 What tam-pane is doing now and what comes next. Read this first; revise
 it at the end of every session (work/README-work).
 
-Updated: 2026-11-26, with W42
+Updated: 2026-11-27, with W42
 
 
 STATE
+
+  Version 0.2.16 on dev (W42) adds the Tamlinux 0.7.x Phase 2 (Milestones
+  11 & 12) compositor primitives: `lock_state` IPC query, `session.lock` /
+  `session.unlock` events (IPC and Lua), DPMS-while-locked, native color
+  temperature / gamma LUTs (`src/gamma_math.c`, `src/gamma.c`, `gamma`
+  query, `dispatch gamma <1000..25000|reset|off>`, `tp.dsp.gamma`,
+  `gamma.change` event), and native screen freeze + pixel sampling
+  (`src/capture.c`, `TP_LAYER_FREEZE`, `freeze` query, `dispatch freeze
+  on|off`, `tp.dsp.freeze`, `pixel [x y]` query gated while locked).
+  All native unit suites (including `test_gamma`, 1235 checks) and headless
+  input tests (913 checks) pass with zero `libxcb` NEEDED.
 
   Version 0.2.15 on dev (W41) adds a pointer-focus setting, cross-display
   tiled drag, checked key dispatch for macros, and window-change events.

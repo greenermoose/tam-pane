@@ -12,6 +12,7 @@
 #include "tam-pane/chord_overlay.h"
 #include "tam-pane/client.h"
 #include "tam-pane/focus.h"
+#include "tam-pane/gamma.h"
 #include "tam-pane/input.h"
 #include "tam-pane/layout/arrange.h"
 #include "tam-pane/layout/layout.h"
@@ -308,6 +309,16 @@ void tp_action_run(struct tp_server *s, const struct tp_action *act) {
 		break;
 	case TP_ACT_MOUSE_MOVE:
 	case TP_ACT_MOUSE_RESIZE:
+		break;
+	case TP_ACT_GAMMA:
+		tp_gamma_set(s, act->gamma_temp ? act->gamma_temp
+										: TP_GAMMA_TEMP_IDENTITY);
+		break;
+	case TP_ACT_FREEZE:
+		if (act->dir != 0)
+			tp_capture_freeze(s);
+		else
+			tp_capture_unfreeze(s);
 		break;
 	}
 }

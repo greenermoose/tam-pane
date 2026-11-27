@@ -401,6 +401,82 @@ static void test_parse_dispatch(void) {
 	CHECK(!tp_ipc_parse_dispatch("capture   ", &act, mon, sizeof(mon), err,
 								 sizeof(err)));
 
+	/* Gamma and freeze dispatches (0.2.16) */
+	CHECK(tp_ipc_parse_dispatch("gamma 4000", &act, mon, sizeof(mon), err,
+								sizeof(err)));
+	CHECK(act.kind == TP_ACT_GAMMA && act.gamma_temp == 4000);
+	{
+		tam_str_t f = tp_ipc_format_action(tam_str_new(""), &act);
+		CHECK(f && strcmp(f, "gamma 4000") == 0);
+		tam_str_free(f);
+	}
+	CHECK(tp_ipc_parse_dispatch("gamma reset", &act, mon, sizeof(mon), err,
+								sizeof(err)));
+	CHECK(act.kind == TP_ACT_GAMMA && act.gamma_temp == 6500);
+	{
+		tam_str_t f = tp_ipc_format_action(tam_str_new(""), &act);
+		CHECK(f && strcmp(f, "gamma reset") == 0);
+		tam_str_free(f);
+	}
+	CHECK(tp_ipc_parse_dispatch("gamma off", &act, mon, sizeof(mon), err,
+								sizeof(err)));
+	CHECK(act.kind == TP_ACT_GAMMA && act.gamma_temp == 6500);
+	CHECK(!tp_ipc_parse_dispatch("gamma 500", &act, mon, sizeof(mon), err,
+								 sizeof(err)));
+	CHECK(!tp_ipc_parse_dispatch("gamma 30000", &act, mon, sizeof(mon), err,
+								 sizeof(err)));
+	CHECK(!tp_ipc_parse_dispatch("gamma -4000", &act, mon, sizeof(mon), err,
+								 sizeof(err)));
+	CHECK(!tp_ipc_parse_dispatch("gamma", &act, mon, sizeof(mon), err,
+								 sizeof(err)));
+	CHECK(tp_ipc_parse_dispatch("freeze on", &act, mon, sizeof(mon), err,
+								sizeof(err)));
+	CHECK(act.kind == TP_ACT_FREEZE && act.dir == 1);
+	{
+		tam_str_t f = tp_ipc_format_action(tam_str_new(""), &act);
+		CHECK(f && strcmp(f, "freeze on") == 0);
+		tam_str_free(f);
+	}
+	CHECK(tp_ipc_parse_dispatch("freeze off", &act, mon, sizeof(mon), err,
+								sizeof(err)));
+	CHECK(act.kind == TP_ACT_FREEZE && act.dir == 0);
+	{
+		tam_str_t f = tp_ipc_format_action(tam_str_new(""), &act);
+		CHECK(f && strcmp(f, "freeze off") == 0);
+		tam_str_free(f);
+	}
+	CHECK(!tp_ipc_parse_dispatch("freeze maybe", &act, mon, sizeof(mon), err,
+								 sizeof(err)));
+
+	/* session.lock / session.unlock / gamma.change subscribe & format */
+	{
+		uint32_t mask = 0;
+		CHECK(tp_ipc_parse_subscribe("session.lock session.unlock gamma.change",
+									 &mask, err, sizeof(err)));
+		CHECK((mask & (1u << TP_EVENT_SESSION_LOCK)) != 0);
+		CHECK((mask & (1u << TP_EVENT_SESSION_UNLOCK)) != 0);
+		CHECK((mask & (1u << TP_EVENT_GAMMA_CHANGE)) != 0);
+
+		struct tp_event ev = {.kind = TP_EVENT_SESSION_LOCK};
+		ev.session_lock.locked = true;
+		tam_str_t s = tp_ipc_format_event(tam_str_new(""), &ev);
+		CHECK(s && strcmp(s, "event\tsession.lock\tlocked=1\n") == 0);
+		tam_str_free(s);
+
+		ev = (struct tp_event){.kind = TP_EVENT_SESSION_UNLOCK};
+		ev.session_lock.locked = false;
+		s = tp_ipc_format_event(tam_str_new(""), &ev);
+		CHECK(s && strcmp(s, "event\tsession.unlock\tlocked=0\n") == 0);
+		tam_str_free(s);
+
+		ev = (struct tp_event){.kind = TP_EVENT_GAMMA_CHANGE};
+		ev.gamma.temperature = 4000;
+		ev.gamma.enabled = true;
+		s = tp_ipc_format_event(tam_str_new(""), &ev);
+		CHECK(s && strcmp(s, "event\tgamma.change\ttemperature=4000\tenabled=1\n") == 0);
+		tam_str_free(s);
+	}
+
 	/* Invalid dispatches */
 	CHECK(!tp_ipc_parse_dispatch("", &act, mon, sizeof(mon), err, sizeof(err)));
 	CHECK(!tp_ipc_parse_dispatch("unknown", &act, mon, sizeof(mon), err,

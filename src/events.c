@@ -260,3 +260,23 @@ void tp_events_emit_chord(struct tp_server *s, enum tp_event_kind kind,
 	ev.chord.selected = s->chord.selected;
 	tp_events_emit(s, &ev);
 }
+
+void tp_events_emit_session_lock(struct tp_server *s, bool locked) {
+	enum tp_event_kind kind =
+		locked ? TP_EVENT_SESSION_LOCK : TP_EVENT_SESSION_UNLOCK;
+	if (!event_has_listeners(s, kind))
+		return;
+	struct tp_event ev = {.kind = kind};
+	ev.session_lock.locked = locked;
+	tp_events_emit(s, &ev);
+}
+
+void tp_events_emit_gamma(struct tp_server *s, uint32_t temperature,
+						  bool enabled) {
+	if (!event_has_listeners(s, TP_EVENT_GAMMA_CHANGE))
+		return;
+	struct tp_event ev = {.kind = TP_EVENT_GAMMA_CHANGE};
+	ev.gamma.temperature = temperature;
+	ev.gamma.enabled = enabled;
+	tp_events_emit(s, &ev);
+}

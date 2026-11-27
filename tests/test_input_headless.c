@@ -12,6 +12,7 @@
 #include "tam-pane/monitor.h"
 #include "tam-pane/output_power.h"
 #include "tam-pane/security.h"
+#include "tam-pane/session_lock.h"
 #include <errno.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -5118,6 +5119,220 @@ int main(void) {
 		}
 		destroy_window(&first);
 		destroy_window(&second);
+	}
+
+	/* ---- 0.2.16: lock_state/events, DPMS-while-locked, gamma, freeze, pixel ---- */
+	{
+		char rep[512];
+		/* 1. Native gamma query, dispatch, and gamma.change event */
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+								"gamma\n", rep, sizeof(rep)));
+		CHECK(strstr(rep, "gamma\ttemperature=6500\tenabled=0\n") != NULL);
+
+		int sub_fd = ipc_test_connect(ipc_sock_path);
+		CHECK(sub_fd >= 0);
+		if (sub_fd >= 0) {
+			const char *sub_cmd =
+				"subscribe session.lock session.unlock gamma.change\n";
+			CHECK(write(sub_fd, sub_cmd, strlen(sub_cmd)) ==
+				  (ssize_t)strlen(sub_cmd));
+			for (unsigned int i = 0; i < 10; i++)
+				wl_event_loop_dispatch(server.loop, 5);
+			char sbuf[1024] = {0};
+			ssize_t sn = read(sub_fd, sbuf, sizeof(sbuf) - 1);
+			CHECK(sn > 0 && strncmp(sbuf, "OK\n", 3) == 0);
+
+			CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+									"dispatch gamma 4000\n", rep, sizeof(rep)));
+			CHECK(strncmp(rep, "OK\nEND\n", 7) == 0);
+			CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+									"gamma\n", rep, sizeof(rep)));
+			CHECK(strstr(rep, "gamma\ttemperature=4000\tenabled=1\n") != NULL);
+
+			memset(sbuf, 0, sizeof(sbuf));
+			for (unsigned int i = 0; i < 10 && !sbuf[0]; i++) {
+				wl_event_loop_dispatch(server.loop, 5);
+				sn = read(sub_fd, sbuf, sizeof(sbuf) - 1);
+				if (sn < 0)
+					sbuf[0] = '\0';
+			}
+			CHECK(strstr(sbuf, "event\tgamma.change\ttemperature=4000\tenabled=1\n") != NULL);
+
+			CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+									"dispatch gamma reset\n", rep, sizeof(rep)));
+			CHECK(strncmp(rep, "OK\nEND\n", 7) == 0);
+			CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+									"gamma\n", rep, sizeof(rep)));
+			CHECK(strstr(rep, "gamma\ttemperature=6500\tenabled=0\n") != NULL);
+
+			memset(sbuf, 0, sizeof(sbuf));
+			for (unsigned int i = 0; i < 10 && !sbuf[0]; i++) {
+				wl_event_loop_dispatch(server.loop, 5);
+				sn = read(sub_fd, sbuf, sizeof(sbuf) - 1);
+				if (sn < 0)
+					sbuf[0] = '\0';
+			}
+			CHECK(strstr(sbuf, "event\tgamma.change\ttemperature=6500\tenabled=0\n") != NULL);
+
+			/* 2. Pixel sampling & native screen freeze */
+			static const float color_a[4] = {
+				51.0f / 255.0f, 102.0f / 255.0f, 153.0f / 255.0f, 1.0f
+			};
+			static const float color_b[4] = {
+				170.0f / 255.0f, 34.0f / 255.0f, 17.0f / 255.0f, 1.0f
+			};
+			struct wlr_scene_rect *swatch =
+				wlr_scene_rect_create(server.layer[TP_LAYER_TILE], 100, 100, color_a);
+			CHECK(swatch != NULL);
+			if (swatch) {
+				wlr_scene_node_set_position(&swatch->node, 0, 0);
+				CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+										"pixel 20 20\n", rep, sizeof(rep)));
+				CHECK(strstr(rep, "pixel\tx=20\ty=20\tr=51\tg=102\tb=153\thex=#336699\n") != NULL);
+
+				CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+										"freeze\n", rep, sizeof(rep)));
+				CHECK(strstr(rep, "freeze\tactive=0\n") != NULL);
+
+				CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+										"dispatch freeze on\n", rep, sizeof(rep)));
+				CHECK(strncmp(rep, "OK\nEND\n", 7) == 0);
+				CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+										"freeze\n", rep, sizeof(rep)));
+				CHECK(strstr(rep, "freeze\tactive=1\n") != NULL);
+
+				/* Mutate underlying scene while frozen: pixel still reads frozen frame! */
+				wlr_scene_rect_set_color(swatch, color_b);
+				CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+										"pixel 20 20\n", rep, sizeof(rep)));
+				CHECK(strstr(rep, "hex=#336699\n") != NULL);
+
+				/* Unfreeze: live scene color #aa2211 is visible again. */
+				CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+										"dispatch freeze off\n", rep, sizeof(rep)));
+				CHECK(strncmp(rep, "OK\nEND\n", 7) == 0);
+				CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+										"pixel 20 20\n", rep, sizeof(rep)));
+				CHECK(strstr(rep, "pixel\tx=20\ty=20\tr=170\tg=34\tb=17\thex=#aa2211\n") != NULL);
+
+				/* Re-freeze to verify locking auto-unfreezes. */
+				CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+										"dispatch freeze on\n", rep, sizeof(rep)));
+				CHECK(server.frozen);
+			}
+
+			/* 3. lock_state query, session.lock/unlock events, DPMS-while-locked */
+			CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+									"lock_state\n", rep, sizeof(rep)));
+			CHECK(strstr(rep, "lock\tlocked=0\tactive=0\tlocker_running=0\tsurfaces=0\toutputs=") != NULL);
+
+			int lsv[2];
+			CHECK(socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, lsv) == 0);
+			struct wl_client *lcl = wl_client_create(server.display, lsv[0]);
+			CHECK(lcl != NULL);
+			tp_security_set_locker_client(&server, lcl);
+			struct test_client lc = {.shm_fd = -1};
+			lc.display = wl_display_connect_to_fd(lsv[1]);
+			CHECK(lc.display != NULL);
+			if (lc.display) {
+				lc.registry = wl_display_get_registry(lc.display);
+				wl_registry_add_listener(lc.registry, &registry_listener, &lc);
+				for (unsigned int i = 0; i < 20 && (!lc.lock_mgr || !lc.compositor || !lc.output || !lc.shm); i++) {
+					pump(&lc, &server);
+					pump(&client, &server);
+				}
+				CHECK(lc.lock_mgr != NULL);
+				struct test_lock_state lst = {0};
+				struct ext_session_lock_v1 *lock =
+					ext_session_lock_manager_v1_lock(lc.lock_mgr);
+				ext_session_lock_v1_add_listener(lock, &lock_listener, &lst);
+				struct wl_surface *lsurf_wl =
+					wl_compositor_create_surface(lc.compositor);
+				struct test_lock_surf_state lss = {
+					.client = &lc, .surface = lsurf_wl
+				};
+				struct ext_session_lock_surface_v1 *lsurf =
+					ext_session_lock_v1_get_lock_surface(lock, lsurf_wl, lc.output);
+				ext_session_lock_surface_v1_add_listener(lsurf, &lock_surf_listener, &lss);
+				for (unsigned int i = 0;
+					 i < 30 && (!lst.locked || !lss.configured ||
+								tp_session_lock_mapped_surface_count(&server) == 0);
+					 i++) {
+					pump(&lc, &server);
+					pump(&client, &server);
+				}
+				CHECK(server.locked);
+				CHECK(!server.frozen); /* auto-unfrozen on lock */
+
+				CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+										"lock_state\n", rep, sizeof(rep)));
+				CHECK(strstr(rep, "lock\tlocked=1\tactive=1\tlocker_running=1\tsurfaces=1\toutputs=") != NULL);
+
+				memset(sbuf, 0, sizeof(sbuf));
+				for (unsigned int i = 0; i < 10 && !sbuf[0]; i++) {
+					wl_event_loop_dispatch(server.loop, 5);
+					sn = read(sub_fd, sbuf, sizeof(sbuf) - 1);
+					if (sn < 0)
+						sbuf[0] = '\0';
+				}
+				CHECK(strstr(sbuf, "event\tsession.lock\tlocked=1\n") != NULL);
+
+				/* DPMS is allowed while locked; close/freeze/pixel are refused. */
+				struct tp_monitor *m0 =
+					wl_container_of(server.monitors.next, m0, link);
+				char dpms_cmd[128];
+				snprintf(dpms_cmd, sizeof(dpms_cmd), "dispatch dpms off %s\n",
+						 m0->output->name);
+				CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+										dpms_cmd, rep, sizeof(rep)));
+				CHECK(strncmp(rep, "OK\nEND\n", 7) == 0);
+				CHECK(!m0->output->enabled);
+				snprintf(dpms_cmd, sizeof(dpms_cmd), "dispatch dpms on %s\n",
+						 m0->output->name);
+				CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+										dpms_cmd, rep, sizeof(rep)));
+				CHECK(strncmp(rep, "OK\nEND\n", 7) == 0);
+				CHECK(m0->output->enabled);
+
+				CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+										"dispatch close\n", rep, sizeof(rep)));
+				CHECK(strstr(rep, "ERR session is locked") != NULL);
+				CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+										"dispatch freeze on\n", rep, sizeof(rep)));
+				CHECK(strstr(rep, "ERR session is locked") != NULL);
+				CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+										"pixel 20 20\n", rep, sizeof(rep)));
+				CHECK(strstr(rep, "ERR session is locked") != NULL);
+
+				ext_session_lock_surface_v1_destroy(lsurf);
+				wl_surface_destroy(lsurf_wl);
+				ext_session_lock_v1_unlock_and_destroy(lock);
+				for (unsigned int i = 0; i < 20 && server.locked; i++) {
+					pump(&lc, &server);
+					pump(&client, &server);
+				}
+				CHECK(!server.locked);
+
+				memset(sbuf, 0, sizeof(sbuf));
+				for (unsigned int i = 0; i < 10 && !sbuf[0]; i++) {
+					wl_event_loop_dispatch(server.loop, 5);
+					sn = read(sub_fd, sbuf, sizeof(sbuf) - 1);
+					if (sn < 0)
+						sbuf[0] = '\0';
+				}
+				CHECK(strstr(sbuf, "event\tsession.unlock\tlocked=0\n") != NULL);
+
+				wl_display_disconnect(lc.display);
+				for (unsigned int i = 0; i < 10; i++)
+					wl_event_loop_dispatch(server.loop, 5);
+				CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+										"lock_state\n", rep, sizeof(rep)));
+				CHECK(strstr(rep, "lock\tlocked=0\tactive=0\tlocker_running=0\tsurfaces=0\toutputs=") != NULL);
+			}
+			if (swatch)
+				wlr_scene_node_destroy(&swatch->node);
+			close(sub_fd);
+		}
 	}
 
 	unlink(lua_cfg);

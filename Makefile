@@ -75,7 +75,7 @@ LUA_SRCS = third_party/lua/lapi.c third_party/lua/lauxlib.c \
 LUA_OBJS = $(patsubst third_party/lua/%.c,build/lua/%.o,$(LUA_SRCS))
 
 # Pure logic: no wlroots, so the unit tests build without it.
-CORE_SRCS = src/tags.c src/layout/dwindle.c src/layout/master.c \
+CORE_SRCS = src/tags.c src/gamma_math.c src/layout/dwindle.c src/layout/master.c \
 	src/layout/scroller.c src/layout/monocle.c src/layout/layout.c
 LUA_HOST_SRCS = src/lua.c src/lua_bindings.c src/lua_events.c src/lua_rules.c \
 	src/settings.c src/spawn.c src/ipc_proto.c src/chord.c
@@ -84,7 +84,7 @@ WM_SRCS = src/main.c src/server.c src/security.c src/events.c src/ipc.c \
 	src/monitor.c src/layer.c src/client.c src/focus.c src/bindings.c \
 	src/chord_overlay.c src/layout/arrange.c src/foreign_toplevel.c \
 	src/workspace.c src/session_lock.c src/idle.c src/output_power.c \
-	src/capture.c src/output_mgmt.c src/text_input.c src/xdg_activation.c \
+	src/capture.c src/gamma.c src/output_mgmt.c src/text_input.c src/xdg_activation.c \
 	src/decoration.c src/input/input.c src/input/keyboard.c src/input/pointer.c
 ifeq ($(XWAYLAND),1)
 WM_SRCS += src/xwayland.c
@@ -93,7 +93,7 @@ endif
 CORE_OBJS = $(patsubst src/%.c,build/%.o,$(CORE_SRCS))
 LUA_HOST_OBJS = $(patsubst src/%.c,build/%.o,$(LUA_HOST_SRCS))
 WM_OBJS = $(patsubst src/%.c,build/%.o,$(WM_SRCS))
-TESTS = build/tests/test_tags build/tests/test_dwindle \
+TESTS = build/tests/test_tags build/tests/test_gamma build/tests/test_dwindle \
 	build/tests/test_layouts build/tests/test_lua build/tests/test_ipc \
 	build/tests/test_chord
 

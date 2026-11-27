@@ -7,6 +7,7 @@
  * using the exact same tp.bind / tp.dsp.* API exposed to init.lua.
  */
 #include "lua_internal.h"
+#include "tam-pane/gamma.h"
 #include "tam-pane/layout/layout.h"
 #include "tam-pane/tags.h"
 #include <ctype.h>
@@ -788,6 +789,36 @@ static int l_dsp_scratchpad(lua_State *L) {
 	return push_dispatcher(L, &act);
 }
 
+static int l_dsp_gamma(lua_State *L) {
+	struct tp_action act = {.kind = TP_ACT_GAMMA};
+	if (lua_type(L, 1) == LUA_TSTRING) {
+		const char *s = lua_tostring(L, 1);
+		if (strcmp(s, "reset") == 0 || strcmp(s, "off") == 0) {
+			act.gamma_temp = TP_GAMMA_TEMP_IDENTITY;
+			return push_dispatcher(L, &act);
+		}
+		return luaL_error(
+			L, "tp.dsp.gamma: expected Kelvin (%d..%d) or 'reset'",
+			TP_GAMMA_TEMP_MIN, TP_GAMMA_TEMP_MAX);
+	}
+	int32_t k = tp_lua_check_int(L, 1, "tp.dsp.gamma", TP_GAMMA_TEMP_MIN,
+								 TP_GAMMA_TEMP_MAX);
+	act.gamma_temp = (uint32_t)k;
+	return push_dispatcher(L, &act);
+}
+
+static int l_dsp_freeze(lua_State *L) {
+	const char *mode = luaL_checkstring(L, 1);
+	struct tp_action act = {.kind = TP_ACT_FREEZE};
+	if (strcmp(mode, "on") == 0)
+		act.dir = 1;
+	else if (strcmp(mode, "off") == 0)
+		act.dir = 0;
+	else
+		return luaL_error(L, "tp.dsp.freeze: expected 'on' or 'off'");
+	return push_dispatcher(L, &act);
+}
+
 static int l_dsp_call(lua_State *L) {
 	struct tp_action *act = luaL_checkudata(L, 1, TP_DSP_MT);
 	struct tp_lua *lua = tp_lua_from_state(L);
@@ -999,6 +1030,8 @@ static const luaL_Reg dsp_funcs[] = {
 	{"reload", l_dsp_reload},
 	{"layout", l_dsp_layout},
 	{"scratchpad", l_dsp_scratchpad},
+	{"gamma", l_dsp_gamma},
+	{"freeze", l_dsp_freeze},
 	{NULL, NULL},
 };
 

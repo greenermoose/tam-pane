@@ -9,8 +9,10 @@
  */
 #define _GNU_SOURCE
 #include "tam-pane/ipc.h"
+#include "tam-pane/capture.h"
 #include "tam-pane/client.h"
 #include "tam-pane/focus.h"
+#include "tam-pane/gamma.h"
 #include "tam-pane/input.h"
 #include "tam-pane/layout/arrange.h"
 #include "tam-pane/lua.h"
@@ -23,6 +25,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -426,6 +429,61 @@ static tam_str_t build_chord(const struct tp_server *s) {
 	return tam_str_cat(out, "END\n");
 }
 
+static tam_str_t build_lock_state(struct tp_server *s) {
+	size_t outputs = 0;
+	struct tp_monitor *m;
+	wl_list_for_each(m, &s->monitors, link) {
+		if (m->output && m->output->enabled)
+			outputs++;
+	}
+	size_t surfaces = tp_session_lock_mapped_surface_count(s);
+	tam_str_t out = tam_str_new("OK\n");
+	if (!out)
+		return NULL;
+	out = tam_str_cat_printf(
+		out,
+		"lock\tlocked=%d\tactive=%d\tlocker_running=%d\tsurfaces=%zu\toutputs=%zu\n",
+		s->locked ? 1 : 0, s->active_lock ? 1 : 0, s->locker_client ? 1 : 0,
+		surfaces, outputs);
+	return tam_str_cat(out, "END\n");
+}
+
+static tam_str_t build_gamma(struct tp_server *s) {
+	uint32_t temp = s->gamma_temp ? s->gamma_temp : TP_GAMMA_TEMP_IDENTITY;
+	int enabled = (temp != TP_GAMMA_TEMP_IDENTITY) ? 1 : 0;
+	tam_str_t out = tam_str_new("OK\n");
+	if (!out)
+		return NULL;
+	out = tam_str_cat_printf(out, "gamma\ttemperature=%u\tenabled=%d\n", temp,
+							 enabled);
+	return tam_str_cat(out, "END\n");
+}
+
+static tam_str_t build_freeze(struct tp_server *s) {
+	tam_str_t out = tam_str_new("OK\n");
+	if (!out)
+		return NULL;
+	out = tam_str_cat_printf(out, "freeze\tactive=%d\n", s->frozen ? 1 : 0);
+	return tam_str_cat(out, "END\n");
+}
+
+static bool parse_int32_token(const char **cursor, int32_t *out) {
+	const char *p = *cursor;
+	while (*p == ' ' || *p == '\t')
+		p++;
+	if (!*p)
+		return false;
+	char *end = NULL;
+	errno = 0;
+	long val = strtol(p, &end, 10);
+	if (errno != 0 || end == p || (*end != '\0' && *end != ' ' && *end != '\t') ||
+		val < INT32_MIN || val > INT32_MAX)
+		return false;
+	*out = (int32_t)val;
+	*cursor = end;
+	return true;
+}
+
 /* ---- Request handling ---- */
 
 static bool handle_line(struct tp_ipc_client *c, char *line) {
@@ -456,7 +514,8 @@ static bool handle_line(struct tp_ipc_client *c, char *line) {
 		strcmp(line, "windows") == 0 || strcmp(line, "focused") == 0 ||
 		strcmp(line, "tags") == 0 || strcmp(line, "cursor") == 0 ||
 		strcmp(line, "binds") == 0 || strcmp(line, "keyboards") == 0 ||
-		strcmp(line, "chord") == 0) {
+		strcmp(line, "chord") == 0 || strcmp(line, "lock_state") == 0 ||
+		strcmp(line, "gamma") == 0 || strcmp(line, "freeze") == 0) {
 		if (*args)
 			return ipc_send_err(c, "command takes no arguments");
 		tam_str_t reply = NULL;
@@ -478,8 +537,47 @@ static bool handle_line(struct tp_ipc_client *c, char *line) {
 			reply = build_binds(s);
 		else if (strcmp(line, "keyboards") == 0)
 			reply = build_keyboards(s);
-		else
+		else if (strcmp(line, "chord") == 0)
 			reply = build_chord(s);
+		else if (strcmp(line, "lock_state") == 0)
+			reply = build_lock_state(s);
+		else if (strcmp(line, "gamma") == 0)
+			reply = build_gamma(s);
+		else
+			reply = build_freeze(s);
+		if (!reply)
+			return ipc_send_err(c, "out of memory");
+		bool ok = ipc_client_queue(c, reply, tam_str_len(reply));
+		tam_str_free(reply);
+		return ok;
+	}
+
+	if (strcmp(line, "pixel") == 0) {
+		if (s->locked)
+			return ipc_send_err(c, "session is locked");
+		int32_t lx = s->cursor ? (int32_t)lround(s->cursor->x) : 0;
+		int32_t ly = s->cursor ? (int32_t)lround(s->cursor->y) : 0;
+		if (*args) {
+			const char *p = args;
+			if (!parse_int32_token(&p, &lx) || !parse_int32_token(&p, &ly))
+				return ipc_send_err(c, "pixel expects optional integer x y");
+			while (*p == ' ' || *p == '\t')
+				p++;
+			if (*p != '\0')
+				return ipc_send_err(c, "pixel expects at most two arguments");
+		}
+		uint8_t rgb[3] = {0, 0, 0};
+		char err[128] = {0};
+		if (!tp_capture_sample_pixel(s, lx, ly, rgb, err, sizeof(err)))
+			return ipc_send_err(c, err[0] ? err : "pixel sample failed");
+		tam_str_t reply = tam_str_new("OK\n");
+		if (!reply)
+			return ipc_send_err(c, "out of memory");
+		reply = tam_str_cat_printf(
+			reply,
+			"pixel\tx=%d\ty=%d\tr=%u\tg=%u\tb=%u\thex=#%02x%02x%02x\nEND\n",
+			lx, ly, (unsigned)rgb[0], (unsigned)rgb[1], (unsigned)rgb[2],
+			(unsigned)rgb[0], (unsigned)rgb[1], (unsigned)rgb[2]);
 		if (!reply)
 			return ipc_send_err(c, "out of memory");
 		bool ok = ipc_client_queue(c, reply, tam_str_len(reply));
@@ -510,14 +608,15 @@ static bool handle_line(struct tp_ipc_client *c, char *line) {
 	}
 
 	if (strcmp(line, "dispatch") == 0) {
-		if (s->locked)
-			return ipc_send_err(c, "session is locked");
 		struct tp_action act;
 		char mon_name[128];
 		char err[256] = {0};
 		if (!tp_ipc_parse_dispatch(args, &act, mon_name, sizeof(mon_name), err,
 								   sizeof(err)))
 			return ipc_send_err(c, err[0] ? err : "invalid dispatch");
+
+		if (s->locked && act.kind != TP_ACT_DPMS)
+			return ipc_send_err(c, "session is locked");
 
 		if ((act.kind == TP_ACT_MONITOR_FOCUS ||
 			 act.kind == TP_ACT_MONITOR_MOVE) &&
@@ -555,6 +654,22 @@ static bool handle_line(struct tp_ipc_client *c, char *line) {
 				return ipc_send_err(c, "unknown monitor");
 			if (!tp_output_power_set(s, m->output, act.dir != 0))
 				return ipc_send_err(c, "dpms failed");
+			return ipc_client_queue(c, "OK\nEND\n", 7);
+		}
+
+		if (act.kind == TP_ACT_GAMMA) {
+			if (!tp_gamma_set(s, act.gamma_temp))
+				return ipc_send_err(c, "gamma failed");
+			return ipc_client_queue(c, "OK\nEND\n", 7);
+		}
+
+		if (act.kind == TP_ACT_FREEZE) {
+			if (act.dir != 0) {
+				if (!tp_capture_freeze(s))
+					return ipc_send_err(c, "freeze failed");
+			} else {
+				tp_capture_unfreeze(s);
+			}
 			return ipc_client_queue(c, "OK\nEND\n", 7);
 		}
 

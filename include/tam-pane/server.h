@@ -18,6 +18,7 @@
 
 struct wlr_allocator;
 struct wlr_backend;
+struct wlr_color_transform;
 struct wlr_compositor;
 struct wlr_cursor;
 struct wlr_output_layout;
@@ -90,6 +91,7 @@ enum tp_layer {
 	TP_LAYER_FLOAT,
 	TP_LAYER_TOP,
 	TP_LAYER_FULLSCREEN,
+	TP_LAYER_FREEZE,
 	TP_LAYER_OVERLAY,
 	TP_LAYER_LOCK,
 	TP_LAYER_COUNT
@@ -180,6 +182,11 @@ struct tp_server {
 	struct wl_listener output_mgr_test;
 	bool output_mgmt_applying;
 	struct wlr_gamma_control_manager_v1 *gamma_mgr;
+	uint32_t gamma_temp;
+	struct wlr_color_transform *gamma_transform;
+	bool gamma_fallback_warned;
+	struct wlr_scene_tree *freeze_tree;
+	bool frozen;
 
 	struct wlr_text_input_manager_v3 *text_input_mgr;
 	struct wlr_input_method_manager_v2 *input_method_mgr;

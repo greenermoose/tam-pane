@@ -272,6 +272,9 @@ outside config load.
 | `"tag.change"` | `event`, `monitor`, `tags` (new bitmask), `prev_tags` (previous bitmask), `tag` (lowest active `1..9`) |
 | `"monitor.add"` | `event`, `name`, `x`, `y`, `w`, `h`, `scale` |
 | `"monitor.remove"` | `event`, `name`, `x`, `y`, `w`, `h`, `scale` |
+| `"session.lock"` (0.2.16) | `event`, `locked` (`true`) |
+| `"session.unlock"` (0.2.16) | `event`, `locked` (`false`) |
+| `"gamma.change"` (0.2.16) | `event`, `temperature` (Kelvin), `enabled` (`true` when `temperature ~= 6500`) |
 | `"startup"` (0.1.7) | `event`; fires once per session, after the Wayland socket is up (never on reload) |
 
 ### `tp.off(id)`
@@ -363,3 +366,14 @@ into a **fresh** sandboxed Lua state starting from compiled-in defaults
   - `SIGHUP` (`pkill -HUP tam-pane`).
   - Direct C entry point `tp_server_reload(s, err_buf, err_buf_size)` for 0.2.3
     IPC.
+
+## Shipped in 0.2.16
+
+- **`tp.dsp.gamma(kelvin_or_reset)`:** Creates a dispatcher that sets the
+  compositor's native color temperature LUT (`1000..25000` K), or restores the
+  identity LUT (`6500` K) when passed `"reset"` or `"off"`.
+- **`tp.dsp.freeze("on" | "off")`:** Creates a dispatcher that snapshots all
+  enabled outputs onto `TP_LAYER_FREEZE` (below `TP_LAYER_OVERLAY`) or clears
+  the freeze.
+- **Events:** `"session.lock"`, `"session.unlock"`, and `"gamma.change"` are
+  available to `tp.on(...)` hooks and IPC `subscribe`.

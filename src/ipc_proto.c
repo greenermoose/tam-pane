@@ -3,6 +3,7 @@
  * Pure IPC wire helpers and the `tam-pane msg` CLI client (no wlroots).
  */
 #include "tam-pane/ipc.h"
+#include "tam-pane/gamma.h"
 #include "tam-pane/layout/layout.h"
 #include "tam-pane/tags.h"
 #include <ctype.h>
@@ -27,7 +28,9 @@ static uint32_t all_subscribable_mask(void) {
 		   (1u << TP_EVENT_MONITOR_FOCUS) | (1u << TP_EVENT_OUTPUT_POWER) |
 		   (1u << TP_EVENT_KEYBOARD_LAYOUT) | (1u << TP_EVENT_CONFIG_RELOAD) |
 		   (1u << TP_EVENT_CHORD_START) | (1u << TP_EVENT_CHORD_UPDATE) |
-		   (1u << TP_EVENT_CHORD_END) | (1u << TP_EVENT_CHORD_CANCEL);
+		   (1u << TP_EVENT_CHORD_END) | (1u << TP_EVENT_CHORD_CANCEL) |
+		   (1u << TP_EVENT_SESSION_LOCK) | (1u << TP_EVENT_SESSION_UNLOCK) |
+		   (1u << TP_EVENT_GAMMA_CHANGE);
 }
 
 bool tp_ipc_socket_path(char *out, size_t out_size, const char *runtime_dir,
@@ -165,6 +168,14 @@ tam_str_t tp_ipc_format_event(tam_str_t s, const struct tp_event *ev) {
 		s = tam_str_cat(s, "\taction=");
 		s = tp_ipc_escape_append(s, ev->chord.action);
 		return tam_str_cat_len(s, "\n", 1);
+	case TP_EVENT_SESSION_LOCK:
+	case TP_EVENT_SESSION_UNLOCK:
+		return tam_str_cat_printf(s, "event\t%s\tlocked=%d\n", name,
+								  ev->session_lock.locked ? 1 : 0);
+	case TP_EVENT_GAMMA_CHANGE:
+		return tam_str_cat_printf(s, "event\tgamma.change\ttemperature=%u\tenabled=%d\n",
+								  ev->gamma.temperature,
+								  ev->gamma.enabled ? 1 : 0);
 	case TP_EVENT_STARTUP:
 		return tam_str_cat(s, "event\tstartup\n");
 	case TP_EVENT_COUNT:
@@ -769,6 +780,54 @@ bool tp_ipc_parse_dispatch(const char *args, struct tp_action *out,
 		return true;
 	}
 
+	if (strcmp(verb, "gamma") == 0) {
+		char arg[32];
+		if (!next_token(&p, arg, sizeof(arg)) || has_extra_tokens(p)) {
+			if (err && err_size > 0)
+				snprintf(err, err_size, "gamma expects a temperature (1000..25000) or 'reset'");
+			return false;
+		}
+		if (strcmp(arg, "reset") == 0 || strcmp(arg, "off") == 0) {
+			out->kind = TP_ACT_GAMMA;
+			out->gamma_temp = TP_GAMMA_TEMP_IDENTITY;
+			return true;
+		}
+		char *end = NULL;
+		errno = 0;
+		unsigned long val = strtoul(arg, &end, 10);
+		if (errno != 0 || !end || *end != '\0' || arg[0] == '-' ||
+			val < TP_GAMMA_TEMP_MIN || val > TP_GAMMA_TEMP_MAX) {
+			if (err && err_size > 0)
+				snprintf(err, err_size,
+						 "gamma temperature must be between %d and %d or 'reset'",
+						 TP_GAMMA_TEMP_MIN, TP_GAMMA_TEMP_MAX);
+			return false;
+		}
+		out->kind = TP_ACT_GAMMA;
+		out->gamma_temp = (uint32_t)val;
+		return true;
+	}
+
+	if (strcmp(verb, "freeze") == 0) {
+		char mode[16];
+		if (!next_token(&p, mode, sizeof(mode)) || has_extra_tokens(p)) {
+			if (err && err_size > 0)
+				snprintf(err, err_size, "freeze expects 'on' or 'off'");
+			return false;
+		}
+		if (strcmp(mode, "on") == 0)
+			out->dir = 1;
+		else if (strcmp(mode, "off") == 0)
+			out->dir = 0;
+		else {
+			if (err && err_size > 0)
+				snprintf(err, err_size, "freeze expects 'on' or 'off'");
+			return false;
+		}
+		out->kind = TP_ACT_FREEZE;
+		return true;
+	}
+
 	if (strcmp(verb, "spawn") == 0) {
 		const char *cmd = skip_ws(p);
 		if (!cmd || !*cmd) {
@@ -894,6 +953,12 @@ tam_str_t tp_ipc_format_action(tam_str_t s, const struct tp_action *act) {
 		return tam_str_cat(s, "mouse_move");
 	case TP_ACT_MOUSE_RESIZE:
 		return tam_str_cat(s, "mouse_resize");
+	case TP_ACT_GAMMA:
+		if (act->gamma_temp == TP_GAMMA_TEMP_IDENTITY || act->gamma_temp == 0)
+			return tam_str_cat(s, "gamma reset");
+		return tam_str_cat_printf(s, "gamma %u", act->gamma_temp);
+	case TP_ACT_FREEZE:
+		return tam_str_cat(s, act->dir ? "freeze on" : "freeze off");
 	}
 	return tam_str_cat(s, "unknown");
 }
@@ -917,6 +982,10 @@ static void msg_usage(FILE *out) {
 		"  cursor                     show pointer coordinates and monitor\n"
 		"  binds                      list active key bindings\n"
 		"  keyboards                  list seat keyboards and active layouts\n"
+		"  lock_state                 show session-lock status and surface count\n"
+		"  gamma                      show active color temperature\n"
+		"  freeze                     show whether screen freeze is active\n"
+		"  pixel [x y]                sample RGB color at pointer or (x, y)\n"
 		"  lock                       start the configured session locker\n"
 		"  reload                     reload init.lua and report errors\n"
 		"  dispatch <action> [args]   run a compositor dispatcher\n"

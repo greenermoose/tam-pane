@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "tam-pane/session_lock.h"
+#include "tam-pane/capture.h"
 #include "tam-pane/client.h"
 #include "tam-pane/focus.h"
 #include "tam-pane/idle.h"
@@ -7,6 +8,7 @@
 #include "tam-pane/monitor.h"
 #include "tam-pane/security.h"
 #include "tam-pane/server.h"
+#include "tam-pane/server_events.h"
 #include "tam-pane/spawn.h"
 #include "tam-pane/text_input.h"
 #include <errno.h>
@@ -187,6 +189,7 @@ static void on_lock_unlock(struct wl_listener *l, void *data) {
 	tp_idle_update_inhibit(s);
 	tp_focus_refresh(s);
 	tp_pointer_refocus_now(s);
+	tp_events_emit_session_lock(s, false);
 	tam_log_info("session unlocked");
 }
 
@@ -222,6 +225,7 @@ static void on_new_lock(struct wl_listener *l, void *data) {
 
 	s->locked = true;
 	s->active_lock = lock;
+	tp_capture_unfreeze(s);
 	tp_pointer_cancel_grab(s, NULL);
 	tp_text_input_set_focus(s, NULL);
 
@@ -245,7 +249,21 @@ static void on_new_lock(struct wl_listener *l, void *data) {
 
 	wlr_session_lock_v1_send_locked(lock);
 	tp_idle_update_inhibit(s);
+	tp_events_emit_session_lock(s, true);
 	tam_log_info("session locked");
+}
+
+size_t tp_session_lock_mapped_surface_count(const struct tp_server *s) {
+	if (!s)
+		return 0;
+	size_t n = 0;
+	const struct tp_lock_surface *ls;
+	wl_list_for_each(ls, &s->lock_surfaces, link) {
+		if (ls->lock_surface && ls->lock_surface->surface &&
+			ls->lock_surface->surface->mapped)
+			n++;
+	}
+	return n;
 }
 
 bool tp_session_lock_init(struct tp_server *s) {
