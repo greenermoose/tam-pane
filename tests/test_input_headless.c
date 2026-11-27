@@ -4333,6 +4333,23 @@ int main(void) {
 								rep, sizeof(rep)));
 		CHECK(strstr(rep, "bind\tmods=") != NULL);
 
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+								"lock /usr/bin/true\n", rep, sizeof(rep)));
+		CHECK(strstr(rep, "lock takes no arguments") != NULL);
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+								"lock\n", rep, sizeof(rep)));
+		CHECK(strstr(rep, "no locker configured") != NULL);
+
+		snprintf(server.settings.locker, sizeof(server.settings.locker),
+				 "/usr/bin/true");
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+								"lock\n", rep, sizeof(rep)));
+		CHECK(strncmp(rep, "OK\n", 3) == 0);
+		server.settings.locker[0] = '\0';
+		for (unsigned int i = 0; i < 20 && server.locker_client; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(server.locker_client == NULL);
+
 		/* Unknown command & bad dispatch return ERR */
 		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path, "bogus\n",
 								rep, sizeof(rep)));
@@ -4871,6 +4888,57 @@ int main(void) {
 			CHECK(rm->output->renderer == server.renderer);
 			CHECK(rm->output->allocator == server.allocator);
 		}
+	}
+
+	/* Focus decorations are checked after the layout fixtures. */
+	{
+		server.settings.border_width = 3;
+		struct test_window first = {0}, second = {0};
+		configure_window_app(&client, &first, "border-first", "Border first");
+		for (unsigned int i = 0; i < 30; i++)
+			if (!pump(&client, &server)) goto fail;
+		struct tp_client *first_client = tp_focused(&server);
+		configure_window_app(&client, &second, "border-second", "Border second");
+		for (unsigned int i = 0; i < 30; i++)
+			if (!pump(&client, &server)) goto fail;
+		struct tp_client *second_client = tp_focused(&server);
+		CHECK(first_client && second_client && first_client != second_client);
+		if (first_client && second_client && first_client != second_client) {
+			struct tp_rect first_content = first_client->content_geom;
+			struct tp_rect second_content = second_client->content_geom;
+			const struct wlr_scene_rect *edge = second_client->border[0];
+			CHECK(edge && edge->node.enabled);
+			if (edge) {
+				CHECK(edge->height == 3 && edge->width == second_client->geom.w);
+				CHECK(edge->color[0] == 0.0f && edge->color[1] == 1.0f &&
+					  edge->color[2] == 0.0f && edge->color[3] == 1.0f);
+			}
+			CHECK(second_content.w == second_client->geom.w - 6);
+			double x = server.cursor->x, y = server.cursor->y;
+			char rep[256];
+			CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+					"dispatch focus_app border-first\n", rep, sizeof(rep)));
+			CHECK(tp_focused(&server) == first_client);
+			CHECK(server.cursor->x == x && server.cursor->y == y);
+			CHECK(first_client->border[0] && first_client->border[0]->node.enabled);
+			CHECK(edge && !edge->node.enabled);
+			CHECK(first_client->content_geom.w == first_content.w &&
+				  first_client->content_geom.h == first_content.h);
+			CHECK(second_client->content_geom.w == second_content.w &&
+				  second_client->content_geom.h == second_content.h);
+			tp_client_set_fullscreen(first_client, true);
+			tp_arrange_flush(&server);
+			CHECK(!first_client->border[0]->node.enabled);
+			tp_client_set_fullscreen(first_client, false);
+			tp_arrange_flush(&server);
+			CHECK(first_client->border[0]->node.enabled);
+			server.settings.border_width = 0;
+			tp_arrange_all(&server);
+			tp_arrange_flush(&server);
+			CHECK(!first_client->border[0]->node.enabled);
+		}
+		destroy_window(&first);
+		destroy_window(&second);
 	}
 
 	unlink(lua_cfg);

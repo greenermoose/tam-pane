@@ -3,12 +3,17 @@ WHATNOW
 What tam-pane is doing now and what comes next. Read this first; revise
 it at the end of every session (work/README-work).
 
-Updated: 2026-11-26, with W35
+Updated: 2026-11-26, with W36
 
 
 STATE
 
-  Version 0.2.10 on branch dev (W35): implements GPU renderer-loss recovery
+  Version 0.2.11 on dev (W36) adds the opt-in bright green focus frame
+  and a configured manual locker. Tamlinux selects a three-logical-pixel
+  border and tam-hide. Native headless tests passed (794 checks).
+  Physical focus, scaling and authenticated unlock await candidate Test.
+
+  Version 0.2.10 (W35): implements GPU renderer-loss recovery
   (R1 finding 11, Tamlinux 0.7.0 Milestone 9). Listens to
   `renderer->events.lost`, defers recovery to an idle source so wlroots
   destroys the old renderer cleanly outside `wl_signal_emit_mutable`,

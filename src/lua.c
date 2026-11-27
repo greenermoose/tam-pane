@@ -353,6 +353,12 @@ static int l_tp_config(lua_State *L) {
 			s->gap_inner = check_int_range(L, -1, key, 0, 256);
 		} else if (strcmp(key, "gap_outer") == 0) {
 			s->gap_outer = check_int_range(L, -1, key, 0, 256);
+		} else if (strcmp(key, "border_width") == 0) {
+			s->border_width = check_int_range(L, -1, key, 0, 16);
+		} else if (strcmp(key, "locker") == 0) {
+			check_string_buf(L, -1, key, true, s->locker, sizeof(s->locker));
+			if (s->locker[0] && s->locker[0] != '/')
+				return luaL_error(L, "tp.config.locker: expected an absolute path");
 		} else if (strcmp(key, "split_ratio") == 0) {
 			s->split_ratio = check_float_range(L, -1, key, 0.05f, 0.95f);
 		} else if (strcmp(key, "width_bias") == 0) {

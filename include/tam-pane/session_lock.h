@@ -29,6 +29,6 @@ void tp_session_lock_focus_surface(struct tp_server *s,
 /* Launch a locker process over a pre-created WAYLAND_SOCKET and grant that
  * exact wl_client access to ext_session_lock_manager_v1. */
 void tp_session_lock_launch(struct tp_server *s, const char *cmd);
-void tp_session_lock_launch_argv(struct tp_server *s, const char *const argv[]);
+bool tp_session_lock_launch_argv(struct tp_server *s, const char *const argv[]);
 
 #endif

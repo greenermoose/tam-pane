@@ -38,6 +38,9 @@ struct tp_client {
 	struct wlr_xdg_toplevel *toplevel;
 	struct wlr_xwayland_surface *xwayland;
 	struct wlr_scene_tree *tree;
+	struct wlr_scene_tree *content;
+	struct wlr_scene_rect *border[4];
+	struct tp_rect content_geom;
 	tp_tags_t tags;
 	bool mapped;
 	bool associated; /* XWayland: surface map/unmap listeners attached */
@@ -86,6 +89,8 @@ void tp_client_apply_unmap(struct tp_client *c);
 bool tp_client_visible(const struct tp_client *c);
 
 /* Move and resize the window. */
+bool tp_client_create_scene(struct tp_client *c, struct wlr_surface *surface);
+void tp_client_destroy_scene(struct tp_client *c);
 void tp_client_place(struct tp_client *c, struct tp_rect box);
 
 #define TP_FLOAT_MIN_W 64

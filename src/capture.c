@@ -56,7 +56,7 @@ static void on_new_toplevel_capture_request(struct wl_listener *l, void *data) {
 	if (!c->capture_source) {
 		c->capture_source =
 			wlr_ext_image_capture_source_v1_create_with_scene_node(
-				&c->tree->node, s->loop, s->allocator, s->renderer);
+				&c->content->node, s->loop, s->allocator, s->renderer);
 		if (!c->capture_source) {
 			tam_log_warn("capture: cannot create toplevel capture source");
 			return;

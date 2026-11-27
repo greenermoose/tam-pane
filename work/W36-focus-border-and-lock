@@ -1,0 +1,34 @@
+W36 FOCUS BORDER AND CONFIGURED LOCKER
+
+Date: 2026-11-26
+AI harness: Codex 0.172.0
+AI model: gpt-6.2-sol
+Commits: this record accompanies the implementation
+
+GUIDANCE
+
+  Fred: "Make the focus border three logical pixels instead of just two.
+  I'd like a more obvious border. Make sure the green is bright."
+  Fred: "Implement the plan."
+
+DONE
+
+  - Added a solid bright green focus frame using the wlroots scene.
+    The frame is opt-in for standalone tam-pane and keeps layout stable
+    when focus changes. Output capture includes the frame, while window
+    capture uses the application's scene subtree.
+  - Added an argument-free IPC request for the locker configured in Lua.
+    The compositor grants the lock protocol on a private Wayland socket.
+  - Passed the native compositor suite, including 794 headless checks.
+    Syntax-checked the optional XWayland source. Verified the Tamlinux
+    Lock command with tam-hide in a two-output headless session and ran
+    the tam-hide fail-closed integration test.
+
+FAILED
+
+  - The sandbox blocked Wayland socket creation. The isolated tests
+    passed when run with host access.
+
+HANDOFF
+
+  - Check physical focus and authenticated unlock in the 0.7.1 Test.

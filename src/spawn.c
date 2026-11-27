@@ -19,7 +19,7 @@
  * compositor's log. A Wayland client given a socket gets it as
  * WAYLAND_SOCKET.
  */
-static void spawn_detached(const char *const argv[], int wayland_fd) {
+static bool spawn_detached(const char *const argv[], int wayland_fd) {
 	char fd_env[48];
 	const char *env[2] = {NULL, NULL};
 	tam_proc_opts_t opts = {.keep_stdio = true};
@@ -29,10 +29,12 @@ static void spawn_detached(const char *const argv[], int wayland_fd) {
 		opts.keep_fd = wayland_fd;
 		opts.env = env;
 	}
-	if (tam_spawn_detached_opts(argv, &opts) < 0)
+	bool started = tam_spawn_detached_opts(argv, &opts) >= 0;
+	if (!started)
 		tam_log_error("spawn: cannot run '%s': %s", argv[0], strerror(errno));
 	if (wayland_fd >= 0)
 		close(wayland_fd);
+	return started;
 }
 
 void tp_spawn(const char *cmd) {
@@ -58,11 +60,11 @@ void tp_spawn_with_fd(const char *cmd, int wayland_fd) {
 	spawn_detached(argv, wayland_fd);
 }
 
-void tp_spawn_with_fd_argv(const char *const argv[], int wayland_fd) {
+bool tp_spawn_with_fd_argv(const char *const argv[], int wayland_fd) {
 	if (!argv || !argv[0] || !*argv[0]) {
 		if (wayland_fd >= 0)
 			close(wayland_fd);
-		return;
+		return false;
 	}
-	spawn_detached(argv, wayland_fd);
+	return spawn_detached(argv, wayland_fd);
 }

@@ -82,18 +82,14 @@ static bool xwayland_should_float(const struct wlr_xwayland_surface *xs) {
 
 static void managed_on_map(struct wl_listener *l, void *data) {
 	struct tp_client *c = wl_container_of(l, c, map);
-	struct tp_server *s = c->server;
 	struct wlr_xwayland_surface *xs = c->xwayland;
 	if (!xs || !xs->surface)
 		return;
 
-	c->tree = wlr_scene_subsurface_tree_create(s->layer[TP_LAYER_TILE],
-											   xs->surface);
-	if (!c->tree) {
+	if (!tp_client_create_scene(c, xs->surface)) {
 		tam_log_error("xwayland map: cannot create scene tree");
 		return;
 	}
-	c->tree->node.data = c;
 	wlr_xwayland_surface_set_minimized(xs, false);
 
 	struct tp_rect init = {
@@ -108,10 +104,7 @@ static void managed_on_map(struct wl_listener *l, void *data) {
 static void managed_on_unmap(struct wl_listener *l, void *data) {
 	struct tp_client *c = wl_container_of(l, c, unmap);
 	tp_client_apply_unmap(c);
-	if (c->tree) {
-		wlr_scene_node_destroy(&c->tree->node);
-		c->tree = NULL;
-	}
+	tp_client_destroy_scene(c);
 }
 
 static void managed_detach_surface(struct tp_client *c) {
@@ -140,10 +133,7 @@ static void managed_on_dissociate(struct wl_listener *l, void *data) {
 	struct tp_client *c = wl_container_of(l, c, dissociate);
 	if (c->mapped) {
 		tp_client_apply_unmap(c);
-		if (c->tree) {
-			wlr_scene_node_destroy(&c->tree->node);
-			c->tree = NULL;
-		}
+		tp_client_destroy_scene(c);
 	}
 	managed_detach_surface(c);
 }
@@ -162,16 +152,18 @@ static void managed_on_request_configure(struct wl_listener *l, void *data) {
 				w = TP_FLOAT_MIN_W;
 			if (h < TP_FLOAT_MIN_H)
 				h = TP_FLOAT_MIN_H;
-			c->float_geom = (struct tp_rect){ev->x, ev->y, w, h};
-			c->geom = c->float_geom;
-			if (c->tree)
-				wlr_scene_node_set_position(&c->tree->node, ev->x, ev->y);
+			int32_t border = c->content_geom.x - c->geom.x;
+			c->float_geom = (struct tp_rect){ev->x - border, ev->y - border,
+											w + 2 * border, h + 2 * border};
+			tp_client_place(c, c->float_geom);
+			return;
 		}
 		wlr_xwayland_surface_configure(xs, ev->x, ev->y, w, h);
 	} else {
-		wlr_xwayland_surface_configure(xs, (int16_t)c->geom.x,
-									   (int16_t)c->geom.y, (uint16_t)c->geom.w,
-									   (uint16_t)c->geom.h);
+		struct tp_rect content = c->content_geom;
+		wlr_xwayland_surface_configure(xs, (int16_t)content.x,
+									   (int16_t)content.y, (uint16_t)content.w,
+									   (uint16_t)content.h);
 	}
 }
 
@@ -184,9 +176,9 @@ static void managed_on_request_fullscreen(struct wl_listener *l, void *data) {
 static void managed_on_request_maximize(struct wl_listener *l, void *data) {
 	struct tp_client *c = wl_container_of(l, c, request_maximize);
 	if (c->mapped && c->xwayland) {
-		wlr_xwayland_surface_configure(c->xwayland, (int16_t)c->geom.x,
-									   (int16_t)c->geom.y, (uint16_t)c->geom.w,
-									   (uint16_t)c->geom.h);
+		wlr_xwayland_surface_configure(c->xwayland, (int16_t)c->content_geom.x,
+									   (int16_t)c->content_geom.y, (uint16_t)c->content_geom.w,
+									   (uint16_t)c->content_geom.h);
 	}
 }
 
@@ -223,12 +215,8 @@ static void managed_on_set_class(struct wl_listener *l, void *data) {
 static void managed_destroy_cleanup(struct tp_client *c) {
 	if (c->mapped)
 		tp_client_apply_unmap(c);
-	if (c->tree) {
-		wlr_scene_node_destroy(&c->tree->node);
-		c->tree = NULL;
-	}
+	tp_client_destroy_scene(c);
 	managed_detach_surface(c);
-	tp_capture_client_finish(c);
 	tp_foreign_toplevel_unmap(c);
 	if (c->server->focused_client == c)
 		c->server->focused_client = NULL;

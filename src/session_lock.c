@@ -303,23 +303,27 @@ void tp_session_lock_focus_surface(struct tp_server *s,
 	enter_lock_keyboard(s, surface);
 }
 
-void tp_session_lock_launch_argv(struct tp_server *s, const char *const argv[]) {
-	if (!s || !s->display || !argv || !argv[0] || !*argv[0])
-		return;
+bool tp_session_lock_launch_argv(struct tp_server *s, const char *const argv[]) {
+	if (!s || !s->display || s->locker_client || !argv || !argv[0] || !*argv[0])
+		return false;
 	int sv[2] = {-1, -1};
 	if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, sv) < 0) {
 		tam_log_error("session-lock: socketpair failed: %s", strerror(errno));
-		return;
+		return false;
 	}
 	struct wl_client *cl = wl_client_create(s->display, sv[0]);
 	if (!cl) {
 		tam_log_error("session-lock: wl_client_create failed");
 		close(sv[0]);
 		close(sv[1]);
-		return;
+		return false;
 	}
 	tp_security_set_locker_client(s, cl);
-	tp_spawn_with_fd_argv(argv, sv[1]);
+	if (!tp_spawn_with_fd_argv(argv, sv[1])) {
+		wl_client_destroy(cl);
+		return false;
+	}
+	return true;
 }
 
 void tp_session_lock_launch(struct tp_server *s, const char *cmd) {

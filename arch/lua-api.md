@@ -66,6 +66,8 @@ or out-of-range values raise a Lua error.
 | `gaps` | integer | `0..256`; sets both `gap_inner` and `gap_outer` (overridden by specific keys) | `8` |
 | `gap_inner` | integer | `0..256` pixels between tiled windows | `8` |
 | `gap_outer` | integer | `0..256` pixels between windows and usable monitor edge | `8` |
+| `border_width` | integer | `0..16` logical pixels for the focused window's green border. `0` disables the frame. | `0` |
+| `locker` | string | Absolute executable path for `tam-pane msg lock`. An empty string disables the command. | `""` |
 | `split_ratio` | number | `0.05..0.95` first child's share for a new split | `0.5` |
 | `width_bias` | number | `0.1..10.0` side-by-side when `w > h * width_bias` | `1.0` |
 | `preserve_split` | boolean | keep each split's initial orientation | `false` |

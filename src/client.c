@@ -59,8 +59,8 @@ static void popup_unconstrain(struct wlr_xdg_popup *popup) {
 	struct tp_rect r = c->fullscreen ? c->mon->area : c->mon->usable;
 	struct wlr_box g = c->toplevel->base->geometry;
 	struct wlr_box box = {
-		.x = r.x - (c->geom.x - g.x),
-		.y = r.y - (c->geom.y - g.y),
+		.x = r.x - (c->content_geom.x - g.x),
+		.y = r.y - (c->content_geom.y - g.y),
 		.width = r.w,
 		.height = r.h,
 	};
@@ -207,7 +207,7 @@ void tp_client_apply_map(struct tp_client *c, struct tp_rect initial_geom,
 	else
 		c->tags = c->mon ? tp_tagview_current(&c->mon->view) : tp_tag_mask(1);
 
-	c->geom = c->float_geom =
+	c->geom = c->float_geom = c->content_geom =
 		(struct tp_rect){0, 0, initial_geom.w, initial_geom.h};
 	c->floating = default_floating;
 	if (rule.has_floating)
@@ -267,6 +267,7 @@ void tp_client_apply_unmap(struct tp_client *c) {
 	bool had_focus = tp_focused(s) == c;
 
 	c->mapped = false;
+	wlr_scene_node_set_enabled(&c->tree->node, false);
 	c->fullscreen = false;
 	c->scratchpad = false;
 	c->scratchpad_visible = false;
@@ -321,7 +322,7 @@ static void on_unmap(struct wl_listener *l, void *data) {
 
 static void on_destroy(struct wl_listener *l, void *data) {
 	struct tp_client *c = wl_container_of(l, c, destroy);
-	tp_capture_client_finish(c);
+	tp_client_destroy_scene(c);
 	tp_decoration_detach_client(c);
 	tp_foreign_toplevel_unmap(c);
 	if (c->server->focused_client == c)
@@ -364,6 +365,31 @@ static void on_request_maximize(struct wl_listener *l, void *data) {
 		wlr_xdg_surface_schedule_configure(c->toplevel->base);
 }
 
+bool tp_client_create_scene(struct tp_client *c, struct wlr_surface *surface) {
+	c->tree = wlr_scene_tree_create(c->server->layer[TP_LAYER_TILE]);
+	if (!c->tree)
+		return false;
+	c->content = surface ? wlr_scene_subsurface_tree_create(c->tree, surface)
+						 : wlr_scene_xdg_surface_create(c->tree, c->toplevel->base);
+	if (!c->content) {
+		tp_client_destroy_scene(c);
+		return false;
+	}
+	c->tree->node.data = c;
+	c->content->node.data = c;
+	wlr_scene_node_set_enabled(&c->tree->node, false);
+	return true;
+}
+
+void tp_client_destroy_scene(struct tp_client *c) {
+	tp_capture_client_finish(c);
+	if (c->tree)
+		wlr_scene_node_destroy(&c->tree->node);
+	c->tree = c->content = NULL;
+	for (size_t i = 0; i < 4; i++)
+		c->border[i] = NULL;
+}
+
 static void on_new_toplevel(struct wl_listener *l, void *data) {
 	struct tp_server *s = wl_container_of(l, s, new_toplevel);
 	struct wlr_xdg_toplevel *toplevel = data;
@@ -376,10 +402,12 @@ static void on_new_toplevel(struct wl_listener *l, void *data) {
 	c->id = ++s->next_client_id;
 	c->server = s;
 	c->toplevel = toplevel;
-	c->tree = wlr_scene_xdg_surface_create(s->layer[TP_LAYER_TILE],
-										   toplevel->base);
-	c->tree->node.data = c;
-	toplevel->base->data = c->tree;
+	if (!tp_client_create_scene(c, NULL)) {
+		tam_log_error("new window: cannot create scene tree");
+		free(c);
+		return;
+	}
+	toplevel->base->data = c->content;
 	wl_list_init(&c->link);
 	wl_list_init(&c->flink);
 
@@ -462,9 +490,43 @@ bool tp_client_is_xwayland(const struct tp_client *c) {
 	return c && c->kind == TP_CLIENT_XWAYLAND;
 }
 
+static int32_t client_border_width(const struct tp_client *c) {
+	int32_t width = c->server->settings.border_width;
+	if (c->fullscreen || c->geom.w <= 2 * width || c->geom.h <= 2 * width)
+		return 0;
+	return width;
+}
+
+static void update_border(struct tp_client *c, bool active) {
+	const float green[4] = {0.0f, 1.0f, 0.0f, 1.0f};
+	int32_t b = client_border_width(c);
+	bool show = active && c->tree && b > 0 && tp_client_visible(c);
+	struct tp_rect edges[4] = {
+		{0, 0, c->geom.w, b}, {0, c->geom.h - b, c->geom.w, b},
+		{0, b, b, c->geom.h - 2 * b},
+		{c->geom.w - b, b, b, c->geom.h - 2 * b},
+	};
+	for (size_t i = 0; i < 4; i++) {
+		struct tp_rect edge = edges[i];
+		if (show && !c->border[i]) {
+			c->border[i] = wlr_scene_rect_create(c->tree, edge.w, edge.h, green);
+			if (c->border[i])
+				wlr_scene_node_lower_to_bottom(&c->border[i]->node);
+		}
+		if (!c->border[i])
+			continue;
+		if (show) {
+			wlr_scene_rect_set_size(c->border[i], edge.w, edge.h);
+			wlr_scene_node_set_position(&c->border[i]->node, edge.x, edge.y);
+		}
+		wlr_scene_node_set_enabled(&c->border[i]->node, show);
+	}
+}
+
 void tp_client_set_activated(struct tp_client *c, bool activated) {
 	if (!c)
 		return;
+	update_border(c, activated);
 	if (c->kind == TP_CLIENT_XWAYLAND)
 		tp_xwayland_set_activated(c, activated);
 	else if (c->toplevel)
@@ -480,16 +542,23 @@ bool tp_client_visible(const struct tp_client *c) {
 }
 
 void tp_client_place(struct tp_client *c, struct tp_rect box) {
-	bool resized = box.w != c->geom.w || box.h != c->geom.h;
 	c->geom = box;
-	if (c->tree)
+	int32_t border = client_border_width(c);
+	struct tp_rect content = tp_rect_inset(box, border);
+	bool resized = content.w != c->content_geom.w ||
+				   content.h != c->content_geom.h;
+	c->content_geom = content;
+	if (c->tree) {
 		wlr_scene_node_set_position(&c->tree->node, box.x, box.y);
+		wlr_scene_node_set_position(&c->content->node, border, border);
+		update_border(c, c->server->focused_client == c && !c->server->locked);
+	}
 	if (c->kind == TP_CLIENT_XWAYLAND) {
-		tp_xwayland_place(c, box);
+		tp_xwayland_place(c, content);
 	} else if (resized && c->toplevel) {
 		/* Each size request costs the client a configure and a redraw, so
 		 * send one only when the size really changes. */
-		wlr_xdg_toplevel_set_size(c->toplevel, box.w, box.h);
+		wlr_xdg_toplevel_set_size(c->toplevel, content.w, content.h);
 	}
 }
 
@@ -756,7 +825,11 @@ struct tp_client *tp_client_at(struct tp_server *s, double x, double y,
 	double lx, ly;
 	struct wlr_scene_node *node =
 		wlr_scene_node_at(&s->scene->tree.node, x, y, &lx, &ly);
-	if (!node || node->type != WLR_SCENE_NODE_BUFFER)
+	if (!node)
+		return NULL;
+	if (node->type == WLR_SCENE_NODE_RECT)
+		return node->parent->node.data;
+	if (node->type != WLR_SCENE_NODE_BUFFER)
 		return NULL;
 	struct wlr_scene_surface *ss =
 		wlr_scene_surface_try_from_buffer(wlr_scene_buffer_from_node(node));

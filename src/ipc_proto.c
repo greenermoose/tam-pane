@@ -853,6 +853,7 @@ static void msg_usage(FILE *out) {
 		"  cursor                     show pointer coordinates and monitor\n"
 		"  binds                      list active key bindings\n"
 		"  keyboards                  list seat keyboards and active layouts\n"
+		"  lock                       start the configured session locker\n"
 		"  reload                     reload init.lua and report errors\n"
 		"  dispatch <action> [args]   run a compositor dispatcher\n"
 		"  subscribe [events...]      stream events until EOF or signal\n");

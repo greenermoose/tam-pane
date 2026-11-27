@@ -18,6 +18,7 @@
 #include "tam-pane/output_power.h"
 #include "tam-pane/server.h"
 #include "tam-pane/server_events.h"
+#include "tam-pane/session_lock.h"
 #include "tam-pane/workspace.h"
 #include <errno.h>
 #include <fcntl.h>
@@ -484,6 +485,19 @@ static bool handle_line(struct tp_ipc_client *c, char *line) {
 		bool ok = ipc_client_queue(c, reply, tam_str_len(reply));
 		tam_str_free(reply);
 		return ok;
+	}
+
+	if (strcmp(line, "lock") == 0) {
+		if (*args)
+			return ipc_send_err(c, "lock takes no arguments");
+		if (s->locker_client)
+			return ipc_send_err(c, "locker already running");
+		if (!s->settings.locker[0])
+			return ipc_send_err(c, "no locker configured");
+		const char *argv[] = {s->settings.locker, NULL};
+		if (access(argv[0], X_OK) != 0 || !tp_session_lock_launch_argv(s, argv))
+			return ipc_send_err(c, "could not start configured locker");
+		return ipc_client_queue(c, "OK\nEND\n", 7);
 	}
 
 	if (strcmp(line, "reload") == 0) {
