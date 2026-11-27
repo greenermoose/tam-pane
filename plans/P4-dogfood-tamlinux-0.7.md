@@ -20,11 +20,13 @@ Hyprland still installed as the fallback session.
 
 ## Design work from review R1
 
-- **Surviving a GPU reset (R1 finding 11).** tam-pane does not listen to
-  the renderer's `lost` event, so a GPU reset ends the session. Recreate
-  the renderer and allocator and re-initialize the outputs, as dwl and
-  sway do. It needs real hardware to check, so it belongs here, before
-  the full working day in Acceptance.
+- **Surviving a GPU reset (R1 finding 11).** Implemented in `0.2.10`:
+  `tam-pane` listens to `renderer->events.lost`, recreates the renderer and
+  allocator, updates `wlr_compositor_set_renderer`, resets cached toplevel
+  capture sources, re-initializes rendering on every active output, and
+  re-arms the listener (verified by headless double-reset test in
+  `tests/test_input_headless.c`; real-hardware check remains for the
+  bosgame Test trial).
 
 ## Acceptance
 

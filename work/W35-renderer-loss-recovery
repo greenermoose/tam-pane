@@ -1,0 +1,37 @@
+W35: Renderer-loss recovery (0.2.10, R1 finding 11)
+
+Date: 2026-11-26
+Agent: agy (Gemini)
+Branch: dev
+
+SUMMARY
+
+  Implemented R1 finding 11 (surviving a GPU reset) for Tamlinux 0.7.0
+  Milestone 9 / plans/P4-dogfood-tamlinux-0.7.md:
+  - Added `renderer_lost` listener, `renderer_lost_idle` event source, and
+    `renderer_recoveries` counter to `struct tp_server` in
+    `include/tam-pane/server.h`.
+  - Added `tp_capture_reset_sources()` in `include/tam-pane/capture.h` and
+    `src/capture.c` to detach cached toplevel capture sources created with
+    the old renderer/allocator.
+  - Wired `s->renderer->events.lost` in `src/server.c`: `on_renderer_lost`
+    detaches itself and schedules `on_renderer_lost_idle` (so
+    `wlr_renderer_destroy` runs outside `wl_signal_emit_mutable`, avoiding
+    wlroots' `wl_list_empty(&r->events.lost.listener_list)` assertion).
+    `on_renderer_lost_idle` recreates `wlr_renderer` and `wlr_allocator`,
+    re-arms `renderer_lost`, updates `wlr_compositor_set_renderer`, resets
+    cached capture sources, re-initializes every active output via
+    `wlr_output_init_render` + `wlr_output_schedule_frame`, destroys the old
+    allocator and renderer, and increments `renderer_recoveries`.
+  - Added a back-to-back double-reset headless test in
+    `tests/test_input_headless.c`, bumped `VERSION` to `0.2.10`, updated
+    `plans/P4-dogfood-tamlinux-0.7.md`, and installed to
+    `~/.local/bin/tam-pane`.
+
+VERIFICATION
+
+  - `make test` passed: test_tags (28), test_dwindle (143), test_layouts
+    (102), test_lua (599), test_ipc (150), test_chord (ok), smoke-headless
+    (6/6), test_input_headless (772/772 including renderer recovery #1 and #2).
+  - `make install PREFIX=$HOME/.local` installed `~/.local/bin/tam-pane`
+    reporting `tam-pane 0.2.10`.

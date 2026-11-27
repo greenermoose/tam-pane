@@ -4840,6 +4840,39 @@ int main(void) {
 	}
 #endif
 
+	/* ---- Renderer-loss recovery (R1 finding 11, 0.2.10) ---- */
+	{
+		struct wlr_renderer *r0 = server.renderer;
+		struct wlr_allocator *a0 = server.allocator;
+		CHECK(r0 != NULL && a0 != NULL);
+		CHECK(server.renderer_recoveries == 0);
+
+		wl_signal_emit_mutable(&server.renderer->events.lost, NULL);
+		wl_event_loop_dispatch(server.loop, 0);
+		CHECK(server.renderer_recoveries == 1);
+		CHECK(server.renderer != NULL && server.renderer != r0);
+		CHECK(server.allocator != NULL && server.allocator != a0);
+		CHECK(server.renderer_lost.notify != NULL);
+		struct tp_monitor *rm;
+		wl_list_for_each(rm, &server.monitors, link) {
+			CHECK(rm->output->renderer == server.renderer);
+			CHECK(rm->output->allocator == server.allocator);
+		}
+
+		/* Second back-to-back reset verifies listener re-arming. */
+		struct wlr_renderer *r1 = server.renderer;
+		struct wlr_allocator *a1 = server.allocator;
+		wl_signal_emit_mutable(&server.renderer->events.lost, NULL);
+		wl_event_loop_dispatch(server.loop, 0);
+		CHECK(server.renderer_recoveries == 2);
+		CHECK(server.renderer != NULL && server.renderer != r1);
+		CHECK(server.allocator != NULL && server.allocator != a1);
+		wl_list_for_each(rm, &server.monitors, link) {
+			CHECK(rm->output->renderer == server.renderer);
+			CHECK(rm->output->allocator == server.allocator);
+		}
+	}
+
 	unlink(lua_cfg);
 	rmdir(lua_dir);
 

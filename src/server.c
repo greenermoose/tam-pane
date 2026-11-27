@@ -35,6 +35,7 @@
 #include <wlr/types/wlr_ext_data_control_v1.h>
 #include <wlr/types/wlr_fractional_scale_v1.h>
 #include <wlr/types/wlr_layer_shell_v1.h>
+#include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_presentation_time.h>
 #include <wlr/types/wlr_primary_selection_v1.h>
@@ -42,6 +43,77 @@
 #include <wlr/types/wlr_subcompositor.h>
 #include <wlr/types/wlr_viewporter.h>
 #include <wlr/types/wlr_xdg_shell.h>
+
+static void on_renderer_lost(struct wl_listener *l, void *data);
+
+static void on_renderer_lost_idle(void *data) {
+	struct tp_server *s = data;
+	s->renderer_lost_idle = NULL;
+	if (!s || s->stopping)
+		return;
+
+	tam_log_warn("renderer lost (GPU reset); recreating renderer and allocator");
+
+	struct wlr_renderer *renderer = wlr_renderer_autocreate(s->backend);
+	if (!renderer) {
+		tam_log_error("renderer recovery failed: cannot create a new renderer");
+		return;
+	}
+	struct wlr_allocator *allocator =
+		wlr_allocator_autocreate(s->backend, renderer);
+	if (!allocator) {
+		tam_log_error("renderer recovery failed: cannot create a new allocator");
+		wlr_renderer_destroy(renderer);
+		return;
+	}
+
+	struct wlr_renderer *old_renderer = s->renderer;
+	struct wlr_allocator *old_allocator = s->allocator;
+
+	s->renderer = renderer;
+	s->allocator = allocator;
+	s->renderer_lost.notify = on_renderer_lost;
+	wl_signal_add(&s->renderer->events.lost, &s->renderer_lost);
+
+	if (s->compositor)
+		wlr_compositor_set_renderer(s->compositor, s->renderer);
+
+	tp_capture_reset_sources(s);
+
+	struct tp_monitor *m;
+	wl_list_for_each(m, &s->monitors, link) {
+		if (!m->output)
+			continue;
+		if (!wlr_output_init_render(m->output, s->allocator, s->renderer)) {
+			tam_log_error("output %s: failed to re-initialize rendering after GPU reset",
+						  m->output->name ? m->output->name : "?");
+			continue;
+		}
+		wlr_output_schedule_frame(m->output);
+	}
+
+	if (old_allocator)
+		wlr_allocator_destroy(old_allocator);
+	if (old_renderer)
+		wlr_renderer_destroy(old_renderer);
+
+	s->renderer_recoveries++;
+	tam_log_info("renderer recovered (#%u)", s->renderer_recoveries);
+}
+
+static void on_renderer_lost(struct wl_listener *l, void *data) {
+	(void)data;
+	struct tp_server *s = wl_container_of(l, s, renderer_lost);
+	if (!s || s->stopping)
+		return;
+	if (s->renderer_lost.notify) {
+		wl_list_remove(&s->renderer_lost.link);
+		s->renderer_lost.notify = NULL;
+	}
+	if (!s->renderer_lost_idle && s->loop)
+		s->renderer_lost_idle =
+			wl_event_loop_add_idle(s->loop, on_renderer_lost_idle, s);
+}
 
 static int on_signal(int signo, void *data) {
 	tam_log_info("signal %d: shutting down", signo);
@@ -124,6 +196,8 @@ bool tp_server_init(struct tp_server *s) {
 		tam_log_error("cannot create a renderer");
 		return false;
 	}
+	s->renderer_lost.notify = on_renderer_lost;
+	wl_signal_add(&s->renderer->events.lost, &s->renderer_lost);
 	wlr_renderer_init_wl_display(s->renderer, s->display);
 	s->allocator = wlr_allocator_autocreate(s->backend, s->renderer);
 	if (!s->allocator) {
@@ -294,6 +368,10 @@ void tp_server_finish(struct tp_server *s) {
 		wl_event_source_remove(s->reload_idle);
 		s->reload_idle = NULL;
 	}
+	if (s->renderer_lost_idle) {
+		wl_event_source_remove(s->renderer_lost_idle);
+		s->renderer_lost_idle = NULL;
+	}
 	tp_ipc_finish(s);
 	tp_events_finish(s);
 	tp_xwayland_finish(s);
@@ -334,6 +412,10 @@ void tp_server_finish(struct tp_server *s) {
 	s->display = NULL;
 	if (s->scene)
 		wlr_scene_node_destroy(&s->scene->tree.node);
+	if (s->renderer_lost.notify) {
+		wl_list_remove(&s->renderer_lost.link);
+		s->renderer_lost.notify = NULL;
+	}
 	if (s->allocator)
 		wlr_allocator_destroy(s->allocator);
 	if (s->renderer)

@@ -109,6 +109,8 @@ struct tp_server {
 	struct wlr_renderer *renderer;
 	struct wlr_allocator *allocator;
 	struct wlr_compositor *compositor;
+	struct wl_listener renderer_lost;
+	uint32_t renderer_recoveries;
 
 	struct wlr_scene *scene;
 	struct wlr_scene_tree *layer[TP_LAYER_COUNT];
@@ -218,6 +220,7 @@ struct tp_server {
 	struct wl_event_source *sigterm, *sigint, *sighup;
 	struct wl_event_source *reload_idle;
 	struct wl_event_source *arrange_idle;
+	struct wl_event_source *renderer_lost_idle;
 	/* Switch to VT n (1..12) for Ctrl+Alt+F-keys. Set only when tam-pane
 	 * owns a session (DRM); NULL nested or headless. Tests may set their
 	 * own. */

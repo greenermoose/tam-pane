@@ -3,10 +3,20 @@ WHATNOW
 What tam-pane is doing now and what comes next. Read this first; revise
 it at the end of every session (work/README-work).
 
-Updated: 2026-11-26, with W34
+Updated: 2026-11-26, with W35
 
 
 STATE
+
+  Version 0.2.10 on branch dev (W35): implements GPU renderer-loss recovery
+  (R1 finding 11, Tamlinux 0.7.0 Milestone 9). Listens to
+  `renderer->events.lost`, defers recovery to an idle source so wlroots
+  destroys the old renderer cleanly outside `wl_signal_emit_mutable`,
+  recreates `wlr_renderer` and `wlr_allocator`, updates
+  `wlr_compositor_set_renderer`, resets cached toplevel capture sources,
+  re-initializes rendering on every active output, and re-arms the listener.
+  Verified by back-to-back double-reset checks in `test_input_headless`
+  (772/772) and installed locally at `~/.local/bin/tam-pane`.
 
   Version 0.2.9 on branch dev (W34): onto libtam's shared code. Programs
   start through tam_spawn_detached_opts (output kept on the log,

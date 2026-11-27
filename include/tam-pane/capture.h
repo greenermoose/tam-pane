@@ -24,6 +24,10 @@ void tp_capture_finish(struct tp_server *s);
 /* Detach any cached toplevel capture source when a client unmaps/destroys. */
 void tp_capture_client_finish(struct tp_client *c);
 
+/* Detach all cached toplevel capture sources on renderer loss so subsequent
+ * requests recreate them against the new renderer and allocator. */
+void tp_capture_reset_sources(struct tp_server *s);
+
 /* Launch a capture tool or portal backend over a pre-created WAYLAND_SOCKET
  * and grant that exact connection access to the raw capture globals. */
 void tp_capture_launch(struct tp_server *s, const char *cmd);

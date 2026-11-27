@@ -33,6 +33,15 @@ void tp_capture_client_finish(struct tp_client *c) {
 	c->capture_source = NULL;
 }
 
+void tp_capture_reset_sources(struct tp_server *s) {
+	if (!s)
+		return;
+	struct tp_client *c;
+	wl_list_for_each(c, &s->clients, link) {
+		tp_capture_client_finish(c);
+	}
+}
+
 static void on_new_toplevel_capture_request(struct wl_listener *l, void *data) {
 	struct tp_server *s = wl_container_of(l, s, new_toplevel_capture_request);
 	struct wlr_ext_foreign_toplevel_image_capture_source_manager_v1_request *req =
