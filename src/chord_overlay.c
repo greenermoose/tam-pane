@@ -245,10 +245,26 @@ void tp_chord_overlay_update(struct tp_server *s) {
 	int fy = panel_h - footer_h;
 	fill_rect(pb->pixels, panel_w, panel_h, 2, fy, panel_w - 4, footer_h - 2,
 			  hdr_bg);
-	const char *hint =
-		(st->mode == TP_CHORD_PLURIPOTENT)
-			? "Mod: chord | A-Z: CAPS | Up/Dn+Enter: run | Esc: cancel"
-			: "ChordKey: send | Up/Dn+Enter: run | Esc: cancel";
+	xkb_keysym_t confirm_sym =
+		st->confirm_with_secondary ? st->secondary_sym : st->chord_sym;
+	char key[32];
+	if (confirm_sym == XKB_KEY_Caps_Lock)
+		snprintf(key, sizeof(key), "CapsLock");
+	else if (st->confirm_with_secondary && confirm_sym == XKB_KEY_Alt_R)
+		snprintf(key, sizeof(key), "Tap Right Alt");
+	else
+		tp_chord_format(0, confirm_sym, key, sizeof(key));
+	char hint[96];
+	const char *action = st->sym != XKB_KEY_NoSymbol ? "send" :
+						 tp_chord_menu_ready(st) ? "run" : "cancel";
+	if (confirm_sym == XKB_KEY_NoSymbol)
+		snprintf(hint, sizeof(hint), "Use chord_cancel to close");
+	else
+		snprintf(hint, sizeof(hint), "%s: %s | %s", key, action,
+				 st->mode == TP_CHORD_PLURIPOTENT ? "Mod: chord | A-Z: CAPS | Up/Dn: menu" :
+				 st->mods != 0 ? "Type chord key | Mod: toggle" :
+				 "Up/Dn: menu | Type: filter");
+
 	draw_text(pb->pixels, panel_w, panel_h, 12, fy + 6, max_cols, hint, fg_dim);
 
 	wlr_scene_buffer_set_buffer(ov->scene_buf, &pb->base);

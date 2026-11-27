@@ -59,6 +59,7 @@ static bool ci_strstr(const char *hay, const char *needle) {
 }
 
 static void clear_pending(struct tp_chord_state *st) {
+	st->menu_navigated = false;
 	st->mods = 0;
 	st->sym = XKB_KEY_NoSymbol;
 	st->keycode = 0;
@@ -223,7 +224,6 @@ void tp_chord_init(struct tp_chord_state *st) {
 	st->enabled = true;
 	st->chord_sym = XKB_KEY_Caps_Lock;
 	st->secondary_sym = XKB_KEY_Alt_R;
-	st->cancel_sym = XKB_KEY_Escape;
 	st->mode = TP_CHORD_IDLE;
 }
 
@@ -243,7 +243,7 @@ void tp_chord_configure(struct tp_chord_state *st, bool enabled,
 	st->enabled = enabled;
 	st->chord_sym = resolve_key_name(chord_key, XKB_KEY_Caps_Lock);
 	st->secondary_sym = resolve_key_name(secondary_key, XKB_KEY_Alt_R);
-	st->cancel_sym = resolve_key_name(cancel_key, XKB_KEY_Escape);
+	(void)cancel_key; /* Legacy setting. Only the confirmation key exits. */
 	if (!enabled) {
 		st->mode = TP_CHORD_IDLE;
 		st->return_to_caps_lock = false;
@@ -254,6 +254,12 @@ void tp_chord_configure(struct tp_chord_state *st, bool enabled,
 bool tp_chord_is_composing(const struct tp_chord_state *st) {
 	return st && (st->mode == TP_CHORD_PLURIPOTENT ||
 				  st->mode == TP_CHORD_BUILDING);
+}
+
+bool tp_chord_menu_ready(const struct tp_chord_state *st) {
+	return st->mods == 0 && st->sym == XKB_KEY_NoSymbol &&
+		   (st->menu_navigated || st->filter_len > 0) &&
+		   st->selected < st->filtered_len;
 }
 
 bool tp_chord_is_caps_lock(const struct tp_chord_state *st) {
@@ -279,6 +285,7 @@ bool tp_chord_open(struct tp_chord_state *st, const struct tp_lua *lua,
 	if (!st || !st->enabled)
 		return false;
 	st->return_to_caps_lock = (st->mode == TP_CHORD_CAPS_LOCK);
+	st->confirm_with_secondary = st->chord_sym == XKB_KEY_NoSymbol;
 	clear_pending(st);
 	st->mode = pluripotent ? TP_CHORD_PLURIPOTENT : TP_CHORD_BUILDING;
 	tp_chord_rebuild_catalog(st, lua);
@@ -302,12 +309,14 @@ static struct tp_chord_result finish_or_cancel(struct tp_chord_state *st) {
 		res.sym = st->sym;
 		res.keycode = st->keycode;
 		res.ended = true;
+	} else if (tp_chord_menu_ready(st)) {
+		res.kind = TP_CHORD_RES_RUN_ITEM;
+		res.item = st->items[st->filtered[st->selected]];
+		res.ended = true;
 	} else {
 		res.cancelled = true;
 	}
-	clear_pending(st);
-	st->mode = st->return_to_caps_lock ? TP_CHORD_CAPS_LOCK : TP_CHORD_IDLE;
-	st->return_to_caps_lock = false;
+	tp_chord_cancel(st);
 	return res;
 }
 
@@ -321,7 +330,9 @@ struct tp_chord_result tp_chord_on_key(struct tp_chord_state *st,
 		return res;
 
 	/* Track solo secondary chord key (default: Right Alt tap). */
-	if (st->secondary_sym != XKB_KEY_NoSymbol && raw_sym == st->secondary_sym) {
+	if (st->secondary_sym != XKB_KEY_NoSymbol && raw_sym == st->secondary_sym &&
+		raw_sym != st->chord_sym &&
+		(!tp_chord_is_composing(st) || st->confirm_with_secondary)) {
 		if (pressed) {
 			st->secondary_down = true;
 			st->secondary_solo = true;
@@ -335,6 +346,7 @@ struct tp_chord_result tp_chord_on_key(struct tp_chord_state *st,
 		if (was_solo) {
 			if (!tp_chord_is_composing(st)) {
 				tp_chord_open(st, lua, false);
+				st->confirm_with_secondary = true;
 				/* Pass through the release so client never sees a stuck key. */
 				res.kind = TP_CHORD_RES_PASSTHROUGH;
 				res.started = true;
@@ -370,6 +382,10 @@ struct tp_chord_result tp_chord_on_key(struct tp_chord_state *st,
 			res.started = true;
 			return res;
 		}
+		if (st->confirm_with_secondary) {
+			res.kind = TP_CHORD_RES_CONSUME;
+			return res;
+		}
 		return finish_or_cancel(st);
 	}
 
@@ -387,167 +403,78 @@ struct tp_chord_result tp_chord_on_key(struct tp_chord_state *st,
 	if (st->mode == TP_CHORD_IDLE)
 		return res;
 
-	/* Inside PLURIPOTENT or BUILDING: consume releases and handle presses. */
-	if (!pressed) {
-		res.kind = TP_CHORD_RES_CONSUME;
+	/* Only the opening key can finish. Consume the other composer keys. */
+	res.kind = TP_CHORD_RES_CONSUME;
+	if (!pressed)
 		return res;
-	}
-
-	/* Cancel key (default: Escape). */
-	if (st->cancel_sym != XKB_KEY_NoSymbol && raw_sym == st->cancel_sym) {
-		tp_chord_cancel(st);
-		res.kind = TP_CHORD_RES_CONSUME;
-		res.cancelled = true;
-		return res;
-	}
 
 	uint32_t mod_bit = keysym_to_mod(raw_sym);
+	if (st->mods == 0 && (sym == XKB_KEY_Return || sym == XKB_KEY_KP_Enter))
+		return res;
 
-	if (st->mode == TP_CHORD_PLURIPOTENT) {
-		if (mod_bit != 0) {
-			st->mode = TP_CHORD_BUILDING;
-			st->mods |= mod_bit;
-			refilter(st);
-			res.kind = TP_CHORD_RES_CONSUME;
-			res.updated = true;
-			return res;
-		}
-		if (sym == XKB_KEY_Up || sym == XKB_KEY_Down ||
-			sym == XKB_KEY_Page_Up || sym == XKB_KEY_Page_Down) {
-			st->mode = TP_CHORD_BUILDING;
-			int delta = (sym == XKB_KEY_Up) ? -1 :
-						(sym == XKB_KEY_Down) ? 1 :
-						(sym == XKB_KEY_Page_Up) ? -TP_CHORD_VISIBLE_ROWS :
-						TP_CHORD_VISIBLE_ROWS;
-			move_selection(st, delta);
-			res.kind = TP_CHORD_RES_CONSUME;
-			res.updated = true;
-			return res;
-		}
-		if (sym == XKB_KEY_BackSpace) {
-			tp_chord_cancel(st);
-			res.kind = TP_CHORD_RES_CONSUME;
-			res.cancelled = true;
-			return res;
-		}
-		if ((sym == XKB_KEY_Return || sym == XKB_KEY_KP_Enter) &&
-			st->filtered_len > 0) {
-			res.kind = TP_CHORD_RES_RUN_ITEM;
-			res.item = st->items[st->filtered[st->selected]];
-			res.ended = true;
-			clear_pending(st);
-			st->mode = TP_CHORD_IDLE;
-			st->return_to_caps_lock = false;
-			return res;
-		}
-		/* Plain letter A-Z transitions from Pluripotent to Regular Caps Lock
-		 * and immediately sends that first letter uppercase. */
-		if (sym >= XKB_KEY_a && sym <= XKB_KEY_z) {
-			clear_pending(st);
-			st->mode = TP_CHORD_CAPS_LOCK;
-			st->return_to_caps_lock = false;
-			res.kind = TP_CHORD_RES_CAPS_LETTER;
-			res.mods = TP_MOD_SHIFT;
-			res.sym = sym;
-			res.keycode = keycode;
-			res.cancelled = true; /* dismiss composer overlay */
-			res.caps_changed = true;
-			return res;
-		}
-		/* Any other non-letter key enters Chord Builder with that key. */
-		st->mode = TP_CHORD_BUILDING;
-		st->sym = sym;
-		st->keycode = keycode;
-		refilter(st);
-		res.kind = TP_CHORD_RES_CONSUME;
-		res.updated = true;
+	if (st->mode == TP_CHORD_PLURIPOTENT && sym == XKB_KEY_BackSpace)
+		return res;
+
+	if (st->mode == TP_CHORD_PLURIPOTENT &&
+		sym >= XKB_KEY_a && sym <= XKB_KEY_z) {
+		clear_pending(st);
+		st->mode = TP_CHORD_CAPS_LOCK;
+		st->return_to_caps_lock = false;
+		res.kind = TP_CHORD_RES_CAPS_LETTER;
+		res.mods = TP_MOD_SHIFT;
+		res.sym = sym;
+		res.keycode = keycode;
+		res.cancelled = true; /* dismiss composer overlay */
+		res.caps_changed = true;
 		return res;
 	}
 
-	/* TP_CHORD_BUILDING */
+	bool was_building = st->mode == TP_CHORD_BUILDING;
+	st->mode = TP_CHORD_BUILDING;
 	if (mod_bit != 0) {
 		st->mods ^= mod_bit;
 		st->filter[0] = '\0';
 		st->filter_len = 0;
+		st->menu_navigated = false;
+	} else if (st->mods == 0 &&
+			   (sym == XKB_KEY_Up || sym == XKB_KEY_Down ||
+				sym == XKB_KEY_Page_Up || sym == XKB_KEY_Page_Down)) {
+		int delta = (sym == XKB_KEY_Up) ? -1 :
+					(sym == XKB_KEY_Down) ? 1 :
+					(sym == XKB_KEY_Page_Up) ? -TP_CHORD_VISIBLE_ROWS :
+					TP_CHORD_VISIBLE_ROWS;
+		st->sym = XKB_KEY_NoSymbol;
+		st->keycode = 0;
 		refilter(st);
-		res.kind = TP_CHORD_RES_CONSUME;
+		move_selection(st, delta);
+		st->menu_navigated = true;
 		res.updated = true;
 		return res;
-	}
-
-	if (st->mods == 0) {
-		if (sym == XKB_KEY_Up || sym == XKB_KEY_Down ||
-			sym == XKB_KEY_Page_Up || sym == XKB_KEY_Page_Down) {
-			int delta = (sym == XKB_KEY_Up) ? -1 :
-						(sym == XKB_KEY_Down) ? 1 :
-						(sym == XKB_KEY_Page_Up) ? -TP_CHORD_VISIBLE_ROWS :
-						TP_CHORD_VISIBLE_ROWS;
-			move_selection(st, delta);
-			res.kind = TP_CHORD_RES_CONSUME;
-			res.updated = true;
+	} else if (st->mods == 0 && sym == XKB_KEY_BackSpace) {
+		if (st->filter_len > 0)
+			st->filter[--st->filter_len] = '\0';
+		else if (st->sym != XKB_KEY_NoSymbol || st->menu_navigated)
+			clear_pending(st);
+		else
 			return res;
-		}
-		if (sym == XKB_KEY_BackSpace) {
-			if (st->filter_len > 0) {
-				st->filter[--st->filter_len] = '\0';
-				refilter(st);
-				res.kind = TP_CHORD_RES_CONSUME;
-				res.updated = true;
-				return res;
-			}
-			if (st->sym != XKB_KEY_NoSymbol) {
-				st->sym = XKB_KEY_NoSymbol;
-				st->keycode = 0;
-				refilter(st);
-				res.kind = TP_CHORD_RES_CONSUME;
-				res.updated = true;
-				return res;
-			}
-			tp_chord_cancel(st);
-			res.kind = TP_CHORD_RES_CONSUME;
-			res.cancelled = true;
+		st->menu_navigated = false;
+	} else if (was_building && st->mods == 0 && sym >= 0x20 && sym <= 0x7e) {
+		st->sym = XKB_KEY_NoSymbol;
+		st->keycode = 0;
+		if (st->filter_len + 1 >= TP_CHORD_FILTER_MAX)
 			return res;
-		}
-		if (sym == XKB_KEY_Return || sym == XKB_KEY_KP_Enter) {
-			if (st->sym != XKB_KEY_NoSymbol)
-				return finish_or_cancel(st);
-			if (st->filtered_len > 0) {
-				res.kind = TP_CHORD_RES_RUN_ITEM;
-				res.item = st->items[st->filtered[st->selected]];
-				res.ended = true;
-				clear_pending(st);
-				st->mode = st->return_to_caps_lock ? TP_CHORD_CAPS_LOCK :
-													 TP_CHORD_IDLE;
-				st->return_to_caps_lock = false;
-				return res;
-			}
-			res.kind = TP_CHORD_RES_CONSUME;
-			return res;
-		}
-		/* Printable ASCII filters the command menu by name/binding. */
-		if (sym >= 0x20 && sym <= 0x7e) {
-			if (st->filter_len + 1 < TP_CHORD_FILTER_MAX) {
-				st->filter[st->filter_len++] = (char)sym;
-				st->filter[st->filter_len] = '\0';
-				refilter(st);
-				res.kind = TP_CHORD_RES_CONSUME;
-				res.updated = true;
-			}
-			return res;
-		}
+		st->filter[st->filter_len++] = (char)sym;
+		st->filter[st->filter_len] = '\0';
+		st->menu_navigated = false;
+	} else {
 		st->sym = sym;
 		st->keycode = keycode;
-		refilter(st);
-		res.kind = TP_CHORD_RES_CONSUME;
-		res.updated = true;
-		return res;
+		st->filter[0] = '\0';
+		st->filter_len = 0;
+		st->menu_navigated = false;
 	}
 
-	/* One or more modifiers latched: any non-modifier sets the chord's key. */
-	st->sym = sym;
-	st->keycode = keycode;
 	refilter(st);
-	res.kind = TP_CHORD_RES_CONSUME;
 	res.updated = true;
 	return res;
 }

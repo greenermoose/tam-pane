@@ -3,7 +3,7 @@
 `tam-pane` is Tamlinux's tiling Wayland compositor with Lua configuration,
 written in C17 on top of `libtam`.
 
-- **Current version:** `0.4.0` (branch `dev`)
+- **Current version:** `0.4.2` (branch `dev`)
 - **Progress:** 3 of 7 phases done (P1–P3 done; P4 hardware Test pending; P5 in progress)
 - **Versioning:** Semantic versioning; during 0.x, minor marks a phase and
   patch marks milestones or fixes within it.
@@ -91,6 +91,7 @@ Fred decided these on 2026-11-17:
 | --- | --- | --- |
 | **0.4.0** | Own Mesa GLES2 visuals module (`src/visuals.c`): rounded corners, rounded borders, and analytical SDF drop shadows (plain scene path when off, zero idle frames; scene-rect borders already landed in `0.2.11`/`0.2.17`) | Done (2026-11-27) |
 | **0.4.1** | Keep release-bound shortcut keys out of client input (B11) | Fix available |
+| **0.4.2** | Confirm or cancel one-hand chords with the opening key | Fix available |
 | **0.4.2** | Blur behind transparent windows and panels, with damage tracking | Planned |
 | **0.4.3** | Animations for open, close, move, and tag change, off by default on battery | Planned |
 

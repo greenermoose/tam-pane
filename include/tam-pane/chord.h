@@ -62,10 +62,11 @@ struct tp_chord_state {
 	bool enabled;
 	xkb_keysym_t chord_sym;
 	xkb_keysym_t secondary_sym;
-	xkb_keysym_t cancel_sym;
 
 	enum tp_chord_mode mode;
 	bool return_to_caps_lock;
+	bool confirm_with_secondary;
+	bool menu_navigated;
 	bool secondary_down;
 	bool secondary_solo;
 
@@ -89,13 +90,16 @@ struct tp_chord_state {
 void tp_chord_init(struct tp_chord_state *st);
 void tp_chord_finish(struct tp_chord_state *st);
 
-/* Apply chord settings (keysym names from tp_settings). */
+/* Apply chord settings. The legacy cancel key is accepted for compatibility. */
 void tp_chord_configure(struct tp_chord_state *st, bool enabled,
 						const char *chord_key, const char *secondary_key,
 						const char *cancel_key);
 
 /* True when the chord composer overlay should be visible. */
 bool tp_chord_is_composing(const struct tp_chord_state *st);
+
+/* True if the current menu selection is ready to run. */
+bool tp_chord_menu_ready(const struct tp_chord_state *st);
 
 /* True when Regular Caps Lock mode is active. */
 bool tp_chord_is_caps_lock(const struct tp_chord_state *st);

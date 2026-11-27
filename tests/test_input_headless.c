@@ -158,7 +158,8 @@ struct test_client {
 	struct wl_surface *keyboard_focus;
 	unsigned int key_events, pointer_enters, pointer_motions, pointer_buttons;
 	uint32_t keys[8], key_states[8];
-	bool slash_on_enter;
+	bool slash_on_enter, caps_on_enter;
+	uint32_t seen_locked;
 	uint32_t depressed, key_mods[8];
 	int shm_fd;
 	void *shm_data;
@@ -214,10 +215,14 @@ static void keyboard_enter(void *data, struct wl_keyboard *keyboard,
 	struct test_client *client = data;
 	client->keyboard_focus = surface;
 	client->slash_on_enter = false;
+	client->caps_on_enter = false;
 	uint32_t *key;
-	wl_array_for_each(key, keys)
+	wl_array_for_each(key, keys) {
 		if (*key == KEY_SLASH)
 			client->slash_on_enter = true;
+		if (*key == KEY_CAPSLOCK)
+			client->caps_on_enter = true;
+	}
 }
 
 static void keyboard_leave(void *data, struct wl_keyboard *keyboard,
@@ -240,7 +245,9 @@ static void keyboard_key(void *data, struct wl_keyboard *keyboard,
 static void keyboard_modifiers(void *data, struct wl_keyboard *keyboard,
 		uint32_t serial, uint32_t depressed, uint32_t latched,
 		uint32_t locked, uint32_t group) {
-	((struct test_client *)data)->depressed = depressed;
+	struct test_client *client = data;
+	client->depressed = depressed;
+	client->seen_locked |= locked;
 }
 
 static void keyboard_repeat(void *data, struct wl_keyboard *keyboard,
@@ -1773,6 +1780,49 @@ int main(void) {
 		client.key_states[2] == WL_KEYBOARD_KEY_STATE_PRESSED);
 	CHECK(client.keys[3] == 45 &&
 		client.key_states[3] == WL_KEYBOARD_KEY_STATE_RELEASED);
+
+	/* CapsLock pairs disappear from client input, including across focus. */
+	client.key_events = 0;
+	client.seen_locked = 0;
+	send_key(&keyboard, KEY_CAPSLOCK, WL_KEYBOARD_KEY_STATE_PRESSED, 30);
+	tp_focus(&server, right_tile);
+	for (unsigned int i = 0; i < 10; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(client.keyboard_focus == client.windows[1].surface);
+	CHECK(!client.caps_on_enter && !(client.seen_locked & WLR_MODIFIER_CAPS));
+	send_key(&keyboard, KEY_CAPSLOCK, WL_KEYBOARD_KEY_STATE_RELEASED, 31);
+	send_key(&keyboard, KEY_CAPSLOCK, WL_KEYBOARD_KEY_STATE_PRESSED, 32);
+	send_key(&keyboard, KEY_CAPSLOCK, WL_KEYBOARD_KEY_STATE_RELEASED, 33);
+	send_key(&keyboard, KEY_A, WL_KEYBOARD_KEY_STATE_PRESSED, 34);
+	send_key(&keyboard, KEY_A, WL_KEYBOARD_KEY_STATE_RELEASED, 35);
+	for (unsigned int i = 0; i < 10; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(client.key_events == 2 && client.keys[0] == KEY_A);
+	CHECK(client.key_mods[0] == 0 && !(client.seen_locked & WLR_MODIFIER_CAPS));
+
+	client.key_events = 0;
+	send_key(&keyboard, KEY_CAPSLOCK, WL_KEYBOARD_KEY_STATE_PRESSED, 36);
+	send_key(&keyboard, KEY_CAPSLOCK, WL_KEYBOARD_KEY_STATE_RELEASED, 37);
+	send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_PRESSED, 38);
+	send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_RELEASED, 39);
+	send_key(&keyboard, KEY_A, WL_KEYBOARD_KEY_STATE_PRESSED, 40);
+	send_key(&keyboard, KEY_A, WL_KEYBOARD_KEY_STATE_RELEASED, 41);
+	for (unsigned int i = 0; i < 10; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(client.key_events == 0);
+	send_key(&keyboard, KEY_CAPSLOCK, WL_KEYBOARD_KEY_STATE_PRESSED, 42);
+	send_key(&keyboard, KEY_CAPSLOCK, WL_KEYBOARD_KEY_STATE_RELEASED, 43);
+	send_key(&keyboard, KEY_A, WL_KEYBOARD_KEY_STATE_PRESSED, 44);
+	send_key(&keyboard, KEY_A, WL_KEYBOARD_KEY_STATE_RELEASED, 45);
+	for (unsigned int i = 0; i < 10; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(client.key_events == 6);
+	CHECK(client.keys[0] == KEY_LEFTMETA && client.keys[3] == KEY_LEFTMETA);
+	CHECK(client.keys[1] == KEY_A && client.keys[2] == KEY_A);
+	CHECK(client.key_mods[1] == WLR_MODIFIER_LOGO);
+	CHECK(client.keys[4] == KEY_A && client.key_mods[4] == 0);
+	CHECK(!(client.seen_locked & WLR_MODIFIER_CAPS));
+	tp_focus(&server, split_target);
 
 	/* Dispatch a terminal paste while the physical macro modifiers are
 	 * still held. The synthetic key and real releases must stay distinct. */

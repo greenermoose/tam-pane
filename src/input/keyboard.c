@@ -272,6 +272,13 @@ static void on_key(struct wl_listener *l, void *data) {
 		struct tp_chord_result cr = tp_chord_on_key(
 			&s->chord, s->lua, raw_sym, sym, ev->keycode, pressed, phys_mods);
 
+		/* Actions may change focus, so update the consumed keys first. */
+		if (cr.kind != TP_CHORD_RES_PASSTHROUGH && word < consumed_words) {
+			if (pressed)
+				s->kb_consumed_keys[word] |= mask;
+			else
+				s->kb_consumed_keys[word] &= ~mask;
+		}
 		if (cr.caps_changed)
 			sync_caps_leds(s);
 		if (cr.started) {
@@ -287,8 +294,6 @@ static void on_key(struct wl_listener *l, void *data) {
 
 		if (cr.kind == TP_CHORD_RES_CAPS_LETTER) {
 			synthesize_chord(s, wlr, TP_MOD_SHIFT, cr.keycode, ev->time_msec);
-			if (word < consumed_words)
-				s->kb_consumed_keys[word] |= mask;
 			return;
 		}
 		if (cr.kind == TP_CHORD_RES_RUN_ITEM) {
@@ -296,8 +301,6 @@ static void on_key(struct wl_listener *l, void *data) {
 			tp_events_emit_chord(s, TP_EVENT_CHORD_END, "menu", cr.item.desc);
 			if (s->lua)
 				tp_lua_run_bind_index(s->lua, cr.item.bind_index, s->locked);
-			if (pressed && word < consumed_words)
-				s->kb_consumed_keys[word] |= mask;
 			return;
 		}
 		if (cr.kind == TP_CHORD_RES_FINISH_CHORD) {
@@ -310,17 +313,10 @@ static void on_key(struct wl_listener *l, void *data) {
 				synthesize_chord(s, wlr, cr.mods, cr.keycode, ev->time_msec);
 				tp_events_emit_chord(s, TP_EVENT_CHORD_END, "forward", cstr);
 			}
-			if (pressed && word < consumed_words)
-				s->kb_consumed_keys[word] |= mask;
 			return;
 		}
-		if (cr.kind == TP_CHORD_RES_CONSUME) {
-			if (pressed && word < consumed_words)
-				s->kb_consumed_keys[word] |= mask;
-			else if (!pressed && word < consumed_words)
-				s->kb_consumed_keys[word] &= ~mask;
+		if (cr.kind == TP_CHORD_RES_CONSUME)
 			return;
-		}
 	}
 
 	if (pressed) {
@@ -590,5 +586,6 @@ void tp_keyboard_enter(struct tp_server *s, struct wlr_surface *surface) {
 		if (!tp_keyboard_key_consumed(s, kb->keycodes[i]))
 			keys[n++] = kb->keycodes[i];
 	}
-	wlr_seat_keyboard_notify_enter(s->seat, surface, keys, n, &kb->modifiers);
+	struct wlr_keyboard_modifiers mods = sanitized_mods(s, kb);
+	wlr_seat_keyboard_notify_enter(s->seat, surface, keys, n, &mods);
 }

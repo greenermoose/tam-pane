@@ -1,0 +1,37 @@
+W49 ONE-HAND CHORD CONFIRMATION
+
+Date: 2026-11-27
+AI harness: Codex CLI 0.172.0
+AI model: gpt-6.2-sol
+Commits: Same commit as this record.
+Transcript: Retained privately by the author.
+
+GUIDANCE
+
+  Fred: "Fix the one-hand key composer. Make it so you must press CapsLock
+  to cancel or run a command. Esc should not cancel. That way, you won't
+  leave your keyboard in CapsLock mode if you cancel or run a command.
+  CapsLock once goes to pluripotent mode, then to key chord building mode
+  if you press Alt, Ctrl, or Meta next. If you press CapLock again before
+  anything else, you cancel."
+  Fred: "Want to make sure CapsLock -> Meta -> A -> CapsLock sends Meta +
+  A. Was a little confusing. Please clarify in your plan."
+  Fred: "Implement the plan."
+
+DONE
+
+  - Made the opening key confirm or cancel. Escape can be composed,
+    Enter leaves the menu open, and Backspace edits without exiting.
+  - Kept Right Alt tap and regular uppercase typing. Filtered the Caps
+    Lock modifier on focus changes.
+  - Chord unit tests and all 1,043 headless input checks passed.
+
+FAILED
+
+  - The sandbox blocked the headless Wayland socket. The authorized
+    run outside the sandbox passed.
+
+HANDOFF
+
+  - Check the exact CapsLock sequence and lock LED on a physical
+    keyboard in the next authorized Tamlinux Test.

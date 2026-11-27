@@ -3,10 +3,14 @@ WHATNOW
 What tam-pane is doing now and what comes next. Read this first; revise
 it at the end of every session (work/README-work).
 
-Updated: 2026-11-27, with W48
+Updated: 2026-11-27, with W49
 
 
 STATE
+
+  Version 0.4.2 confirms one-hand chords with the opening key (W49).
+  Chord unit tests and 1,043 headless input checks passed. Physical
+  keyboard verification awaits Tamlinux Test.
 
   Version 0.4.1 keeps release-bound shortcut keys out of client input
   (B11, W48). Meta+Alt+slash sends one paste chord in the headless test
