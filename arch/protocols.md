@@ -18,10 +18,12 @@ classification here and in `src/security.c` in the same commit.
   to any client with a `wp_security_context_v1` sandbox context and to
   any client whose peer UID differs from the compositor's own UID.
   Direct same-UID clients are allowed (no executable-path allowlist).
-- **Exclusive OVERLAY keyboard focus (0.1.18):** reserved for the
-  configured shell connection (`tp_server.shell_client`). Ordinary
-  layer-shell use (`BACKGROUND`, `BOTTOM`, `TOP`, and non-exclusive
-  `OVERLAY` surfaces) remains available to direct same-UID clients.
+- **Exclusive OVERLAY keyboard focus:** allowed for direct same-UID,
+  non-sandboxed clients (matching `TOP` + `EXCLUSIVE` and
+  `zwlr_layer_shell_v1`). Sandboxed (`wp_security_context_v1`) and
+  cross-UID clients are denied both at the global filter and at the focus
+  check; `ext_session_lock_v1` stays above `OVERLAY` on `TP_LAYER_LOCK`
+  and strictly gated to `locker_client`.
 - **Per-role grants:**
   - **Session lock (0.2.0)** (`ext_session_lock_manager_v1`): granted
     exclusively to the locker connection launched by `tam-pane` via
@@ -71,7 +73,7 @@ classification here and in `src/security.c` in the same commit.
 | `zwp_primary_selection_device_manager_v1` | unprivileged | Middle-click primary selection for focused clients |
 | `zxdg_decoration_manager_v1` | unprivileged | CSD/SSD negotiation (server-side enforced on tiled windows) |
 | `wp_security_context_manager_v1` | privileged | Sandbox engines register restricted listen sockets; hidden from sandboxed clients per spec |
-| `zwlr_layer_shell_v1` | privileged | Panels, bars, wallpapers, launchers; exclusive OVERLAY keyboard focus is reserved for the configured shell connection |
+| `zwlr_layer_shell_v1` | privileged | Panels, bars, wallpapers, launchers, and polkit prompts; direct same-UID non-sandboxed clients allowed (including exclusive OVERLAY focus) |
 | `zwlr_foreign_toplevel_manager_v1` | privileged | Window list and activation/fullscreen/close control for bars and shells |
 | `ext_foreign_toplevel_list_v1` | privileged | Standard read-only window list |
 | `ext_workspace_manager_v1` | privileged | Per-monitor tag groups exposed as workspaces (`1`..`9`) |

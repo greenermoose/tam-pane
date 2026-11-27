@@ -8,8 +8,8 @@
  * sandbox context and to clients whose peer UID differs from the compositor's
  * own UID; direct same-UID clients are allowed.
  *
- * Exclusive OVERLAY keyboard focus is reserved for the configured shell
- * connection while ordinary layer-shell use remains available.
+ * Exclusive OVERLAY keyboard focus is allowed for direct same-UID,
+ * non-sandboxed clients (matching TOP + EXCLUSIVE and zwlr_layer_shell_v1).
  */
 #ifndef TAM_PANE_SECURITY_H
 #define TAM_PANE_SECURITY_H
@@ -39,11 +39,6 @@ bool tp_security_init(struct tp_server *s);
 
 /* Remove security listeners before display teardown. */
 void tp_security_finish(struct tp_server *s);
-
-/* Designate (or clear, with NULL) the configured shell connection allowed to
- * take exclusive OVERLAY keyboard focus. Automatically cleared on disconnect. */
-void tp_security_set_shell_client(struct tp_server *s,
-								  struct wl_client *client);
 
 /* Whether `client` may take exclusive keyboard focus on the OVERLAY layer. */
 bool tp_security_allow_exclusive_overlay(const struct tp_server *s,

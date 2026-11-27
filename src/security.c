@@ -139,31 +139,18 @@ static bool global_filter(const struct wl_client *client,
 	return true;
 }
 
-static void on_shell_client_destroy(struct wl_listener *l, void *data) {
-	struct tp_server *s = wl_container_of(l, s, shell_client_destroy);
-	wl_list_remove(&s->shell_client_destroy.link);
-	s->shell_client_destroy.notify = NULL;
-	s->shell_client = NULL;
-}
-
-void tp_security_set_shell_client(struct tp_server *s,
-								  struct wl_client *client) {
-	if (!s || s->shell_client == client)
-		return;
-	if (s->shell_client_destroy.notify) {
-		wl_list_remove(&s->shell_client_destroy.link);
-		s->shell_client_destroy.notify = NULL;
-	}
-	s->shell_client = client;
-	if (client) {
-		s->shell_client_destroy.notify = on_shell_client_destroy;
-		wl_client_add_destroy_listener(client, &s->shell_client_destroy);
-	}
-}
-
 bool tp_security_allow_exclusive_overlay(const struct tp_server *s,
 										 const struct wl_client *client) {
-	return s && client && s->shell_client == client;
+	if (!s || !client)
+		return false;
+	bool has_ctx =
+		s->security_context_mgr &&
+		wlr_security_context_manager_v1_lookup_client(s->security_context_mgr,
+													  client) != NULL;
+	uid_t peer_uid = (uid_t)-1;
+	wl_client_get_credentials((struct wl_client *)client, NULL, &peer_uid,
+							  NULL);
+	return tp_security_allow_privileged(has_ctx, peer_uid, getuid());
 }
 
 static void on_locker_client_destroy(struct wl_listener *l, void *data) {
@@ -279,7 +266,6 @@ bool tp_security_init(struct tp_server *s) {
 void tp_security_finish(struct tp_server *s) {
 	if (!s)
 		return;
-	tp_security_set_shell_client(s, NULL);
 	tp_security_set_locker_client(s, NULL);
 	if (s->capture_clients.next) {
 		struct tp_capture_client *cc, *tmp;

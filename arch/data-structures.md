@@ -30,15 +30,14 @@ the same commit as any change to them.
     (`struct tp_layer_surface *`) for exclusive or on-demand layer keyboard
     focus.
   - `security_context_mgr` (`struct wlr_security_context_manager_v1`),
-    `shell_client` (`struct wl_client *`, cleared on disconnect via
-    `shell_client_destroy`), `locker_client` (`struct wl_client *`,
+    `locker_client` (`struct wl_client *`,
     cleared on disconnect via `locker_client_destroy`, 0.2.0), and
     `capture_clients` (`struct wl_list` of authorized raw-capture
     connections, each automatically removed on disconnect, 0.2.1) for the
     global filter and per-role policies (`src/security.c`,
-    `arch/protocols.md`). Privileged globals are denied to sandboxed
-    clients and cross-UID connections, exclusive OVERLAY keyboard focus is
-    reserved for `shell_client`, `ext_session_lock_manager_v1` is granted
+    `arch/protocols.md`). Privileged globals and exclusive OVERLAY keyboard
+    focus are denied to sandboxed clients and cross-UID connections,
+    `ext_session_lock_manager_v1` is granted
     exclusively to `locker_client`, and raw capture globals are granted
     only to `capture_clients`.
   - P3 shell protocol managers (0.2.0): `foreign_toplevel_mgr` and

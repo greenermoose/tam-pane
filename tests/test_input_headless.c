@@ -2449,10 +2449,10 @@ int main(void) {
 	CHECK(server.focused_layer == NULL);
 	CHECK(tp_focused(&server) == c0);
 
-	/* Exclusive OVERLAY keyboard focus is reserved for the configured shell
-	 * connection (0.1.18, R1 #9): an ordinary client's exclusive OVERLAY
-	 * layer surface does not steal keyboard focus, while the designated
-	 * shell client's does. */
+	/* Exclusive OVERLAY keyboard focus is allowed for direct same-UID,
+	 * non-sandboxed clients (matching TOP + EXCLUSIVE and zwlr_layer_shell_v1). */
+	CHECK(tp_security_allow_exclusive_overlay(&server,
+		wl_resource_get_client(c0->toplevel->resource)));
 	struct test_layer overlay_excl;
 	create_layer(&client, &overlay_excl, ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY,
 		ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT,
@@ -2461,18 +2461,10 @@ int main(void) {
 		if (!pump(&client, &server)) goto fail;
 	for (unsigned int i = 0; i < 20; i++)
 		if (!pump(&client, &server)) goto fail;
-	CHECK(server.focused_layer == NULL);
-	CHECK(tp_focused(&server) == c0);
-	tp_security_set_shell_client(&server,
-		wl_resource_get_client(c0->toplevel->resource));
-	tp_focus_refresh(&server);
-	for (unsigned int i = 0; i < 20; i++)
-		if (!pump(&client, &server)) goto fail;
 	CHECK(server.focused_layer != NULL);
 	CHECK(client.keyboard_focus == overlay_excl.surface);
 	CHECK(tp_focused(&server) == NULL);
 	destroy_layer(&overlay_excl);
-	tp_security_set_shell_client(&server, NULL);
 	for (unsigned int i = 0; i < 50 && server.focused_layer != NULL; i++)
 		if (!pump(&client, &server)) goto fail;
 	CHECK(server.focused_layer == NULL);
@@ -3439,6 +3431,16 @@ int main(void) {
 			CHECK(!sb.has_input_method);
 			CHECK(!sb.has_wlr_data_control);
 			CHECK(!sb.has_ext_data_control);
+
+			/* Defense-in-depth: sandboxed clients are also denied exclusive
+			 * OVERLAY focus directly at the focus predicate. */
+			bool saw_denied_sandbox_client = false;
+			struct wl_client *iter;
+			wl_client_for_each(iter, wl_display_get_client_list(server.display)) {
+				if (!tp_security_allow_exclusive_overlay(&server, iter))
+					saw_denied_sandbox_client = true;
+			}
+			CHECK(saw_denied_sandbox_client);
 
 			/* Active bind rejection: attempting to bind the hidden
 			 * zwlr_layer_shell_v1 global by its numeric name must fail

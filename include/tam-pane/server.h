@@ -143,8 +143,6 @@ struct tp_server {
 	struct tp_layer_surface *focused_layer;
 
 	struct wlr_security_context_manager_v1 *security_context_mgr;
-	struct wl_client *shell_client; /* allowed exclusive OVERLAY focus */
-	struct wl_listener shell_client_destroy;
 	struct wl_client *locker_client; /* granted ext_session_lock_manager_v1 */
 	struct wl_listener locker_client_destroy;
 	struct wl_list capture_clients; /* tp_capture_client.link */
