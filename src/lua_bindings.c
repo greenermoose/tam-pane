@@ -554,6 +554,10 @@ static int l_dsp_spawn(lua_State *L) {
 	if (len == 0)
 		return luaL_error(L, "tp.dsp.spawn: command must not be empty");
 	struct tp_action act = {.kind = TP_ACT_SPAWN};
+	if (!lua_isnoneornil(L, 2)) {
+		luaL_checktype(L, 2, LUA_TBOOLEAN);
+		act.append_target = lua_toboolean(L, 2);
+	}
 	if (len >= sizeof(act.cmd))
 		return luaL_error(L, "tp.dsp.spawn: command too long (max %d bytes)",
 						  (int)(sizeof(act.cmd) - 1));
@@ -635,6 +639,13 @@ static int l_dsp_capture(lua_State *L) {
 
 static int l_dsp_mouse_move(lua_State *L) {
 	struct tp_action act = {.kind = TP_ACT_MOUSE_MOVE};
+	if (!lua_isnoneornil(L, 1)) {
+		size_t len;
+		const char *background = luaL_checklstring(L, 1, &len);
+		if (len >= sizeof(act.cmd))
+			return luaL_error(L, "tp.dsp.mouse_move: background command too long");
+		memcpy(act.cmd, background, len + 1);
+	}
 	return push_dispatcher(L, &act);
 }
 

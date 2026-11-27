@@ -15,6 +15,7 @@ static const char *const event_names[TP_EVENT_COUNT] = {
 	[TP_EVENT_WINDOW_OPEN] = "window.open",
 	[TP_EVENT_WINDOW_CLOSE] = "window.close",
 	[TP_EVENT_WINDOW_FOCUS] = "window.focus",
+	[TP_EVENT_WINDOW_CHANGE] = "window.change",
 	[TP_EVENT_TAG_CHANGE] = "tag.change",
 	[TP_EVENT_MONITOR_ADD] = "monitor.add",
 	[TP_EVENT_MONITOR_REMOVE] = "monitor.remove",
@@ -151,6 +152,7 @@ static void push_event_table(lua_State *L, const struct tp_event *ev) {
 	switch (ev->kind) {
 	case TP_EVENT_WINDOW_OPEN:
 	case TP_EVENT_WINDOW_CLOSE:
+	case TP_EVENT_WINDOW_CHANGE:
 		push_window_fields(L, &ev->window);
 		break;
 	case TP_EVENT_WINDOW_FOCUS:

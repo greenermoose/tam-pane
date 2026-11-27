@@ -2361,6 +2361,36 @@ int main(void) {
 	chord(&keyboard, KEY_DOT, false, false);
 	CHECK(server.selmon == m2 && tp_focused(&server) == c1);
 
+	/* A stationary pointer does not undo keyboard focus, but motion does. */
+	server.settings.focus_follows_mouse = true;
+	wlr_cursor_warp(server.cursor, &pointer.base, c0->geom.x + 1.0,
+					c0->geom.y + 1.0);
+	tp_pointer_refocus_now(&server);
+	CHECK(tp_focused(&server) == c1);
+	emit_motion(&server, &pointer, 0, 0, 155);
+	CHECK(tp_focused(&server) == c0 && server.selmon == m1);
+	server.settings.focus_follows_mouse = false;
+
+	/* Tiled movement is committed only on drop and preserves tiling. */
+	send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_PRESSED, 156);
+	emit_button(&server, &pointer, BTN_LEFT, WL_POINTER_BUTTON_STATE_PRESSED, 157);
+	CHECK(server.grab.mode == TP_GRAB_MOVE && server.grab.tiled);
+	CHECK(server.grab.move_outline != NULL);
+	emit_motion(&server, &pointer, m2->area.x + 40.0 - server.cursor->x, 0, 158);
+	CHECK(c0->mon == m1);
+	tp_pointer_cancel_grab(&server, c0);
+	CHECK(server.grab.mode == TP_GRAB_NONE && c0->mon == m1);
+	wlr_cursor_warp(server.cursor, &pointer.base, c0->geom.x + 1.0,
+					c0->geom.y + 1.0);
+	emit_button(&server, &pointer, BTN_LEFT, WL_POINTER_BUTTON_STATE_PRESSED, 159);
+	emit_motion(&server, &pointer, m2->area.x + 40.0 - server.cursor->x, 0, 160);
+	emit_button(&server, &pointer, BTN_LEFT, WL_POINTER_BUTTON_STATE_RELEASED, 161);
+	send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_RELEASED, 162);
+	CHECK(c0->mon == m2 && !c0->floating && tp_focused(&server) == c0);
+	CHECK(c0->tags == tp_tagview_current(&m2->view));
+	tp_client_set_monitor(c0, m1, true);
+	tp_arrange_flush(&server);
+
 	/* Dragging a floating window onto another monitor moves it there in
 	 * full: monitor, tags, focus slots and layout trees (R1 findings 6 and
 	 * 13). Then Meta+Shift+Comma brings it back and it tiles again. */
@@ -4451,6 +4481,24 @@ int main(void) {
 								rep, sizeof(rep)));
 		CHECK(strstr(rep, "window\tmonitor=") != NULL);
 		CHECK(strstr(rep, "\tfocused=1\t") != NULL);
+
+		struct tp_client *target = tp_focused(&server);
+		CHECK(target != NULL);
+		if (target) {
+			char dispatch[100];
+			snprintf(dispatch, sizeof(dispatch),
+					 "dispatch send_key_if_focused 0x%llx Ctrl+Shift+v\n",
+					 (unsigned long long)target->id);
+			CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+									dispatch, rep, sizeof(rep)));
+			CHECK(strncmp(rep, "OK\n", 3) == 0);
+			snprintf(dispatch, sizeof(dispatch),
+					 "dispatch send_key_if_focused 0x%llx Ctrl+v\n",
+					 (unsigned long long)(target->id + 1));
+			CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+									dispatch, rep, sizeof(rep)));
+			CHECK(strstr(rep, "ERR focused window changed") != NULL);
+		}
 
 		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path, "tags\n",
 								rep, sizeof(rep)));

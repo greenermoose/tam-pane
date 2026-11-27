@@ -155,7 +155,8 @@ void tp_events_emit_window(struct tp_server *s, enum tp_event_kind kind,
 						   const struct tp_client *c, bool focused) {
 	if (!event_has_listeners(s, kind))
 		return;
-	if (c && c->mon && c->mon->arrange_dirty && kind != TP_EVENT_WINDOW_CLOSE)
+	if (c && c->mon && c->mon->arrange_dirty && kind != TP_EVENT_WINDOW_CLOSE &&
+		kind != TP_EVENT_WINDOW_CHANGE)
 		tp_arrange_flush(s);
 
 	struct tp_event ev = {.kind = kind};

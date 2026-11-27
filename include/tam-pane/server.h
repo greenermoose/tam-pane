@@ -78,6 +78,7 @@ struct tp_pointer_grab {
 	struct tp_rect start_geom;
 	uint32_t edges;
 	bool tiled;
+	struct wlr_scene_tree *move_outline;
 	struct tp_layout_drag drag;
 };
 

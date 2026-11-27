@@ -1,0 +1,27 @@
+W41 INPUT AND TAGS FOR TAMLINUX 0.7.1
+
+Date: 2026-11-26
+AI harness: Codex 0.172.0
+AI model: gpt-6.2-sol
+
+GUIDANCE
+
+  Fred: "Implement the plan."
+
+DONE
+
+  - Added opt-in pointer focus and tiled cross-display dragging.
+  - Added a desktop-background action for a move binding, checked macro
+    key dispatch against the triggering window, and published window
+    tag and output changes to subscribers.
+  - The full native suite passed, including 854 headless input checks.
+
+FAILED
+
+  - The sandbox blocked private Wayland sockets. The authorized
+    headless run passed.
+
+HANDOFF
+
+  - Verify the green focus border, macros, and dragging on the recorded
+    Tamlinux candidate during physical Test.

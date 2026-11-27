@@ -595,6 +595,8 @@ void tp_client_set_tags(struct tp_client *c, tp_tags_t tags) {
 	if (c->mon)
 		tp_arrange(c->mon);
 	tp_focus_refresh(c->server);
+	tp_events_emit_window(c->server, TP_EVENT_WINDOW_CHANGE, c,
+						  tp_focused(c->server) == c);
 }
 
 void tp_client_set_floating(struct tp_client *c, bool floating) {
@@ -784,11 +786,16 @@ void tp_client_detach(struct tp_client *c) {
 
 void tp_client_attach(struct tp_client *c, struct tp_monitor *m,
 					  tp_tags_t tags) {
+	struct tp_monitor *old = c->mon;
+	tp_tags_t previous_tags = c->tags;
 	tp_client_detach(c);
 	c->mon = m;
 	if (tags & TP_TAG_ALL)
 		c->tags = tags & TP_TAG_ALL;
 	tp_foreign_toplevel_set_output(c, m ? m->output : NULL);
+	if (c->mapped && (old != m || previous_tags != c->tags))
+		tp_events_emit_window(c->server, TP_EVENT_WINDOW_CHANGE, c,
+							  tp_focused(c->server) == c);
 }
 
 void tp_client_carry_float(struct tp_client *c, struct tp_rect from,

@@ -21,7 +21,8 @@
 
 static uint32_t all_subscribable_mask(void) {
 	return (1u << TP_EVENT_WINDOW_OPEN) | (1u << TP_EVENT_WINDOW_CLOSE) |
-		   (1u << TP_EVENT_WINDOW_FOCUS) | (1u << TP_EVENT_TAG_CHANGE) |
+		   (1u << TP_EVENT_WINDOW_FOCUS) | (1u << TP_EVENT_WINDOW_CHANGE) |
+		   (1u << TP_EVENT_TAG_CHANGE) |
 		   (1u << TP_EVENT_MONITOR_ADD) | (1u << TP_EVENT_MONITOR_REMOVE) |
 		   (1u << TP_EVENT_MONITOR_FOCUS) | (1u << TP_EVENT_OUTPUT_POWER) |
 		   (1u << TP_EVENT_KEYBOARD_LAYOUT) | (1u << TP_EVENT_CONFIG_RELOAD) |
@@ -98,6 +99,7 @@ tam_str_t tp_ipc_format_event(tam_str_t s, const struct tp_event *ev) {
 	switch (ev->kind) {
 	case TP_EVENT_WINDOW_OPEN:
 	case TP_EVENT_WINDOW_CLOSE:
+	case TP_EVENT_WINDOW_CHANGE:
 	case TP_EVENT_WINDOW_FOCUS:
 		s = tam_str_cat_printf(s, "event\t%s\tmonitor=", name);
 		s = tp_ipc_escape_append(s, ev->window.monitor);
@@ -710,7 +712,21 @@ bool tp_ipc_parse_dispatch(const char *args, struct tp_action *out,
 		return true;
 	}
 
-	if (strcmp(verb, "send_key") == 0) {
+	if (strcmp(verb, "send_key") == 0 ||
+		strcmp(verb, "send_key_if_focused") == 0) {
+		if (strcmp(verb, "send_key_if_focused") == 0) {
+			char token[19];
+			char *end = NULL;
+			if (!next_token(&p, token, sizeof(token)) ||
+				strncmp(token, "0x", 2) != 0 ||
+				token[2] == '\0' ||
+				strspn(token + 2, "0123456789abcdefABCDEF") != strlen(token + 2) ||
+				(out->target_id = strtoull(token + 2, &end, 16)) == 0 || *end) {
+				if (err && err_size > 0)
+					snprintf(err, err_size, "send_key_if_focused requires a window ID");
+				return false;
+			}
+		}
 		const char *chord = skip_ws(p);
 		if (!chord || !*chord) {
 			if (err && err_size > 0)

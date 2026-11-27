@@ -23,6 +23,7 @@
 #include "tam-pane/spawn.h"
 #include "tam-pane/workspace.h"
 #include <ctype.h>
+#include <stdio.h>
 #include <string.h>
 
 static bool contains_icase(const char *haystack, const char *needle) {
@@ -100,9 +101,20 @@ void tp_action_run(struct tp_server *s, const struct tp_action *act) {
 		return;
 
 	switch (act->kind) {
-	case TP_ACT_SPAWN:
-		tp_spawn(act->cmd);
+	case TP_ACT_SPAWN: {
+		if (!act->append_target) {
+			tp_spawn(act->cmd);
+			break;
+		}
+		struct tp_client *c = tp_focused(s);
+		if (c) {
+			char command[sizeof(act->cmd) + 32];
+			snprintf(command, sizeof(command), "%s --target 0x%llx",
+					 act->cmd, (unsigned long long)c->id);
+			tp_spawn(command);
+		}
 		break;
+	}
 	case TP_ACT_TERMINAL:
 		tp_spawn(s->settings.terminal);
 		break;

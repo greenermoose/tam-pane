@@ -580,6 +580,15 @@ static bool handle_line(struct tp_ipc_client *c, char *line) {
 			return ipc_client_queue(c, "OK\nEND\n", 7);
 		}
 
+		if (act.kind == TP_ACT_SEND_KEY) {
+			struct tp_client *target = tp_focused(s);
+			if (act.target_id && (!target || target->id != act.target_id))
+				return ipc_send_err(c, "focused window changed");
+			if (!tp_keyboard_send_key(s, act.mods, act.sym))
+				return ipc_send_err(c, "could not send key");
+			return ipc_client_queue(c, "OK\nEND\n", 7);
+		}
+
 		if (act.kind == TP_ACT_QUIT) {
 			/* Send reply before requesting termination. */
 			ipc_client_queue(c, "OK\nEND\n", 7);

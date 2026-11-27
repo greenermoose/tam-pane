@@ -353,6 +353,9 @@ static int l_tp_config(lua_State *L) {
 			s->gap_inner = check_int_range(L, -1, key, 0, 256);
 		} else if (strcmp(key, "gap_outer") == 0) {
 			s->gap_outer = check_int_range(L, -1, key, 0, 256);
+		} else if (strcmp(key, "focus_follows_mouse") == 0) {
+			luaL_checktype(L, -1, LUA_TBOOLEAN);
+			s->focus_follows_mouse = lua_toboolean(L, -1);
 		} else if (strcmp(key, "border_width") == 0) {
 			s->border_width = check_int_range(L, -1, key, 0, 16);
 		} else if (strcmp(key, "locker") == 0) {

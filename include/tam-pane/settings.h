@@ -23,6 +23,7 @@ struct tp_settings {
 	int32_t gap_inner;	 /* pixels between tiled windows */
 	int32_t gap_outer;	 /* pixels between windows and the monitor edge */
 	int32_t border_width;
+	bool focus_follows_mouse;
 	char locker[TP_SETTINGS_TERMINAL_MAX];
 	float split_ratio;	 /* first child's share for a new split */
 	float width_bias;	 /* dwindle: side by side when w > h * width_bias */

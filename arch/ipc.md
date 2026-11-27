@@ -114,6 +114,7 @@ replaced with a space. Every record is guaranteed to occupy one line.
   - Subscribes the connection to compositor events. Empty arguments or
     `all` subscribe to all subscribable events:
     - `window.open`
+    - `window.change` (tag assignment or output membership updated)
     - `window.close`
     - `window.focus`
     - `tag.change`
@@ -145,3 +146,8 @@ Socket resolution order:
 Exit status is `0` on `OK`, `1` on `ERR` or connection failure, and `2` on
 CLI usage errors. For `subscribe`, each event line is flushed to `stdout`
 as it arrives.
+
+
+`dispatch send_key_if_focused 0xID CHORD` sends the chord only when the
+focused window still has the supplied ID. It returns an error for a
+different target or when the requested chord cannot be sent.

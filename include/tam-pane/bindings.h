@@ -73,6 +73,8 @@ struct tp_action {
 	float scale;	  /* scale for TP_ACT_MONITOR_SCALE */
 	/* TP_ACT_MONITOR_MODE: size, and refresh in mHz (0 = the highest). */
 	int32_t mode_w, mode_h, mode_refresh;
+	bool append_target; /* append the focused client ID for TP_ACT_SPAWN */
+	uint64_t target_id; /* required focused client for TP_ACT_SEND_KEY */
 	char cmd[256];	  /* command string for TP_ACT_SPAWN/CAPTURE/DPMS/FOCUS_APP */
 };
 

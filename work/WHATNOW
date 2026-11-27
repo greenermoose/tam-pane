@@ -3,10 +3,14 @@ WHATNOW
 What tam-pane is doing now and what comes next. Read this first; revise
 it at the end of every session (work/README-work).
 
-Updated: 2026-11-26, with W40
+Updated: 2026-11-26, with W41
 
 
 STATE
+
+  Version 0.2.15 on dev (W41) adds a pointer-focus setting, cross-display
+  tiled drag, checked key dispatch for macros, and window-change events.
+  Headless input passes. The physical Tamlinux trial awaits Test.
 
   Version 0.2.14 on dev (W40) adds `dispatch monitor mode <output>
   <W>x<H>[@<Hz>]`, which replies OK only when the mode commit went

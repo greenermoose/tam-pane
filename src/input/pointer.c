@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-/* The cursor: motion, buttons, scrolling, and pointer focus. Keyboard
- * focus follows clicks; focus-follows-mouse becomes a Lua setting. */
+/* Cursor motion, buttons, scrolling, and keyboard focus on pointer input. */
 #include "tam-pane/bindings.h"
 #include "tam-pane/client.h"
 #include "tam-pane/focus.h"
@@ -11,6 +10,8 @@
 #include "tam-pane/monitor.h"
 #include "tam-pane/server.h"
 #include "tam-pane/session_lock.h"
+#include "tam-pane/spawn.h"
+#include "tam-pane/xwayland.h"
 #include <linux/input-event-codes.h>
 #include <stdlib.h>
 #include <tam.h>
@@ -22,6 +23,7 @@
 #include <wlr/types/wlr_layer_shell_v1.h>
 #include <wlr/types/wlr_pointer.h>
 #include <wlr/types/wlr_seat.h>
+#include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/util/edges.h>
 
@@ -60,6 +62,8 @@ void tp_pointer_cancel_grab(struct tp_server *s, struct tp_client *c) {
 		return;
 	if (c && s->grab.client != c)
 		return;
+	if (s->grab.move_outline)
+		wlr_scene_node_destroy(&s->grab.move_outline->node);
 	s->grab = (struct tp_pointer_grab){0};
 	if (s->cursor && s->cursor_mgr) {
 		s->cursor_shape_name = "default";
@@ -82,6 +86,13 @@ static void update_grab(struct tp_server *s) {
 	double dy = s->cursor->y - g->start_y;
 
 	if (g->mode == TP_GRAB_MOVE) {
+		if (g->tiled) {
+			if (g->move_outline)
+				wlr_scene_node_set_position(&g->move_outline->node,
+											g->start_geom.x + (int32_t)dx,
+											g->start_geom.y + (int32_t)dy);
+			return;
+		}
 		c->float_geom.x = g->start_geom.x + (int32_t)dx;
 		c->float_geom.y = g->start_geom.y + (int32_t)dy;
 		struct tp_monitor *m = tp_monitor_at(s, s->cursor->x, s->cursor->y);
@@ -163,6 +174,14 @@ static void after_motion(struct tp_server *s, uint32_t time_msec) {
 		update_grab(s);
 		return;
 	}
+	if (s->settings.focus_follows_mouse && !s->locked &&
+		!wlr_seat_pointer_has_grab(s->seat) && s->seat->pointer_state.button_count == 0) {
+		struct tp_client *c = tp_client_at(s, s->cursor->x, s->cursor->y,
+										   NULL, NULL, NULL);
+		if (c && c != tp_focused(s) && tp_client_visible(c) &&
+			(!tp_client_is_xwayland(c) || tp_xwayland_accepts_keyboard(c)))
+			tp_focus(s, c);
+	}
 	tp_pointer_refocus(s, time_msec);
 }
 
@@ -182,19 +201,46 @@ static void on_motion_absolute(struct wl_listener *l, void *data) {
 	after_motion(s, ev->time_msec);
 }
 
+static struct wlr_scene_tree *move_outline(struct tp_server *s,
+										  struct tp_rect box) {
+	struct wlr_scene_tree *tree =
+		wlr_scene_tree_create(s->layer[TP_LAYER_OVERLAY]);
+	if (!tree)
+		return NULL;
+	const float color[4] = {0.25f, 0.85f, 0.42f, 0.9f};
+	int32_t b = 2;
+	if (box.w < b || box.h < b)
+		return tree;
+	struct tp_rect edges[] = {
+		{0, 0, box.w, b}, {0, box.h - b, box.w, b},
+		{0, 0, b, box.h}, {box.w - b, 0, b, box.h},
+	};
+	for (size_t i = 0; i < sizeof(edges) / sizeof(edges[0]); i++) {
+		struct tp_rect edge = edges[i];
+		struct wlr_scene_rect *rect =
+			wlr_scene_rect_create(tree, edge.w, edge.h, color);
+		if (rect)
+			wlr_scene_node_set_position(&rect->node, edge.x, edge.y);
+	}
+	wlr_scene_node_set_position(&tree->node, box.x, box.y);
+	return tree;
+}
+
 static bool try_begin_grab(struct tp_server *s, struct tp_client *c,
 						   uint32_t button, enum tp_action_kind kind) {
 	if (!c || c->fullscreen)
 		return false;
 
-	if (kind == TP_ACT_MOUSE_MOVE && c->floating) {
+	if (kind == TP_ACT_MOUSE_MOVE) {
 		s->grab = (struct tp_pointer_grab){
 			.mode = TP_GRAB_MOVE,
 			.client = c,
 			.button = button,
 			.start_x = s->cursor->x,
 			.start_y = s->cursor->y,
-			.start_geom = c->float_geom,
+			.start_geom = c->floating ? c->float_geom : c->geom,
+			.tiled = !c->floating,
+			.move_outline = c->floating ? NULL : move_outline(s, c->geom),
 		};
 		wlr_seat_pointer_clear_focus(s->seat);
 		wlr_cursor_set_xcursor(s->cursor, s->cursor_mgr, "grabbing");
@@ -279,9 +325,13 @@ static void on_button(struct wl_listener *l, void *data) {
 	if (s->grab.mode != TP_GRAB_NONE) {
 		if (ev->state == WL_POINTER_BUTTON_STATE_RELEASED &&
 			ev->button == s->grab.button) {
-			s->grab = (struct tp_pointer_grab){0};
-			wlr_cursor_set_xcursor(s->cursor, s->cursor_mgr, "default");
-			tp_pointer_refocus(s, ev->time_msec);
+			struct tp_pointer_grab grab = s->grab;
+			tp_pointer_cancel_grab(s, NULL);
+			if (grab.mode == TP_GRAB_MOVE && grab.tiled) {
+				struct tp_monitor *dest = tp_monitor_at(s, s->cursor->x, s->cursor->y);
+				if (dest)
+					tp_client_set_monitor(grab.client, dest, true);
+			}
 		}
 		return;
 	}
@@ -310,6 +360,15 @@ static void on_button(struct wl_listener *l, void *data) {
 					grab.kind == TP_ACT_MOUSE_RESIZE) {
 					if (try_begin_grab(s, c, ev->button, grab.kind))
 						return;
+					if (grab.kind == TP_ACT_MOUSE_MOVE && !c && grab.cmd[0]) {
+						struct tp_layer_surface *layer =
+							surface ? tp_layer_from_surface(surface) : NULL;
+						if (!surface || (layer && layer->layer_surface->current.layer ==
+							ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND)) {
+							tp_spawn(grab.cmd);
+							return;
+						}
+					}
 				} else {
 					return;
 				}

@@ -67,6 +67,7 @@ or out-of-range values raise a Lua error.
 | `gap_inner` | integer | `0..256` pixels between tiled windows | `8` |
 | `gap_outer` | integer | `0..256` pixels between windows and usable monitor edge | `8` |
 | `border_width` | integer | `0..16` logical pixels for the focused window's green border. `0` disables the frame. | `0` |
+| `focus_follows_mouse` | boolean | Give the window under the moving pointer keyboard focus. | `false` |
 | `locker` | string | Absolute executable path for `tam-pane msg lock`. An empty string disables the command. | `""` |
 | `split_ratio` | number | `0.05..0.95` first child's share for a new split | `0.5` |
 | `width_bias` | number | `0.1..10.0` side-by-side when `w > h * width_bias` | `1.0` |
@@ -213,7 +214,8 @@ callable (`tp.dsp.close()()`) inside plain Lua callbacks (calling one during
 
 | Constructor | Arguments | Behavior |
 |---|---|---|
-| `tp.dsp.spawn(cmd)` | non-empty string (max 255 bytes) | Spawn `cmd` via `/bin/sh -c` |
+| `tp.dsp.spawn(cmd[, focused_target])` | command (max 255 bytes), optional boolean | Spawn via `/bin/sh -c`. When the flag is true, require a focused window and append `--target 0xID`. |
+| `tp.dsp.mouse_move([background_command])` | optional command (max 255 bytes) | Drag a window, or run the command on the desktop background. |
 | `tp.dsp.terminal()` | none | Spawn configured `settings.terminal` |
 | `tp.dsp.close()` | none | Close focused window |
 | `tp.dsp.quit()` | none | Quit `tam-pane` |

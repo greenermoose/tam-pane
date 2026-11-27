@@ -31,6 +31,7 @@ enum tp_event_kind {
 	TP_EVENT_CHORD_END,
 	TP_EVENT_CHORD_CANCEL,
 	TP_EVENT_STARTUP, /* once, after the Wayland socket is up */
+	TP_EVENT_WINDOW_CHANGE,
 	TP_EVENT_COUNT,
 };
 
