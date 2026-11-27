@@ -3,10 +3,26 @@ WHATNOW
 What tam-pane is doing now and what comes next. Read this first; revise
 it at the end of every session (work/README-work).
 
-Updated: 2026-11-27, with W44
+Updated: 2026-11-27, with W45
 
 
 STATE
+
+  Version 0.4.0 on dev (W45) starts Phase P5 (Visuals) with our own Mesa
+  GLES2 visuals module (`src/visuals.c`, `src/visuals_math.c`, no scenefx,
+  no `tp_client` effect flags): rounded window corners (with XDG popups
+  unclipped), anti-aliased rounded border rings, and analytical SDF drop
+  shadows. All effects default to off (plain `wlr_scene` path), idle
+  desktops draw zero frames (`m->output->needs_frame`), non-GLES2 renderers
+  fall back cleanly, and GPU renderer-loss recovery recompiles shaders on
+  the recreated EGL context. Adds 7 `tp.config` keys (`corner_radius`,
+  `shadow_enabled`, `shadow_radius`, `shadow_offset_x`, `shadow_offset_y`,
+  `shadow_color`, `shadow_inactive_color`) with live reload and the
+  read-only `visuals` IPC query. All unit suites (`test_visuals` 31,
+  `test_lua` 698, `test_ipc` 215, `test_gamma` 1235, etc.), smoke tests
+  (6/6), headless pixman tests (`test_input_headless` 988), and headless
+  Mesa GLES2 pixel/idle/reset tests (`test_visuals_gles2` 32) pass cleanly
+  with zero `libxcb` NEEDED.
 
   Version 0.3.0 on dev (W44) starts Phase P4 (Dogfood in Tamlinux 0.7) and
   closes out all remaining Review R1 Finding 17 items: shared keyboard
@@ -128,11 +144,12 @@ STATE
 
 NEXT
 
-  1. Phase P4 (plans/P4-dogfood-tamlinux-0.7.md): complete physical-hardware
+  1. Phase P5 (plans/P5-visuals.md): 0.4.1 blur behind transparent windows
+     and panels with damage tracking, then 0.4.2 frame-clock animations
+     (off by default on battery).
+  2. Phase P4 (plans/P4-dogfood-tamlinux-0.7.md): complete physical-hardware
      acceptance checks during Fred's Tamlinux 0.7 Test/Run, and record any
      daily-use issues in bugs/.
-  2. Phase P5 (plans/P5-visuals.md): rounded corners and shadows in our own
-     Mesa GLES visuals module (no scenefx).
 
 
 WAITING FOR FRED

@@ -64,6 +64,7 @@ struct tp_layer_surface;
 struct tp_lua;
 struct tp_monitor;
 struct tp_text_input_relay;
+struct tp_visuals;
 
 /* Interactive pointer drag state (explicit in tp_server, no globals). */
 enum tp_grab_mode {
@@ -115,6 +116,7 @@ struct tp_server {
 	struct wlr_compositor *compositor;
 	struct wl_listener renderer_lost;
 	uint32_t renderer_recoveries;
+	struct tp_visuals *visuals;
 
 	struct wlr_scene *scene;
 	struct wlr_scene_tree *layer[TP_LAYER_COUNT];

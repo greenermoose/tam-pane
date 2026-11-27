@@ -12,6 +12,8 @@
 #include "tam-pane/server.h"
 #include "tam-pane/server_events.h"
 #include "tam-pane/session_lock.h"
+#include "tam-pane/visuals.h"
+#include "tam-pane/visuals_math.h"
 #include "tam-pane/workspace.h"
 #include "viewporter-client-protocol.h"
 #include <math.h>
@@ -40,22 +42,28 @@ static void on_frame(struct wl_listener *l, void *data) {
 	struct tp_monitor *m = wl_container_of(l, m, frame);
 	struct tp_server *s = m->server;
 	struct timespec now;
-	if (s && s->gamma_transform) {
-		struct wlr_scene_output_state_options opts = {
-			.color_transform = s->gamma_transform,
-		};
-		if (!wlr_scene_output_commit(m->scene_output, &opts)) {
-			if (!s->gamma_fallback_warned) {
-				tam_log_warn("gamma: output %s rejected color transform; "
-							 "falling back to plain scene commit",
-							 m->output && m->output->name ? m->output->name
-														  : "(unnamed)");
-				s->gamma_fallback_warned = true;
+	bool committed = false;
+	if (s && tp_visuals_enabled(&s->settings))
+		committed = tp_visuals_commit_output(s, m);
+	if (!committed) {
+		if (s && s->gamma_transform) {
+			struct wlr_scene_output_state_options opts = {
+				.color_transform = s->gamma_transform,
+			};
+			if (!wlr_scene_output_commit(m->scene_output, &opts)) {
+				if (!s->gamma_fallback_warned) {
+					tam_log_warn("gamma: output %s rejected color transform; "
+								 "falling back to plain scene commit",
+								 m->output && m->output->name ? m->output->name
+															  : "(unnamed)");
+					s->gamma_fallback_warned = true;
+				}
+				wlr_scene_output_commit(m->scene_output, NULL);
 			}
+		} else {
 			wlr_scene_output_commit(m->scene_output, NULL);
 		}
-	} else {
-		wlr_scene_output_commit(m->scene_output, NULL);
+		tp_visuals_note_plain_frame(s);
 	}
 	clock_gettime(CLOCK_MONOTONIC, &now);
 	wlr_scene_output_send_frame_done(m->scene_output, &now);

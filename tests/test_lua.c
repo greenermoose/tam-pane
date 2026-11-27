@@ -1849,6 +1849,67 @@ static void test_r1_17_pattern_and_utf8_0_3_0(void) {
 	tp_lua_destroy(lua);
 }
 
+static void test_visuals_config_0_4_0(void) {
+	struct tp_lua *lua = tp_lua_create();
+	CHECK(lua != NULL);
+
+	struct tp_settings base, out;
+	tp_settings_defaults(&base);
+	char err[256] = {0};
+
+	/* Defaults: all visual effects off. */
+	CHECK(base.corner_radius == 0);
+	CHECK(!base.shadow_enabled);
+	CHECK(base.shadow_radius == 16);
+	CHECK(base.shadow_offset_x == 0);
+	CHECK(base.shadow_offset_y == 4);
+
+	/* Valid visual settings. */
+	const char *good =
+		"tp.config({\n"
+		"  corner_radius = 12,\n"
+		"  shadow_enabled = true,\n"
+		"  shadow_radius = 24,\n"
+		"  shadow_offset_x = -4,\n"
+		"  shadow_offset_y = 8,\n"
+		"  shadow_color = '#00000080',\n"
+		"  shadow_inactive_color = 'none',\n"
+		"})\n";
+	CHECK(tp_lua_exec_string(lua, good, strlen(good), "visuals_good",
+							 TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+							 TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+							 sizeof(err)));
+	CHECK(out.corner_radius == 12);
+	CHECK(out.shadow_enabled);
+	CHECK(out.shadow_radius == 24);
+	CHECK(out.shadow_offset_x == -4);
+	CHECK(out.shadow_offset_y == 8);
+	CHECK(out.shadow_color[3] > 0.49f && out.shadow_color[3] < 0.51f);
+	CHECK(out.shadow_inactive_color[3] == 0.0f);
+
+	/* Out-of-range and invalid-type rejections. */
+	const char *bad[] = {
+		"tp.config({ corner_radius = -1 })\n",
+		"tp.config({ corner_radius = 65 })\n",
+		"tp.config({ shadow_enabled = 'yes' })\n",
+		"tp.config({ shadow_radius = 129 })\n",
+		"tp.config({ shadow_offset_x = 65 })\n",
+		"tp.config({ shadow_offset_y = -65 })\n",
+		"tp.config({ shadow_color = 'notacolor' })\n",
+		"tp.config({ shadow_inactive_color = 123 })\n",
+	};
+	for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++) {
+		err[0] = '\0';
+		CHECK(!tp_lua_exec_string(lua, bad[i], strlen(bad[i]), "visuals_bad",
+								  TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+								  TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+								  sizeof(err)));
+		CHECK(err[0] != '\0');
+	}
+
+	tp_lua_destroy(lua);
+}
+
 int main(void) {
 	tam_log_set_level(TAM_LOG_ERROR);
 	test_config_and_fallback();
@@ -1870,5 +1931,6 @@ int main(void) {
 	test_gamma_freeze_and_lock_events_0_2_16();
 	test_controls_and_borders_0_2_17();
 	test_r1_17_pattern_and_utf8_0_3_0();
+	test_visuals_config_0_4_0();
 	CHECK_DONE("test_lua");
 }

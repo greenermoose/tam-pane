@@ -1160,6 +1160,7 @@ static void msg_usage(FILE *out) {
 		"  lock_state                 show session-lock status and surface count\n"
 		"  gamma                      show active color temperature\n"
 		"  freeze                     show whether screen freeze is active\n"
+		"  visuals                    show GLES2 visuals status and frame counts\n"
 		"  pixel [x y]                sample RGB color at pointer or (x, y)\n"
 		"  lock                       start the configured session locker\n"
 		"  reload                     reload init.lua and report errors\n"

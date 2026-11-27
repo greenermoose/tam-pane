@@ -13,6 +13,7 @@
 #include "tam-pane/client.h"
 #include "tam-pane/focus.h"
 #include "tam-pane/gamma.h"
+#include "tam-pane/visuals.h"
 #include "tam-pane/input.h"
 #include "tam-pane/layout/arrange.h"
 #include "tam-pane/lua.h"
@@ -494,6 +495,23 @@ static tam_str_t build_freeze(struct tp_server *s) {
 	return tam_str_cat(out, "END\n");
 }
 
+static tam_str_t build_visuals(struct tp_server *s) {
+	tam_str_t out = tam_str_new("OK\n");
+	if (!out)
+		return NULL;
+	struct tp_visuals_stats st;
+	tp_visuals_get_stats(s, &st);
+	out = tam_str_cat_printf(
+		out,
+		"visuals\tactive=%d\tgles2=%d\tcorner_radius=%d\tshadow=%d\t"
+		"shadow_radius=%d\tframes_visual=%llu\tframes_plain=%llu\n",
+		st.active ? 1 : 0, st.gles2 ? 1 : 0, s->settings.corner_radius,
+		s->settings.shadow_enabled ? 1 : 0, s->settings.shadow_radius,
+		(unsigned long long)st.frames_visual,
+		(unsigned long long)st.frames_plain);
+	return tam_str_cat(out, "END\n");
+}
+
 static bool parse_int32_token(const char **cursor, int32_t *out) {
 	const char *p = *cursor;
 	while (*p == ' ' || *p == '\t')
@@ -543,7 +561,7 @@ static bool handle_line(struct tp_ipc_client *c, char *line) {
 		strcmp(line, "binds") == 0 || strcmp(line, "keyboards") == 0 ||
 		strcmp(line, "devices") == 0 || strcmp(line, "chord") == 0 ||
 		strcmp(line, "lock_state") == 0 || strcmp(line, "gamma") == 0 ||
-		strcmp(line, "freeze") == 0) {
+		strcmp(line, "freeze") == 0 || strcmp(line, "visuals") == 0) {
 		if (*args)
 			return ipc_send_err(c, "command takes no arguments");
 		tam_str_t reply = NULL;
@@ -573,8 +591,10 @@ static bool handle_line(struct tp_ipc_client *c, char *line) {
 			reply = build_lock_state(s);
 		else if (strcmp(line, "gamma") == 0)
 			reply = build_gamma(s);
-		else
+		else if (strcmp(line, "freeze") == 0)
 			reply = build_freeze(s);
+		else
+			reply = build_visuals(s);
 		if (!reply)
 			return ipc_send_err(c, "out of memory");
 		bool ok = ipc_client_queue(c, reply, tam_str_len(reply));

@@ -374,6 +374,31 @@ static int l_tp_config(lua_State *L) {
 				return luaL_error(
 					L, "tp.config.border_color_unfocused: expected '#RRGGBB[AA]', "
 					   "'0xRRGGBB[AA]', or 'none'");
+		} else if (strcmp(key, "corner_radius") == 0) {
+			s->corner_radius = check_int_range(L, -1, key, 0, 64);
+		} else if (strcmp(key, "shadow_enabled") == 0) {
+			s->shadow_enabled = check_bool(L, -1, key);
+		} else if (strcmp(key, "shadow_radius") == 0) {
+			s->shadow_radius = check_int_range(L, -1, key, 0, 128);
+		} else if (strcmp(key, "shadow_offset_x") == 0) {
+			s->shadow_offset_x = check_int_range(L, -1, key, -64, 64);
+		} else if (strcmp(key, "shadow_offset_y") == 0) {
+			s->shadow_offset_y = check_int_range(L, -1, key, -64, 64);
+		} else if (strcmp(key, "shadow_color") == 0) {
+			if (lua_type(L, -1) != LUA_TSTRING)
+				return luaL_error(L, "tp.config.shadow_color: expected string");
+			if (!tp_settings_parse_color(lua_tostring(L, -1), s->shadow_color))
+				return luaL_error(
+					L, "tp.config.shadow_color: expected '#RRGGBB[AA]', "
+					   "'0xRRGGBB[AA]', or 'none'");
+		} else if (strcmp(key, "shadow_inactive_color") == 0) {
+			if (lua_type(L, -1) != LUA_TSTRING)
+				return luaL_error(L, "tp.config.shadow_inactive_color: expected string");
+			if (!tp_settings_parse_color(lua_tostring(L, -1),
+										 s->shadow_inactive_color))
+				return luaL_error(
+					L, "tp.config.shadow_inactive_color: expected '#RRGGBB[AA]', "
+					   "'0xRRGGBB[AA]', or 'none'");
 		} else if (strcmp(key, "locker") == 0) {
 			check_string_buf(L, -1, key, true, s->locker, sizeof(s->locker));
 			if (s->locker[0] && s->locker[0] != '/')

@@ -25,6 +25,13 @@ struct tp_settings {
 	int32_t border_width;
 	float border_color_focused[4];   /* premultiplied RGBA; alpha 0 = disabled */
 	float border_color_unfocused[4]; /* premultiplied RGBA; alpha 0 = disabled */
+	int32_t corner_radius;           /* 0..64 logical px; 0 = sharp (plain scene) */
+	bool shadow_enabled;             /* false = off (plain scene) */
+	int32_t shadow_radius;           /* 0..128 logical px */
+	int32_t shadow_offset_x;         /* -64..64 logical px */
+	int32_t shadow_offset_y;         /* -64..64 logical px */
+	float shadow_color[4];           /* premultiplied RGBA for focused shadow */
+	float shadow_inactive_color[4];  /* premultiplied RGBA for unfocused shadow */
 	bool focus_follows_mouse;
 	char locker[TP_SETTINGS_TERMINAL_MAX];
 	float split_ratio;	 /* first child's share for a new split */

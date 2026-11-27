@@ -85,6 +85,9 @@ replaced with a space. Every record is guaranteed to occupy one line.
 - `freeze` (0.2.16)
   - Whether native screen freeze is active:
     `freeze\tactive=<0|1>`
+- `visuals` (0.4.0)
+  - GLES2 visuals status and rendered frame counters:
+    `visuals\tactive=<0|1>\tgles2=<0|1>\tcorner_radius=<N>\tshadow=<0|1>\tshadow_radius=<N>\tframes_visual=<N>\tframes_plain=<N>`
 - `pixel [x y]` (0.2.16)
   - Samples the rendered RGB pixel at layout coordinates `(x, y)` (defaulting to
     the current pointer coordinates). Refused with `ERR session is locked` while

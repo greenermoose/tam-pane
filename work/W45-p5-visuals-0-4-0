@@ -1,0 +1,52 @@
+W45 P5 VISUALS: ROUNDED CORNERS AND DROP SHADOWS (0.4.0)
+
+Date: 2026-11-27
+AI harness: agy 1.5.18
+AI model: gemini-4-neon-medium
+
+GUIDANCE
+
+  Fred: "/plan Do the next work slice for tam-pane"
+  Fred reviewed the implementation plan in tam-view and approved execution.
+
+DONE
+
+  - Bumped VERSION to 0.4.0 and marked Phase P5 In progress in ROADMAP.md
+    and plans/P5-visuals.md (noting that focused/unfocused scene-rect
+    borders already landed in 0.2.11 and 0.2.17).
+  - Added pure visual-effects math in src/visuals_math.c and
+    include/tam-pane/visuals_math.h (enabled predicate, radius clamping,
+    inner radius, shadow bounding box, and CPU rounded-box SDF).
+  - Implemented our own Mesa GLES2 visuals module in src/visuals.c and
+    include/tam-pane/visuals.h without scenefx or tp_client effect flags:
+    rounded window corner clipping (for GL_TEXTURE_2D and
+    GL_TEXTURE_EXTERNAL_OES, leaving XDG popups unclipped), anti-aliased
+    rounded border rings, analytical SDF drop shadows, zero frames drawn
+    when idle (checking m->output->needs_frame), plain wlr_scene path
+    when all effects are off, clean fallback on non-GLES2 renderers, and
+    safe GL program teardown/recompilation on GPU renderer loss.
+  - Added 7 Lua tp.config visual keys (corner_radius, shadow_enabled,
+    shadow_radius, shadow_offset_x, shadow_offset_y, shadow_color,
+    shadow_inactive_color) in src/settings.c and src/lua.c, all off by
+    default, with live reload damage scheduling in src/server.c.
+  - Added read-only `visuals` IPC query in src/ipc.c and src/ipc_proto.c
+    reporting active/gles2 state and frames_visual/frames_plain counters.
+  - Linked Mesa glesv2 and egl directly in Makefile and updated
+    arch/dependencies.md, arch/lua-api.md, and arch/ipc.md.
+  - Added unit tests (tests/test_visuals.c, 31 checks, also verified under
+    ASan+UBSan), Lua config tests (tests/test_lua.c, 698 checks), and a
+    headless Mesa GLES2 integration test (tests/test_visuals_gles2.c, 32
+    checks verifying pixel-level corner clipping, rounded border, drop
+    shadow, 0 idle frames, plain-scene toggle, and GPU reset recovery).
+  - Full `make test` suite passed with zero libxcb NEEDED.
+
+FAILED
+
+  - Nothing.
+
+HANDOFF
+
+  - Next in Phase P5: 0.4.1 blur behind transparent windows and panels
+    with damage tracking, or 0.4.2 frame-clock animations (off on battery).
+  - Phase P4 real-hardware acceptance checks remain pending Fred's
+    Tamlinux 0.7 Test run.

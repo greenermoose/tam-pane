@@ -3,8 +3,8 @@
 `tam-pane` is Tamlinux's tiling Wayland compositor with Lua configuration,
 written in C17 on top of `libtam`.
 
-- **Current version:** `0.3.0` (branch `dev`)
-- **Progress:** 3 of 7 phases done (P1–P3 done; P4 in progress)
+- **Current version:** `0.4.0` (branch `dev`)
+- **Progress:** 3 of 7 phases done (P1–P3 done; P4 hardware Test pending; P5 in progress)
 - **Versioning:** Semantic versioning; during 0.x, minor marks a phase and
   patch marks milestones or fixes within it.
 
@@ -16,7 +16,7 @@ written in C17 on top of `libtam`.
 | **P2** | 0.1.x | Embedded Lua 5.5 config, bindings, hooks, window rules, live reload, and R1 hardening | [P2-lua.md](plans/P2-lua.md) | Done (2026-11-22) |
 | **P3** | 0.2.x | Daily-driver parity: shell/capture/text protocols, IPC, layouts, chords, monitor/input polish | [P3-daily-parity.md](plans/P3-daily-parity.md) | Done (2026-11-26) |
 | **P4** | 0.3.x | Dogfood in Tamlinux 0.7 with Quickshell, `fred.*` plugins, and headless desktop tests | [P4-dogfood-tamlinux-0.7.md](plans/P4-dogfood-tamlinux-0.7.md) | In progress |
-| **P5** | 0.4.x | Own GLES visuals on Mesa: borders, rounded corners, shadows, blur, animations | [P5-visuals.md](plans/P5-visuals.md) | Planned |
+| **P5** | 0.4.x | Own GLES visuals on Mesa: borders, rounded corners, shadows, blur, animations | [P5-visuals.md](plans/P5-visuals.md) | In progress |
 | **P6** | 0.5.x–0.7.x | Own the stack: replace libinput/xkbcommon, libwayland-server, and wlroots via `libtam` + Mesa | [P6-own-the-stack.md](plans/P6-own-the-stack.md) | Planned |
 | **P7** | 1.0.0 | Retire Hyprland; `tam-pane` becomes Tamlinux's sole compositor (only on Fred's word) | [P7-retire-hyprland.md](plans/P7-retire-hyprland.md) | Planned |
 
@@ -89,7 +89,9 @@ Fred decided these on 2026-11-17:
 
 | Version | Milestone | Status |
 | --- | --- | --- |
-| **0.4.x** | Own GLES drawing on Mesa: borders, rounded corners, shadows, blur, and animations (no scenefx) | Planned |
+| **0.4.0** | Own Mesa GLES2 visuals module (`src/visuals.c`): rounded corners, rounded borders, and analytical SDF drop shadows (plain scene path when off, zero idle frames; scene-rect borders already landed in `0.2.11`/`0.2.17`) | Done (2026-11-27) |
+| **0.4.1** | Blur behind transparent windows and panels, with damage tracking | Planned |
+| **0.4.2** | Animations for open, close, move, and tag change, off by default on battery | Planned |
 
 ### Phase P6: Own the stack (0.5.x–0.7.x) — [P6-own-the-stack.md](plans/P6-own-the-stack.md)
 

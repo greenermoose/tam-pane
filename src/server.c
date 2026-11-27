@@ -18,6 +18,7 @@
 #include "tam-pane/security.h"
 #include "tam-pane/session_lock.h"
 #include "tam-pane/text_input.h"
+#include "tam-pane/visuals.h"
 #include "tam-pane/workspace.h"
 #include "tam-pane/xdg_activation.h"
 #include "tam-pane/xwayland.h"
@@ -67,6 +68,8 @@ static void on_renderer_lost_idle(void *data) {
 		wlr_renderer_destroy(renderer);
 		return;
 	}
+
+	tp_visuals_reset_renderer(s);
 
 	struct wlr_renderer *old_renderer = s->renderer;
 	struct wlr_allocator *old_allocator = s->allocator;
@@ -164,6 +167,10 @@ bool tp_server_init(struct tp_server *s) {
 	wl_list_init(&s->input_devices);
 	tp_events_init(s);
 	tp_gamma_init(s);
+	if (!tp_visuals_init(s)) {
+		tam_log_error("cannot allocate visuals state");
+		return false;
+	}
 	tp_chord_init(&s->chord);
 	tp_chord_configure(&s->chord, s->settings.chord_enabled,
 					   s->settings.chord_key, s->settings.chord_secondary_key,
@@ -369,6 +376,17 @@ bool tp_server_reload(struct tp_server *s, char *err_buf, size_t err_buf_size) {
 		tp_pointer_apply_settings(s);
 	}
 	tp_arrange_all(s);
+	if (prev.corner_radius != s->settings.corner_radius ||
+		prev.shadow_enabled != s->settings.shadow_enabled ||
+		prev.shadow_radius != s->settings.shadow_radius ||
+		prev.shadow_offset_x != s->settings.shadow_offset_x ||
+		prev.shadow_offset_y != s->settings.shadow_offset_y ||
+		memcmp(prev.shadow_color, s->settings.shadow_color,
+			   sizeof(prev.shadow_color)) != 0 ||
+		memcmp(prev.shadow_inactive_color, s->settings.shadow_inactive_color,
+			   sizeof(prev.shadow_inactive_color)) != 0) {
+		tp_visuals_damage_all(s);
+	}
 	tp_events_emit_config_reload(s);
 
 	tam_log_info("reloaded config: %s", path);
@@ -449,6 +467,7 @@ void tp_server_finish(struct tp_server *s) {
 		wl_list_remove(&s->renderer_lost.link);
 		s->renderer_lost.notify = NULL;
 	}
+	tp_visuals_finish(s);
 	if (s->allocator)
 		wlr_allocator_destroy(s->allocator);
 	if (s->renderer)

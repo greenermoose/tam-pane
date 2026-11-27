@@ -69,6 +69,13 @@ or out-of-range values raise a Lua error.
 | `border_width` | integer | `0..16` logical pixels for window borders. `0` disables borders. | `0` |
 | `border_color_focused` | string | `#RRGGBB[AA]`, `0xRRGGBB[AA]`, or `"none"`/`""` (0.2.17) | `"#00ff00ff"` |
 | `border_color_unfocused` | string | `#RRGGBB[AA]`, `0xRRGGBB[AA]`, or `"none"`/`""` (0.2.17) | `"none"` |
+| `corner_radius` | integer | `0..64` logical pixels for rounded window corners and borders; `0` uses plain scene path (0.4.0) | `0` |
+| `shadow_enabled` | boolean | Enable analytical GLES2 drop shadows behind windows (0.4.0) | `false` |
+| `shadow_radius` | integer | `0..128` logical pixels for shadow spread/blur (0.4.0) | `16` |
+| `shadow_offset_x` | integer | `-64..64` logical pixels horizontal shadow offset (0.4.0) | `0` |
+| `shadow_offset_y` | integer | `-64..64` logical pixels vertical shadow offset (0.4.0) | `4` |
+| `shadow_color` | string | `#RRGGBB[AA]`, `0xRRGGBB[AA]`, or `"none"`/`""` for focused window shadow (0.4.0) | `"#00000073"` |
+| `shadow_inactive_color` | string | `#RRGGBB[AA]`, `0xRRGGBB[AA]`, or `"none"`/`""` for unfocused window shadow (0.4.0) | `"#00000040"` |
 | `focus_follows_mouse` | boolean | Give the window under the moving pointer keyboard focus. | `false` |
 | `locker` | string | Absolute executable path for `tam-pane msg lock`. An empty string disables the command. | `""` |
 | `split_ratio` | number | `0.05..0.95` first child's share for a new split | `0.5` |

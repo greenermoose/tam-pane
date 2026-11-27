@@ -26,6 +26,10 @@ this file in the same change as any dependency change.
 - **xkbcommon**
   - **Why:** keymaps and key symbols.
   - **Planned exit:** P6, 0.5.x (libtam keymaps).
+- **libGLESv2, libEGL (Mesa)** (direct since 0.4.0)
+  - **Why:** Mesa GLES2 shaders for our visuals module (`src/visuals.c`:
+    rounded corners, rounded borders, and drop shadows).
+  - **Planned exit:** none; Mesa is part of the permanent goal.
 
 ## Build-time only
 
