@@ -1634,8 +1634,7 @@ static bool mock_change_vt(struct tp_server *s, unsigned int vt) {
 }
 
 static bool key_consumed(struct tp_server *s, uint32_t code) {
-	struct tp_keyboard *k = wl_container_of(s->keyboards.next, k, link);
-	return (k->consumed_keys[code / 64] & (UINT64_C(1) << (code % 64))) != 0;
+	return tp_keyboard_key_consumed(s, code);
 }
 
 /* A hook feedback loop used to keep the event loop spinning forever; turn
@@ -5564,6 +5563,82 @@ int main(void) {
 
 		destroy_window(&wa);
 		destroy_window(&wb);
+		for (unsigned int i = 0; i < 10; i++)
+			pump(&client, &server);
+	}
+
+	/* ---- 0.3.0: R1-17 keyboard grouping and UTF-8-safe event truncation ---- */
+	{
+		char rep[4096];
+		FILE *f = fopen(lua_cfg, "w");
+		CHECK(f != NULL);
+		fputs("tp.bind('Meta+1', tp.dsp.tag('view', 1))\n"
+			  "tp.bind('Meta+2', tp.dsp.tag('view', 2))\n"
+			  "tp.on('window.open', function(ev)\n"
+			  "  if ev.title and #ev.title == 253 and "
+			  "ev.title:sub(-3) == '\xe3\x81\x82' then\n"
+			  "    tp.dsp.tag('view', 3)()\n"
+			  "  end\n"
+			  "end)\n",
+			  f);
+		fclose(f);
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path, "reload\n",
+								rep, sizeof(rep)));
+		CHECK(strncmp(rep, "OK\nEND\n", 7) == 0);
+
+		/* Add a second keyboard and verify modifiers combine across devices. */
+		struct wlr_keyboard keyboard2;
+		wlr_keyboard_init(&keyboard2, &keyboard_impl, "test keyboard 2");
+		tp_keyboard_add(&server, &keyboard2.base);
+
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path, "keyboards\n",
+								rep, sizeof(rep)));
+		CHECK(strstr(rep, "name=test keyboard\t") != NULL);
+		CHECK(strstr(rep, "name=test keyboard 2\t") != NULL);
+
+		/* Ensure we start on tag 1 before testing Meta+2 across keyboards. */
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+								"dispatch tag view 1\n", rep, sizeof(rep)));
+		CHECK(tp_tagview_current(&m1->view) == tp_tag_mask(1));
+
+		/* Hold Meta on keyboard 1, press '2' on keyboard 2 -> switches to tag 2. */
+		send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_PRESSED, 600);
+		send_key(&keyboard2, KEY_2, WL_KEYBOARD_KEY_STATE_PRESSED, 601);
+		send_key(&keyboard2, KEY_2, WL_KEYBOARD_KEY_STATE_RELEASED, 602);
+		send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_RELEASED, 603);
+		for (unsigned int i = 0; i < 10; i++)
+			pump(&client, &server);
+		CHECK(tp_tagview_current(&m1->view) == tp_tag_mask(2));
+
+		/* Remove keyboard 2 and verify keyboard 1 still works cleanly. */
+		wlr_keyboard_finish(&keyboard2);
+		send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_PRESSED, 604);
+		send_key(&keyboard, KEY_1, WL_KEYBOARD_KEY_STATE_PRESSED, 605);
+		send_key(&keyboard, KEY_1, WL_KEYBOARD_KEY_STATE_RELEASED, 606);
+		send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_RELEASED, 607);
+		for (unsigned int i = 0; i < 10; i++)
+			pump(&client, &server);
+		CHECK(tp_tagview_current(&m1->view) == tp_tag_mask(1));
+
+		/* UTF-8-safe event string truncation: 'a' + 86 * 3-byte 'あ' = 259 bytes.
+		 * Truncating to 255 bytes must back up to 253 (complete UTF-8). */
+		char long_utf8[300];
+		size_t pos = 0;
+		long_utf8[pos++] = 'a';
+		for (int i = 0; i < 86; i++) {
+			long_utf8[pos++] = (char)0xe3;
+			long_utf8[pos++] = (char)0x81;
+			long_utf8[pos++] = (char)0x82;
+		}
+		long_utf8[pos] = '\0';
+		struct test_window wu = {0};
+		wu.client = &client;
+		configure_window(&client, &wu, long_utf8);
+		for (unsigned int i = 0; i < 60 &&
+			 tp_tagview_current(&m1->view) != tp_tag_mask(3); i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(tp_tagview_current(&m1->view) == tp_tag_mask(3));
+		destroy_window(&wu);
 		for (unsigned int i = 0; i < 10; i++)
 			pump(&client, &server);
 	}

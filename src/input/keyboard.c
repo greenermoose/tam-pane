@@ -15,16 +15,17 @@
 #include <wlr/interfaces/wlr_keyboard.h>
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/types/wlr_keyboard.h>
+#include <wlr/types/wlr_keyboard_group.h>
 #include <wlr/types/wlr_seat.h>
 #include <xkbcommon/xkbcommon.h>
 
-static struct wlr_keyboard_modifiers sanitized_mods(struct tp_keyboard *k) {
-	struct wlr_keyboard_modifiers m = k->wlr->modifiers;
+static struct wlr_keyboard_modifiers
+sanitized_mods(struct tp_server *s, struct wlr_keyboard *wlr) {
+	struct wlr_keyboard_modifiers m = wlr->modifiers;
 	/* When one-handed Caps Lock chord mode is enabled, tam-pane manages
 	 * Regular Caps Lock for A-Z in software so hardware Caps Lock presses
 	 * in Pluripotent/Building mode never leave Lock stuck on clients. */
-	if (k->server->chord.enabled &&
-		k->server->chord.chord_sym == XKB_KEY_Caps_Lock) {
+	if (s->chord.enabled && s->chord.chord_sym == XKB_KEY_Caps_Lock) {
 		m.locked &= ~(uint32_t)WLR_MODIFIER_CAPS;
 	}
 	return m;
@@ -43,21 +44,32 @@ static const char *keyboard_layout_name(struct wlr_keyboard *wlr,
 	return name ? name : "";
 }
 
-static void on_modifiers(struct wl_listener *l, void *data) {
-	struct tp_keyboard *k = wl_container_of(l, k, modifiers);
-	tp_idle_notify_activity(k->server);
-	if (k->wlr->modifiers.group != k->last_layout_group) {
-		k->last_layout_group = k->wlr->modifiers.group;
-		tp_events_emit_keyboard_layout(
-			k->server, k->wlr->base.name ? k->wlr->base.name : "",
-			keyboard_layout_name(k->wlr, k->last_layout_group),
-			k->last_layout_group);
+static const char *primary_keyboard_name(const struct tp_server *s) {
+	struct tp_keyboard *k;
+	wl_list_for_each(k, &s->keyboards, link) {
+		if (k->wlr && k->wlr->base.name && *k->wlr->base.name)
+			return k->wlr->base.name;
 	}
-	if (tp_text_input_forward_modifiers(k->server, k->wlr))
+	return "seat0";
+}
+
+static void on_modifiers(struct wl_listener *l, void *data) {
+	(void)data;
+	struct tp_server *s = wl_container_of(l, s, kb_group_modifiers);
+	struct wlr_keyboard *wlr = &s->kb_group->keyboard;
+	tp_idle_notify_activity(s);
+	if (wlr->modifiers.group != s->kb_last_layout_group) {
+		s->kb_last_layout_group = wlr->modifiers.group;
+		tp_events_emit_keyboard_layout(
+			s, primary_keyboard_name(s),
+			keyboard_layout_name(wlr, s->kb_last_layout_group),
+			s->kb_last_layout_group);
+	}
+	if (tp_text_input_forward_modifiers(s, wlr))
 		return;
-	struct wlr_keyboard_modifiers m = sanitized_mods(k);
-	wlr_seat_set_keyboard(k->server->seat, k->wlr);
-	wlr_seat_keyboard_notify_modifiers(k->server->seat, &m);
+	struct wlr_keyboard_modifiers m = sanitized_mods(s, wlr);
+	wlr_seat_set_keyboard(s->seat, wlr);
+	wlr_seat_keyboard_notify_modifiers(s->seat, &m);
 }
 
 static uint32_t wlr_mods_to_tp(uint32_t wlr_mods) {
@@ -87,14 +99,14 @@ static uint32_t tp_mods_to_wlr(uint32_t tp_mods) {
 }
 
 static void sync_caps_leds(struct tp_server *s) {
+	if (!s->kb_group)
+		return;
+	struct wlr_keyboard *wlr = &s->kb_group->keyboard;
 	uint32_t leds = tp_chord_is_caps_lock(&s->chord) ? WLR_LED_CAPS_LOCK : 0;
-	struct tp_keyboard *k;
-	wl_list_for_each(k, &s->keyboards, link) {
-		uint32_t cur = 0;
-		if (k->wlr->modifiers.locked & WLR_MODIFIER_MOD2)
-			cur |= WLR_LED_NUM_LOCK;
-		wlr_keyboard_led_update(k->wlr, cur | leds);
-	}
+	uint32_t cur = 0;
+	if (wlr->modifiers.locked & WLR_MODIFIER_MOD2)
+		cur |= WLR_LED_NUM_LOCK;
+	wlr_keyboard_led_update(wlr, cur | leds);
 }
 
 /*
@@ -103,10 +115,11 @@ static void sync_caps_leds(struct tp_server *s) {
  * by tam-last's held-key bitmap) AND wl_keyboard.modifiers (needed by XKB
  * clients such as GTK, Qt, Chromium, and Foot).
  */
-static void synthesize_chord(struct tp_keyboard *k, uint32_t mods,
-							 uint32_t keycode, uint32_t time_msec) {
-	struct wlr_seat *seat = k->server->seat;
-	wlr_seat_set_keyboard(seat, k->wlr);
+static void synthesize_chord(struct tp_server *s, struct wlr_keyboard *wlr,
+							 uint32_t mods, uint32_t keycode,
+							 uint32_t time_msec) {
+	struct wlr_seat *seat = s->seat;
+	wlr_seat_set_keyboard(seat, wlr);
 
 	static const struct {
 		uint32_t bit;
@@ -124,7 +137,7 @@ static void synthesize_chord(struct tp_keyboard *k, uint32_t mods,
 										 WL_KEYBOARD_KEY_STATE_PRESSED);
 	}
 
-	struct wlr_keyboard_modifiers synth = sanitized_mods(k);
+	struct wlr_keyboard_modifiers synth = sanitized_mods(s, wlr);
 	synth.depressed |= tp_mods_to_wlr(mods);
 	wlr_seat_keyboard_notify_modifiers(seat, &synth);
 
@@ -139,7 +152,7 @@ static void synthesize_chord(struct tp_keyboard *k, uint32_t mods,
 										 WL_KEYBOARD_KEY_STATE_RELEASED);
 	}
 
-	struct wlr_keyboard_modifiers real = sanitized_mods(k);
+	struct wlr_keyboard_modifiers real = sanitized_mods(s, wlr);
 	wlr_seat_keyboard_notify_modifiers(seat, &real);
 }
 
@@ -148,13 +161,12 @@ static void synthesize_chord(struct tp_keyboard *k, uint32_t mods,
  * ordinary modifier, so "Meta+Shift+1" is written with "1" on any layout
  * rather than with whatever symbol Shift+1 makes.
  */
-static int level0_syms(struct tp_keyboard *k, uint32_t keycode,
+static int level0_syms(struct wlr_keyboard *wlr, uint32_t keycode,
 					   const xkb_keysym_t **syms) {
 	xkb_keycode_t code = keycode + 8; /* evdev to xkb */
 	xkb_layout_index_t layout =
-		xkb_state_key_get_layout(k->wlr->xkb_state, code);
-	return xkb_keymap_key_get_syms_by_level(k->wlr->keymap, code, layout, 0,
-											syms);
+		xkb_state_key_get_layout(wlr->xkb_state, code);
+	return xkb_keymap_key_get_syms_by_level(wlr->keymap, code, layout, 0, syms);
 }
 
 /*
@@ -164,10 +176,10 @@ static int level0_syms(struct tp_keyboard *k, uint32_t keycode,
  *                             (the keymap turns these into XF86Switch_VT_n);
  *   Ctrl+Alt+Shift+Backspace  emergency quit.
  */
-static bool run_compositor_key(struct tp_keyboard *k, uint32_t keycode) {
-	struct tp_server *s = k->server;
+static bool run_compositor_key(struct tp_server *s, struct wlr_keyboard *wlr,
+							   uint32_t keycode) {
 	const xkb_keysym_t *syms;
-	int n = xkb_state_key_get_syms(k->wlr->xkb_state, keycode + 8, &syms);
+	int n = xkb_state_key_get_syms(wlr->xkb_state, keycode + 8, &syms);
 	for (int i = 0; i < n; i++) {
 		if (syms[i] >= XKB_KEY_XF86Switch_VT_1 &&
 			syms[i] <= XKB_KEY_XF86Switch_VT_12) {
@@ -181,10 +193,10 @@ static bool run_compositor_key(struct tp_keyboard *k, uint32_t keycode) {
 	if (s->locked)
 		return false; /* gate emergency quit while session is locked */
 
-	uint32_t mods = wlr_mods_to_tp(wlr_keyboard_get_modifiers(k->wlr));
+	uint32_t mods = wlr_mods_to_tp(wlr_keyboard_get_modifiers(wlr));
 	if (mods != (TP_MOD_CTRL | TP_MOD_ALT | TP_MOD_SHIFT))
 		return false;
-	n = level0_syms(k, keycode, &syms);
+	n = level0_syms(wlr, keycode, &syms);
 	for (int i = 0; i < n; i++) {
 		if (syms[i] == XKB_KEY_BackSpace) {
 			tam_log_warn("emergency quit (Ctrl+Alt+Shift+Backspace)");
@@ -195,48 +207,49 @@ static bool run_compositor_key(struct tp_keyboard *k, uint32_t keycode) {
 	return false;
 }
 
-static bool run_binding(struct tp_keyboard *k, uint32_t keycode,
-						bool released) {
-	uint32_t mods = wlr_mods_to_tp(wlr_keyboard_get_modifiers(k->wlr));
-	if (!mods && !tp_lua_has_unmodified_bindings(k->server->lua))
+static bool run_binding(struct tp_server *s, struct wlr_keyboard *wlr,
+						uint32_t keycode, bool released) {
+	uint32_t mods = wlr_mods_to_tp(wlr_keyboard_get_modifiers(wlr));
+	if (!mods && !tp_lua_has_unmodified_bindings(s->lua))
 		return false;
 	uint32_t xkb_code = keycode + 8;
 	const xkb_keysym_t *syms = NULL;
-	int n = level0_syms(k, keycode, &syms);
+	int n = level0_syms(wlr, keycode, &syms);
 	if (n <= 0)
-		return tp_bindings_handle_key(k->server, mods, XKB_KEY_NoSymbol,
-									  xkb_code, released);
+		return tp_bindings_handle_key(s, mods, XKB_KEY_NoSymbol, xkb_code,
+									  released);
 	for (int i = 0; i < n; i++)
-		if (tp_bindings_handle_key(k->server, mods, syms[i], xkb_code,
-								   released))
+		if (tp_bindings_handle_key(s, mods, syms[i], xkb_code, released))
 			return true;
 	return false;
 }
 
 static void on_key(struct wl_listener *l, void *data) {
-	struct tp_keyboard *k = wl_container_of(l, k, key);
-	struct tp_server *s = k->server;
+	struct tp_server *s = wl_container_of(l, s, kb_group_key);
+	struct wlr_keyboard *wlr = &s->kb_group->keyboard;
 	struct wlr_keyboard_key_event *ev = data;
 	tp_idle_notify_activity(s);
 	uint32_t word = ev->keycode / 64;
 	uint64_t mask = UINT64_C(1) << (ev->keycode % 64);
+	size_t consumed_words =
+		sizeof(s->kb_consumed_keys) / sizeof(s->kb_consumed_keys[0]);
 	bool pressed = (ev->state == WL_KEYBOARD_KEY_STATE_PRESSED);
 
-	if (pressed && run_compositor_key(k, ev->keycode)) {
-		if (word < sizeof(k->consumed_keys) / sizeof(k->consumed_keys[0]))
-			k->consumed_keys[word] |= mask;
+	if (pressed && run_compositor_key(s, wlr, ev->keycode)) {
+		if (word < consumed_words)
+			s->kb_consumed_keys[word] |= mask;
 		return;
 	}
 
 	/* Route through one-handed chord composer when unlocked. */
 	if (!s->locked && s->chord.enabled) {
 		const xkb_keysym_t *syms = NULL;
-		int n = level0_syms(k, ev->keycode, &syms);
+		int n = level0_syms(wlr, ev->keycode, &syms);
 		xkb_keysym_t raw_sym = (n > 0) ? syms[0] : XKB_KEY_NoSymbol;
 		xkb_keysym_t sym = (raw_sym != XKB_KEY_NoSymbol)
 							   ? xkb_keysym_to_lower(raw_sym)
 							   : XKB_KEY_NoSymbol;
-		uint32_t phys_mods = wlr_mods_to_tp(wlr_keyboard_get_modifiers(k->wlr));
+		uint32_t phys_mods = wlr_mods_to_tp(wlr_keyboard_get_modifiers(wlr));
 		struct tp_chord_result cr = tp_chord_on_key(
 			&s->chord, s->lua, raw_sym, sym, ev->keycode, pressed, phys_mods);
 
@@ -254,9 +267,9 @@ static void on_key(struct wl_listener *l, void *data) {
 		}
 
 		if (cr.kind == TP_CHORD_RES_CAPS_LETTER) {
-			synthesize_chord(k, TP_MOD_SHIFT, cr.keycode, ev->time_msec);
-			if (word < sizeof(k->consumed_keys) / sizeof(k->consumed_keys[0]))
-				k->consumed_keys[word] |= mask;
+			synthesize_chord(s, wlr, TP_MOD_SHIFT, cr.keycode, ev->time_msec);
+			if (word < consumed_words)
+				s->kb_consumed_keys[word] |= mask;
 			return;
 		}
 		if (cr.kind == TP_CHORD_RES_RUN_ITEM) {
@@ -264,9 +277,8 @@ static void on_key(struct wl_listener *l, void *data) {
 			tp_events_emit_chord(s, TP_EVENT_CHORD_END, "menu", cr.item.desc);
 			if (s->lua)
 				tp_lua_run_bind_index(s->lua, cr.item.bind_index, s->locked);
-			if (pressed &&
-				word < sizeof(k->consumed_keys) / sizeof(k->consumed_keys[0]))
-				k->consumed_keys[word] |= mask;
+			if (pressed && word < consumed_words)
+				s->kb_consumed_keys[word] |= mask;
 			return;
 		}
 		if (cr.kind == TP_CHORD_RES_FINISH_CHORD) {
@@ -276,60 +288,59 @@ static void on_key(struct wl_listener *l, void *data) {
 			if (tp_bindings_handle(s, cr.mods, cr.sym)) {
 				tp_events_emit_chord(s, TP_EVENT_CHORD_END, "dispatch", cstr);
 			} else {
-				synthesize_chord(k, cr.mods, cr.keycode, ev->time_msec);
+				synthesize_chord(s, wlr, cr.mods, cr.keycode, ev->time_msec);
 				tp_events_emit_chord(s, TP_EVENT_CHORD_END, "forward", cstr);
 			}
-			if (pressed &&
-				word < sizeof(k->consumed_keys) / sizeof(k->consumed_keys[0]))
-				k->consumed_keys[word] |= mask;
+			if (pressed && word < consumed_words)
+				s->kb_consumed_keys[word] |= mask;
 			return;
 		}
 		if (cr.kind == TP_CHORD_RES_CONSUME) {
-			if (pressed &&
-				word < sizeof(k->consumed_keys) / sizeof(k->consumed_keys[0]))
-				k->consumed_keys[word] |= mask;
-			else if (!pressed &&
-					 word < sizeof(k->consumed_keys) /
-								sizeof(k->consumed_keys[0]))
-				k->consumed_keys[word] &= ~mask;
+			if (pressed && word < consumed_words)
+				s->kb_consumed_keys[word] |= mask;
+			else if (!pressed && word < consumed_words)
+				s->kb_consumed_keys[word] &= ~mask;
 			return;
 		}
 	}
 
 	if (pressed) {
-		if (run_binding(k, ev->keycode, false)) {
-			if (word < sizeof(k->consumed_keys) / sizeof(k->consumed_keys[0]))
-				k->consumed_keys[word] |= mask;
+		if (run_binding(s, wlr, ev->keycode, false)) {
+			if (word < consumed_words)
+				s->kb_consumed_keys[word] |= mask;
 			return;
 		}
 	} else {
-		bool had_release = run_binding(k, ev->keycode, true);
-		if (word < sizeof(k->consumed_keys) / sizeof(k->consumed_keys[0]) &&
-			(k->consumed_keys[word] & mask)) {
-			k->consumed_keys[word] &= ~mask;
+		bool had_release = run_binding(s, wlr, ev->keycode, true);
+		if (word < consumed_words && (s->kb_consumed_keys[word] & mask)) {
+			s->kb_consumed_keys[word] &= ~mask;
 			return;
 		}
 		if (had_release)
 			return;
 	}
-	if (tp_text_input_forward_key(s, k->wlr, ev))
+	if (tp_text_input_forward_key(s, wlr, ev))
 		return;
-	wlr_seat_set_keyboard(s->seat, k->wlr);
+	wlr_seat_set_keyboard(s->seat, wlr);
 	wlr_seat_keyboard_notify_key(s->seat, ev->time_msec, ev->keycode,
 								 ev->state);
 }
 
 static void keyboard_free(struct tp_keyboard *k) {
-	wl_list_remove(&k->modifiers.link);
-	wl_list_remove(&k->key.link);
+	if (k->grouped && k->server->kb_group && k->wlr)
+		wlr_keyboard_group_remove_keyboard(k->server->kb_group, k->wlr);
 	wl_list_remove(&k->destroy.link);
 	wl_list_remove(&k->link);
 	free(k);
 }
 
 static void on_destroy(struct wl_listener *l, void *data) {
+	(void)data;
 	struct tp_keyboard *k = wl_container_of(l, k, destroy);
 	struct tp_server *s = k->server;
+	/* wlr_keyboard_group listens on dev->events.destroy and removes k->wlr
+	 * itself when the device is destroyed. */
+	k->grouped = false;
 	keyboard_free(k);
 	if (s->display)
 		tp_input_update_caps(s);
@@ -359,19 +370,19 @@ static struct xkb_keymap *compile_keymap(const struct tp_settings *st) {
 	return keymap;
 }
 
-void tp_keyboard_add(struct tp_server *s, struct wlr_input_device *dev) {
-	struct wlr_keyboard *wlr = wlr_keyboard_from_input_device(dev);
-	struct tp_keyboard *k = calloc(1, sizeof(*k));
-	if (!k)
-		return;
-	k->server = s;
-	k->wlr = wlr;
-
+bool tp_keyboards_init(struct tp_server *s) {
+	s->kb_group = wlr_keyboard_group_create();
+	if (!s->kb_group) {
+		tam_log_error("cannot create keyboard group");
+		return false;
+	}
+	struct wlr_keyboard *wlr = &s->kb_group->keyboard;
 	struct xkb_keymap *keymap = compile_keymap(&s->settings);
 	if (!keymap) {
-		tam_log_error("keyboard %s: cannot compile a keymap", dev->name);
-		free(k);
-		return;
+		tam_log_error("keyboard group: cannot compile a keymap");
+		wlr_keyboard_group_destroy(s->kb_group);
+		s->kb_group = NULL;
+		return false;
 	}
 	wlr_keyboard_set_keymap(wlr, keymap);
 	xkb_keymap_unref(keymap);
@@ -382,25 +393,72 @@ void tp_keyboard_add(struct tp_server *s, struct wlr_input_device *dev) {
 			wlr, wlr->modifiers.depressed, wlr->modifiers.latched,
 			wlr->modifiers.locked | WLR_MODIFIER_MOD2, wlr->modifiers.group);
 	}
+	s->kb_group_modifiers.notify = on_modifiers;
+	wl_signal_add(&wlr->events.modifiers, &s->kb_group_modifiers);
+	s->kb_group_key.notify = on_key;
+	wl_signal_add(&wlr->events.key, &s->kb_group_key);
+	return true;
+}
 
-	k->modifiers.notify = on_modifiers;
-	wl_signal_add(&wlr->events.modifiers, &k->modifiers);
-	k->key.notify = on_key;
-	wl_signal_add(&wlr->events.key, &k->key);
+void tp_keyboard_add(struct tp_server *s, struct wlr_input_device *dev) {
+	if (!s->kb_group)
+		return;
+	struct wlr_keyboard *wlr = wlr_keyboard_from_input_device(dev);
+	struct tp_keyboard *k = calloc(1, sizeof(*k));
+	if (!k)
+		return;
+	k->server = s;
+	k->wlr = wlr;
+
+	struct wlr_keyboard *group_kb = &s->kb_group->keyboard;
+	if (group_kb->keymap)
+		wlr_keyboard_set_keymap(wlr, group_kb->keymap);
+	wlr_keyboard_set_repeat_info(wlr, group_kb->repeat_info.rate,
+								 group_kb->repeat_info.delay);
+	if (s->settings.numlock_by_default) {
+		wlr_keyboard_notify_modifiers(
+			wlr, wlr->modifiers.depressed, wlr->modifiers.latched,
+			wlr->modifiers.locked | WLR_MODIFIER_MOD2, wlr->modifiers.group);
+	}
+
+	k->grouped = wlr_keyboard_group_add_keyboard(s->kb_group, wlr);
+	if (!k->grouped)
+		tam_log_warn("keyboard %s: failed to join keyboard group",
+					 dev->name ? dev->name : "?");
+
 	k->destroy.notify = on_destroy;
 	wl_signal_add(&dev->events.destroy, &k->destroy);
 
-	wlr_seat_set_keyboard(s->seat, wlr);
+	wlr_seat_set_keyboard(s->seat, group_kb);
 	wl_list_insert(&s->keyboards, &k->link);
 }
 
 void tp_keyboards_finish(struct tp_server *s) {
 	struct tp_keyboard *k, *tmp;
 	wl_list_for_each_safe(k, tmp, &s->keyboards, link) keyboard_free(k);
+	if (s->kb_group_modifiers.notify) {
+		wl_list_remove(&s->kb_group_modifiers.link);
+		s->kb_group_modifiers.notify = NULL;
+	}
+	if (s->kb_group_key.notify) {
+		wl_list_remove(&s->kb_group_key.link);
+		s->kb_group_key.notify = NULL;
+	}
+	if (s->kb_group) {
+		wlr_keyboard_group_destroy(s->kb_group);
+		s->kb_group = NULL;
+	}
 }
 
 void tp_keyboards_apply_settings(struct tp_server *s) {
 	struct xkb_keymap *keymap = compile_keymap(&s->settings);
+	if (s->kb_group) {
+		struct wlr_keyboard *group_kb = &s->kb_group->keyboard;
+		if (keymap)
+			wlr_keyboard_set_keymap(group_kb, keymap);
+		wlr_keyboard_set_repeat_info(group_kb, s->settings.repeat_rate,
+									 s->settings.repeat_delay);
+	}
 	struct tp_keyboard *k;
 	wl_list_for_each(k, &s->keyboards, link) {
 		if (keymap)
@@ -413,31 +471,22 @@ void tp_keyboards_apply_settings(struct tp_server *s) {
 }
 
 bool tp_keyboard_send_key(struct tp_server *s, uint32_t mods, uint32_t sym) {
-	if (!s || !s->seat || sym == XKB_KEY_NoSymbol)
+	if (!s || !s->seat || !s->kb_group || sym == XKB_KEY_NoSymbol)
 		return false;
-	struct wlr_keyboard *seat_kb = wlr_seat_get_keyboard(s->seat);
-	struct tp_keyboard *target = NULL;
-	struct tp_keyboard *k;
-	wl_list_for_each(k, &s->keyboards, link) {
-		if (k->wlr == seat_kb || !target) {
-			target = k;
-			if (k->wlr == seat_kb)
-				break;
-		}
-	}
-	if (!target || !target->wlr || !target->wlr->keymap)
+	struct wlr_keyboard *target = &s->kb_group->keyboard;
+	if (!target->keymap)
 		return false;
 	xkb_keysym_t want = xkb_keysym_to_lower((xkb_keysym_t)sym);
-	xkb_keycode_t min_kc = xkb_keymap_min_keycode(target->wlr->keymap);
-	xkb_keycode_t max_kc = xkb_keymap_max_keycode(target->wlr->keymap);
-	xkb_layout_index_t layout = target->wlr->modifiers.group;
-	if (layout >= xkb_keymap_num_layouts(target->wlr->keymap))
+	xkb_keycode_t min_kc = xkb_keymap_min_keycode(target->keymap);
+	xkb_keycode_t max_kc = xkb_keymap_max_keycode(target->keymap);
+	xkb_layout_index_t layout = target->modifiers.group;
+	if (layout >= xkb_keymap_num_layouts(target->keymap))
 		layout = 0;
 	uint32_t evdev_code = 0;
 	for (xkb_keycode_t kc = min_kc; kc <= max_kc; kc++) {
 		const xkb_keysym_t *syms = NULL;
-		int n = xkb_keymap_key_get_syms_by_level(target->wlr->keymap, kc,
-												 layout, 0, &syms);
+		int n = xkb_keymap_key_get_syms_by_level(target->keymap, kc, layout, 0,
+												 &syms);
 		for (int i = 0; i < n; i++) {
 			if (xkb_keysym_to_lower(syms[i]) == want) {
 				evdev_code = (uint32_t)(kc - 8);
@@ -452,48 +501,56 @@ bool tp_keyboard_send_key(struct tp_server *s, uint32_t mods, uint32_t sym) {
 	/* Explicit dispatch supplies the whole chord, even while its caller's
 	 * shortcut modifiers are physically held. Leave the device's key state
 	 * alone so real modifier releases still reach the client normally. */
-	wlr_seat_set_keyboard(s->seat, target->wlr);
-	struct wlr_keyboard_modifiers real = sanitized_mods(target);
+	wlr_seat_set_keyboard(s->seat, target);
+	struct wlr_keyboard_modifiers real = sanitized_mods(s, target);
 	struct wlr_keyboard_modifiers chord = real;
 	chord.depressed = tp_mods_to_wlr(mods);
 	chord.latched = 0;
 	wlr_seat_keyboard_notify_modifiers(s->seat, &chord);
 	wlr_seat_keyboard_notify_key(s->seat, 0, evdev_code,
-							 WL_KEYBOARD_KEY_STATE_PRESSED);
+								 WL_KEYBOARD_KEY_STATE_PRESSED);
 	wlr_seat_keyboard_notify_key(s->seat, 0, evdev_code,
-							 WL_KEYBOARD_KEY_STATE_RELEASED);
+								 WL_KEYBOARD_KEY_STATE_RELEASED);
 	wlr_seat_keyboard_notify_modifiers(s->seat, &real);
 	return true;
 }
 
 bool tp_keyboard_next_layout(struct tp_server *s, const char *name) {
-	if (!s)
+	if (!s || !s->kb_group)
 		return false;
-	struct tp_keyboard *target = NULL;
-	struct wlr_keyboard *seat_kb =
-		s->seat ? wlr_seat_get_keyboard(s->seat) : NULL;
-	struct tp_keyboard *k;
-	wl_list_for_each(k, &s->keyboards, link) {
-		if (name && *name) {
+	if (name && *name) {
+		bool found = false;
+		struct tp_keyboard *k;
+		wl_list_for_each(k, &s->keyboards, link) {
 			if (k->wlr && k->wlr->base.name &&
 				strcmp(k->wlr->base.name, name) == 0) {
-				target = k;
+				found = true;
 				break;
 			}
-		} else if (k->wlr == seat_kb || !target) {
-			target = k;
-			if (k->wlr == seat_kb)
-				break;
 		}
-	}
-	if (!target || !target->wlr || !target->wlr->keymap)
+		if (!found)
+			return false;
+	} else if (wl_list_empty(&s->keyboards)) {
 		return false;
-	xkb_layout_index_t num = xkb_keymap_num_layouts(target->wlr->keymap);
+	}
+	struct wlr_keyboard *target = &s->kb_group->keyboard;
+	if (!target->keymap)
+		return false;
+	xkb_layout_index_t num = xkb_keymap_num_layouts(target->keymap);
 	if (num == 0)
 		return false;
-	uint32_t next = (target->wlr->modifiers.group + 1) % num;
-	wlr_keyboard_notify_modifiers(
-		target->wlr, target->wlr->modifiers.depressed,
-		target->wlr->modifiers.latched, target->wlr->modifiers.locked, next);
+	uint32_t next = (target->modifiers.group + 1) % num;
+	wlr_keyboard_notify_modifiers(target, target->modifiers.depressed,
+								  target->modifiers.latched,
+								  target->modifiers.locked, next);
 	return true;
+}
+
+bool tp_keyboard_key_consumed(const struct tp_server *s, uint32_t code) {
+	if (!s)
+		return false;
+	uint32_t word = code / 64;
+	if (word >= sizeof(s->kb_consumed_keys) / sizeof(s->kb_consumed_keys[0]))
+		return false;
+	return (s->kb_consumed_keys[word] & (UINT64_C(1) << (code % 64))) != 0;
 }

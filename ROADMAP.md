@@ -3,8 +3,8 @@
 `tam-pane` is Tamlinux's tiling Wayland compositor with Lua configuration,
 written in C17 on top of `libtam`.
 
-- **Current version:** `0.2.17` (branch `dev`)
-- **Progress:** 3 of 7 phases done (P1–P3 done; P4 next)
+- **Current version:** `0.3.0` (branch `dev`)
+- **Progress:** 3 of 7 phases done (P1–P3 done; P4 in progress)
 - **Versioning:** Semantic versioning; during 0.x, minor marks a phase and
   patch marks milestones or fixes within it.
 
@@ -15,7 +15,7 @@ written in C17 on top of `libtam`.
 | **P1** | 0.0.x | Foundation: headless/nested compositor, tags, dwindle tiling, layer-shell, multi-monitor | [P1-foundation.md](plans/P1-foundation.md) | Done |
 | **P2** | 0.1.x | Embedded Lua 5.5 config, bindings, hooks, window rules, live reload, and R1 hardening | [P2-lua.md](plans/P2-lua.md) | Done (2026-11-22) |
 | **P3** | 0.2.x | Daily-driver parity: shell/capture/text protocols, IPC, layouts, chords, monitor/input polish | [P3-daily-parity.md](plans/P3-daily-parity.md) | Done (2026-11-26) |
-| **P4** | 0.3.x | Dogfood in Tamlinux 0.7 with Quickshell, `fred.*` plugins, and headless desktop tests | [P4-dogfood-tamlinux-0.7.md](plans/P4-dogfood-tamlinux-0.7.md) | Planned |
+| **P4** | 0.3.x | Dogfood in Tamlinux 0.7 with Quickshell, `fred.*` plugins, and headless desktop tests | [P4-dogfood-tamlinux-0.7.md](plans/P4-dogfood-tamlinux-0.7.md) | In progress |
 | **P5** | 0.4.x | Own GLES visuals on Mesa: borders, rounded corners, shadows, blur, animations | [P5-visuals.md](plans/P5-visuals.md) | Planned |
 | **P6** | 0.5.x–0.7.x | Own the stack: replace libinput/xkbcommon, libwayland-server, and wlroots via `libtam` + Mesa | [P6-own-the-stack.md](plans/P6-own-the-stack.md) | Planned |
 | **P7** | 1.0.0 | Retire Hyprland; `tam-pane` becomes Tamlinux's sole compositor (only on Fred's word) | [P7-retire-hyprland.md](plans/P7-retire-hyprland.md) | Planned |
@@ -81,8 +81,8 @@ Fred decided these on 2026-11-17:
 
 | Version | Milestone | Status |
 | --- | --- | --- |
-| **0.3.0** | Packaged with login session entry; Hyprland kept as fallback | Planned |
-| **0.3.1** | Quickshell and `fred.*` plugins operate through `tam-pane` IPC; headless desktop tests switch from Sway | Planned |
+| **0.3.0** | P4 dogfood baseline & R1-17 hardening (keyboard grouping, full Lua pattern validation, UTF-8 truncation, async nested scale, NULL checks); packaged with login session entry and Hyprland fallback in Tamlinux 0.7 | Done (2026-11-27) |
+| **0.3.1** | Quickshell and `fred.*` plugins operate through `tam-pane` IPC; headless desktop tests switch from Sway (wired in Tamlinux 0.7.x; hardware Test pending) | In progress |
 | **0.3.x** | Fixes from daily use, recorded in `bugs/` | Planned |
 
 ### Phase P5: Visuals (0.4.x) — [P5-visuals.md](plans/P5-visuals.md)

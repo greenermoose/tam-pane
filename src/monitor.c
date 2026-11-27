@@ -147,34 +147,22 @@ static const struct wl_registry_listener host_registry_listener = {
 	.global_remove = on_host_global_remove,
 };
 
-static void setup_nested_scale(struct tp_monitor *m) {
-	if (!wlr_output_is_wl(m->output) || !wlr_backend_is_wl(m->output->backend))
-		return;
-	struct wl_display *remote =
-		wlr_wl_backend_get_remote_display(m->output->backend);
-	struct wl_surface *surface = wlr_wl_output_get_surface(m->output);
-	if (!remote || !surface)
-		return;
-
-	struct wl_event_queue *q = wl_display_create_queue(remote);
-	struct wl_display *wrapped = q ? wl_proxy_create_wrapper(remote) : NULL;
-	if (!wrapped) {
-		if (q)
-			wl_event_queue_destroy(q);
-		return;
+static void on_host_sync_done(void *data, struct wl_callback *cb,
+							  uint32_t serial) {
+	(void)serial;
+	struct tp_monitor *m = data;
+	wl_callback_destroy(cb);
+	if (m->host_sync == cb)
+		m->host_sync = NULL;
+	if (m->host_reg) {
+		wl_registry_destroy(m->host_reg);
+		m->host_reg = NULL;
 	}
-	wl_proxy_set_queue((struct wl_proxy *)wrapped, q);
-	struct wl_registry *reg = wl_display_get_registry(wrapped);
-	wl_registry_add_listener(reg, &host_registry_listener, m);
-	wl_display_roundtrip_queue(remote, q);
-	wl_registry_destroy(reg);
-	if (m->host_viewporter)
-		wl_proxy_set_queue((struct wl_proxy *)m->host_viewporter, NULL);
-	if (m->host_fsm)
-		wl_proxy_set_queue((struct wl_proxy *)m->host_fsm, NULL);
-	wl_proxy_wrapper_destroy(wrapped);
-	wl_event_queue_destroy(q);
-
+	if (!m->output || !wlr_output_is_wl(m->output))
+		return;
+	struct wl_surface *surface = wlr_wl_output_get_surface(m->output);
+	if (!surface)
+		return;
 	if (m->host_viewporter && m->host_fsm) {
 		m->host_viewport =
 			wp_viewporter_get_viewport(m->host_viewporter, surface);
@@ -186,7 +174,39 @@ static void setup_nested_scale(struct tp_monitor *m) {
 	}
 }
 
+static const struct wl_callback_listener host_sync_listener = {
+	.done = on_host_sync_done,
+};
+
+static void setup_nested_scale(struct tp_monitor *m) {
+	if (!wlr_output_is_wl(m->output) || !wlr_backend_is_wl(m->output->backend))
+		return;
+	struct wl_display *remote =
+		wlr_wl_backend_get_remote_display(m->output->backend);
+	struct wl_surface *surface = wlr_wl_output_get_surface(m->output);
+	if (!remote || !surface)
+		return;
+
+	/* Discover host globals asynchronously on the remote display queue
+	 * already dispatched by wlr_wl_backend (no blocking roundtrip). */
+	m->host_reg = wl_display_get_registry(remote);
+	if (!m->host_reg)
+		return;
+	wl_registry_add_listener(m->host_reg, &host_registry_listener, m);
+	m->host_sync = wl_display_sync(remote);
+	if (!m->host_sync) {
+		wl_registry_destroy(m->host_reg);
+		m->host_reg = NULL;
+		return;
+	}
+	wl_callback_add_listener(m->host_sync, &host_sync_listener, m);
+}
+
 static void finish_nested_scale(struct tp_monitor *m) {
+	if (m->host_sync)
+		wl_callback_destroy(m->host_sync);
+	if (m->host_reg)
+		wl_registry_destroy(m->host_reg);
 	if (m->host_fscale)
 		wp_fractional_scale_v1_destroy(m->host_fscale);
 	if (m->host_viewport)
@@ -195,6 +215,8 @@ static void finish_nested_scale(struct tp_monitor *m) {
 		wp_fractional_scale_manager_v1_destroy(m->host_fsm);
 	if (m->host_viewporter)
 		wp_viewporter_destroy(m->host_viewporter);
+	m->host_sync = NULL;
+	m->host_reg = NULL;
 	m->host_fscale = NULL;
 	m->host_viewport = NULL;
 	m->host_fsm = NULL;

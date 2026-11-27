@@ -36,6 +36,7 @@
 #include <unistd.h>
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_keyboard.h>
+#include <wlr/types/wlr_keyboard_group.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_xdg_shell.h>
@@ -374,32 +375,37 @@ static tam_str_t build_keyboards(const struct tp_server *s) {
 	tam_str_t out = tam_str_new("OK\n");
 	struct wlr_keyboard *seat_kb =
 		s->seat ? wlr_seat_get_keyboard(s->seat) : NULL;
+	struct wlr_keyboard *group_kb = s->kb_group ? &s->kb_group->keyboard : NULL;
 	struct tp_keyboard *k;
+	bool first = true;
 	wl_list_for_each(k, &s->keyboards, link) {
 		if (!k->wlr)
 			continue;
+		struct wlr_keyboard *state_kb = (k->grouped && group_kb) ? group_kb : k->wlr;
 		const char *name = k->wlr->base.name ? k->wlr->base.name : "";
-		uint32_t group = k->wlr->modifiers.group;
+		uint32_t group = state_kb->modifiers.group;
 		const char *active_keymap = "";
 		tam_str_t layouts = tam_str_new("");
-		if (k->wlr->keymap) {
-			xkb_layout_index_t num = xkb_keymap_num_layouts(k->wlr->keymap);
+		if (state_kb->keymap) {
+			xkb_layout_index_t num = xkb_keymap_num_layouts(state_kb->keymap);
 			if (num > 0) {
 				if (group >= num)
 					group = 0;
 				const char *ln =
-					xkb_keymap_layout_get_name(k->wlr->keymap, group);
+					xkb_keymap_layout_get_name(state_kb->keymap, group);
 				if (ln)
 					active_keymap = ln;
 				for (xkb_layout_index_t i = 0; i < num; i++) {
 					if (i > 0)
 						layouts = tam_str_cat_len(layouts, ",", 1);
 					const char *item =
-						xkb_keymap_layout_get_name(k->wlr->keymap, i);
+						xkb_keymap_layout_get_name(state_kb->keymap, i);
 					layouts = tam_str_cat(layouts, item ? item : "");
 				}
 			}
 		}
+		bool is_main = (k->wlr == seat_kb) ||
+					   (k->grouped && group_kb && seat_kb == group_kb && first);
 		out = tam_str_cat(out, "keyboard\tname=");
 		out = tp_ipc_escape_append(out, name);
 		out = tam_str_cat(out, "\tlayout=");
@@ -407,7 +413,8 @@ static tam_str_t build_keyboards(const struct tp_server *s) {
 		out = tam_str_cat(out, "\tactive_keymap=");
 		out = tp_ipc_escape_append(out, active_keymap);
 		out = tam_str_cat_printf(out, "\tactive_layout_index=%u\tmain=%d\n",
-								 group, k->wlr == seat_kb ? 1 : 0);
+								 group, is_main ? 1 : 0);
+		first = false;
 		tam_str_free(layouts);
 		if (!out)
 			return NULL;

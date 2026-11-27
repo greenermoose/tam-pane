@@ -1,6 +1,6 @@
 # P4: Dogfood in Tamlinux 0.7 (0.3.x)
 
-**Status:** not started.
+**Status:** in progress (`0.3.0` landed on `dev` 2026-11-27; Tamlinux 0.7.x session packaging, `TamPaneAdapter`, and headless desktop battery are wired in `tamlinux`; real-hardware acceptance checks await Fred's `Test` run).
 
 ## Goal
 

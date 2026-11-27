@@ -115,6 +115,8 @@ bool tp_input_init(struct tp_server *s) {
 		tam_log_error("cannot create seat0");
 		return false;
 	}
+	if (!tp_keyboards_init(s))
+		return false;
 	s->new_input.notify = on_new_input;
 	wl_signal_add(&s->backend->events.new_input, &s->new_input);
 	s->request_cursor.notify = on_request_cursor;

@@ -109,6 +109,10 @@ static void on_new_popup(struct wl_listener *l, void *data) {
 		return;
 	p->popup = popup;
 	popup->base->data = wlr_scene_xdg_surface_create(parent->data, popup->base);
+	if (!popup->base->data) {
+		free(p);
+		return;
+	}
 	p->commit.notify = popup_commit;
 	wl_signal_add(&popup->base->surface->events.commit, &p->commit);
 	p->reposition.notify = popup_reposition;

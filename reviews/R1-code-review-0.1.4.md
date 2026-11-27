@@ -228,8 +228,13 @@ schedules are not findings here.
   - The Makefile does not rebuild `main.o` and `lua.o` when `VERSION`
     changes, so a bumped build can still report the old version (seen
     while building 0.1.5).
-- **Status:** the Makefile point is fixed in 0.1.8; the rest are
-  scheduled in `plans/P3-daily-parity.md` (Design work from review R1)
+- **Status:** resolved across 0.1.8–0.3.0:
+  - Makefile `VERSION` rebuild dependency fixed in 0.1.8.
+  - Binding gate (session lock) landed in 0.2.0.
+  - `SIGHUP` shuts down cleanly instead of reloading (0.2.3).
+  - `tp_monitor_cycle` uses `struct tp_monitor *m = NULL; m = wl_container_of(pos, m, link)` with `offsetof` (no NULL dereference).
+  - Keyboard grouping (`wlr_keyboard_group`), complete Lua 5.5 pattern validation, UTF-8-safe event/rule string truncation, async nested fractional-scale discovery (`wl_display_sync`), and scene/output-layout NULL checks landed in 0.3.0.
+  - `ON_DEMAND` layer surfaces intentionally take focus on click rather than on map (verified in `tests/test_input_headless.c`) so panels and notifications do not steal keyboard focus; launchers requesting immediate focus use `EXCLUSIVE`.
 
 ## Limits
 

@@ -1777,6 +1777,78 @@ static void test_controls_and_borders_0_2_17(void) {
 	tp_lua_destroy(lua);
 }
 
+static void test_r1_17_pattern_and_utf8_0_3_0(void) {
+	struct tp_lua *lua = tp_lua_create();
+	CHECK(lua != NULL);
+
+	struct tp_settings base, out;
+	tp_settings_defaults(&base);
+	char err[256] = {0};
+
+	/* Malformed patterns after the first item must be rejected at load time. */
+	static const char *const bad_patterns[] = {
+		"foo[bar",
+		"abc)",
+		"abc(def",
+		"abc%b",
+		"abc%b(",
+		"abc%f",
+		"abc%fx",
+		"abc%",
+		"abc%1",
+		"abc%0",
+		"[a-%",
+		"()foo%2",
+		"((a)%1)",
+		"foo[]",
+	};
+	for (size_t i = 0; i < sizeof(bad_patterns) / sizeof(bad_patterns[0]); i++) {
+		char src[256];
+		snprintf(src, sizeof(src),
+				 "tp.rule({ match = { app_id = \"%s\" }, floating = true })\n",
+				 bad_patterns[i]);
+		err[0] = '\0';
+		CHECK(!tp_lua_exec_string(lua, src, strlen(src), "bad_pat",
+								  TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+								  TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+								  sizeof(err)));
+	}
+
+	/* Valid complex patterns must still be accepted. */
+	const char *good_src =
+		"tp.rule({ match = { app_id = '^foot$' }, tag = 1 })\n"
+		"tp.rule({ match = { app_id = 'foo[a-z]+' }, tag = 2 })\n"
+		"tp.rule({ match = { app_id = '(foo)%1' }, tag = 3 })\n"
+		"tp.rule({ match = { app_id = '%b()' }, tag = 4 })\n"
+		"tp.rule({ match = { app_id = '%f[%a]foo' }, tag = 5 })\n"
+		"tp.rule({ match = { app_id = '[]a]' }, tag = 6 })\n"
+		"tp.rule({ match = { app_id = '[^]a]' }, tag = 7 })\n"
+		"tp.rule({ match = { title = '^a.*\xe3\x81\x82$' }, floating = true })\n";
+	err[0] = '\0';
+	CHECK(tp_lua_exec_string(lua, good_src, strlen(good_src), "good_pats",
+							 TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+							 TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+							 sizeof(err)));
+
+	/* UTF-8-safe subject truncation: 'a' + 86 * 3-byte 'あ' = 259 bytes.
+	 * Byte 256 falls mid-codepoint; safe truncation backs up to 253 bytes
+	 * (complete UTF-8), so '^a(あ)+$' still matches cleanly. */
+	char utf8_title[300];
+	size_t pos = 0;
+	utf8_title[pos++] = 'a';
+	for (int i = 0; i < 86; i++) {
+		utf8_title[pos++] = (char)0xe3;
+		utf8_title[pos++] = (char)0x81;
+		utf8_title[pos++] = (char)0x82;
+	}
+	utf8_title[pos] = '\0';
+	struct tp_rule_result res = {0};
+	CHECK(tp_lua_eval_rules(lua, "none", utf8_title, &res));
+	CHECK(res.matched && res.has_floating && res.floating);
+
+	tp_lua_destroy(lua);
+}
+
 int main(void) {
 	tam_log_set_level(TAM_LOG_ERROR);
 	test_config_and_fallback();
@@ -1797,5 +1869,6 @@ int main(void) {
 	test_controls_0_2_8();
 	test_gamma_freeze_and_lock_events_0_2_16();
 	test_controls_and_borders_0_2_17();
+	test_r1_17_pattern_and_utf8_0_3_0();
 	CHECK_DONE("test_lua");
 }

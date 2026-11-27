@@ -53,10 +53,146 @@ static bool rule_list_remove_id(struct tp_lua_rule_list *list, uint64_t id) {
 
 /* ---- Pattern helpers ---- */
 
+static size_t utf8_safe_len(const char *s, size_t max_bytes) {
+	if (!s || max_bytes == 0)
+		return 0;
+	size_t len = strnlen(s, max_bytes);
+	if (len < max_bytes || s[len] == '\0')
+		return len;
+	size_t i = len;
+	while (i > 0 && ((unsigned char)s[i - 1] & 0xC0) == 0x80)
+		i--;
+	if (i == 0)
+		return 0;
+	unsigned char lead = (unsigned char)s[i - 1];
+	size_t expected = 1;
+	if ((lead & 0xE0) == 0xC0)
+		expected = 2;
+	else if ((lead & 0xF0) == 0xE0)
+		expected = 3;
+	else if ((lead & 0xF8) == 0xF0)
+		expected = 4;
+	if (len - (i - 1) < expected)
+		return i - 1;
+	return len;
+}
+
+static const char *validate_char_class(const char *p, const char **err_out) {
+	/* p points at '[' */
+	p++;
+	if (*p == '^')
+		p++;
+	do {
+		if (*p == '\0') {
+			*err_out = "malformed pattern (missing ']')";
+			return NULL;
+		}
+		if (*p == '%') {
+			p++;
+			if (*p == '\0') {
+				*err_out = "malformed pattern (ends with '%')";
+				return NULL;
+			}
+		}
+		p++;
+	} while (*p != ']');
+	return p + 1;
+}
+
+static const char *check_lua_pattern_syntax(const char *pat) {
+	enum { MAX_CAPS = 32 };
+	bool closed[MAX_CAPS] = {0};
+	int open_ids[MAX_CAPS];
+	int open_depth = 0;
+	int total = 0;
+
+	const char *p = pat;
+	if (*p == '^')
+		p++;
+
+	while (*p != '\0') {
+		switch (*p) {
+		case '(':
+			if (total >= MAX_CAPS)
+				return "too many captures";
+			if (p[1] == ')') {
+				closed[total++] = true;
+				p += 2;
+			} else {
+				closed[total] = false;
+				open_ids[open_depth++] = total++;
+				p++;
+			}
+			continue;
+		case ')':
+			if (open_depth == 0)
+				return "invalid pattern capture";
+			closed[open_ids[--open_depth]] = true;
+			p++;
+			continue;
+		case '$':
+			if (p[1] == '\0') {
+				p++;
+				continue;
+			}
+			p++;
+			break;
+		case '%':
+			if (p[1] == '\0')
+				return "malformed pattern (ends with '%')";
+			if (p[1] == 'b') {
+				if (p[2] == '\0' || p[3] == '\0')
+					return "malformed pattern (missing arguments to '%b')";
+				p += 4;
+				continue;
+			}
+			if (p[1] == 'f') {
+				if (p[2] != '[')
+					return "missing '[' after '%f' in pattern";
+				const char *err = NULL;
+				p = validate_char_class(p + 2, &err);
+				if (!p)
+					return err;
+				continue;
+			}
+			if (p[1] >= '0' && p[1] <= '9') {
+				int idx = p[1] - '1';
+				if (idx < 0 || idx >= total || !closed[idx])
+					return "invalid capture index";
+				p += 2;
+				continue;
+			}
+			p += 2;
+			break;
+		case '[': {
+			const char *err = NULL;
+			p = validate_char_class(p, &err);
+			if (!p)
+				return err;
+			break;
+		}
+		default:
+			p++;
+			break;
+		}
+		if (*p == '*' || *p == '+' || *p == '-' || *p == '?')
+			p++;
+	}
+
+	if (open_depth > 0)
+		return "unfinished capture";
+	return NULL;
+}
+
 static void validate_lua_pattern(struct tp_lua *lua, lua_State *L,
 								 const char *pat, const char *field) {
 	if (lua->string_find_ref == LUA_NOREF)
 		luaL_error(L, "tp.rule.match.%s: string.find unavailable", field);
+
+	const char *syn_err = check_lua_pattern_syntax(pat);
+	if (syn_err)
+		luaL_error(L, "tp.rule.match.%s: invalid Lua pattern: %s", field,
+				   syn_err);
 
 	lua_rawgeti(L, LUA_REGISTRYINDEX, lua->string_find_ref);
 	lua_pushliteral(L, "");
@@ -80,9 +216,7 @@ static bool match_lua_pattern(struct tp_lua *lua, const char *subject,
 	int top = lua_gettop(L);
 	/* Rules see the first TP_LUA_RULE_SUBJECT_MAX bytes, as event hooks do:
 	 * clients choose their titles, and matching time grows with them. */
-	size_t len = subject ? strlen(subject) : 0;
-	if (len > TP_LUA_RULE_SUBJECT_MAX)
-		len = TP_LUA_RULE_SUBJECT_MAX;
+	size_t len = subject ? utf8_safe_len(subject, TP_LUA_RULE_SUBJECT_MAX) : 0;
 	lua_rawgeti(L, LUA_REGISTRYINDEX, lua->string_find_ref);
 	lua_pushlstring(L, subject ? subject : "", len);
 	lua_pushstring(L, pat);

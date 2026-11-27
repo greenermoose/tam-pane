@@ -74,6 +74,10 @@ static void on_new_popup(struct wl_listener *l, void *data) {
 		return;
 	p->popup = popup;
 	popup->base->data = wlr_scene_xdg_surface_create(ls->popup_tree, popup->base);
+	if (!popup->base->data) {
+		free(p);
+		return;
+	}
 	p->constrain_box = (struct wlr_box){
 		.x = ls->mon->area.x - ls->scene->tree->node.x,
 		.y = ls->mon->area.y - ls->scene->tree->node.y,

@@ -17,6 +17,28 @@ enum {
 	TP_EVENT_QUEUE_MAX = 256,
 };
 
+static size_t utf8_safe_len(const char *s, size_t max_bytes) {
+	size_t len = strnlen(s, max_bytes);
+	if (len < max_bytes || s[len] == '\0')
+		return len;
+	size_t i = len;
+	while (i > 0 && ((unsigned char)s[i - 1] & 0xC0) == 0x80)
+		i--;
+	if (i == 0)
+		return 0;
+	unsigned char lead = (unsigned char)s[i - 1];
+	size_t expected = 1;
+	if ((lead & 0xE0) == 0xC0)
+		expected = 2;
+	else if ((lead & 0xF0) == 0xE0)
+		expected = 3;
+	else if ((lead & 0xF8) == 0xF0)
+		expected = 4;
+	if (len - (i - 1) < expected)
+		return i - 1;
+	return len;
+}
+
 static void copy_str(char *dst, size_t dst_size, const char *src) {
 	if (!dst_size)
 		return;
@@ -24,7 +46,9 @@ static void copy_str(char *dst, size_t dst_size, const char *src) {
 		dst[0] = '\0';
 		return;
 	}
-	snprintf(dst, dst_size, "%s", src);
+	size_t len = utf8_safe_len(src, dst_size - 1);
+	memcpy(dst, src, len);
+	dst[len] = '\0';
 }
 
 static int drain_events_timer(void *data);

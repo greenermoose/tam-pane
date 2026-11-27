@@ -21,6 +21,7 @@ struct wlr_backend;
 struct wlr_color_transform;
 struct wlr_compositor;
 struct wlr_cursor;
+struct wlr_keyboard_group;
 struct wlr_output_layout;
 struct wlr_renderer;
 struct wlr_scene;
@@ -208,6 +209,12 @@ struct tp_server {
 	struct wl_listener xwayland_new_surface;
 
 	struct wlr_seat *seat;
+	struct wlr_keyboard_group *kb_group;
+	struct wl_listener kb_group_key;
+	struct wl_listener kb_group_modifiers;
+	/* Linux KEY_MAX fits in twelve 64-bit words. */
+	uint64_t kb_consumed_keys[12];
+	uint32_t kb_last_layout_group;
 	struct wl_list keyboards;     /* tp_keyboard.link */
 	struct wl_list input_devices; /* tp_input_device.link */
 	struct wl_listener new_input;

@@ -3,10 +3,21 @@ WHATNOW
 What tam-pane is doing now and what comes next. Read this first; revise
 it at the end of every session (work/README-work).
 
-Updated: 2026-11-27, with W43
+Updated: 2026-11-27, with W44
 
 
 STATE
+
+  Version 0.3.0 on dev (W44) starts Phase P4 (Dogfood in Tamlinux 0.7) and
+  closes out all remaining Review R1 Finding 17 items: shared keyboard
+  grouping (`wlr_keyboard_group`) so modifiers combine across keyboards,
+  complete Lua 5.5 pattern syntax validation at config load time, UTF-8-safe
+  truncation in event snapshots and rule subjects, non-blocking nested
+  fractional-scale discovery (`wl_display_sync`), and NULL checks on scene,
+  output-layout, and shell creation helpers. `ON_DEMAND` layer surfaces remain
+  click-to-focus by design. All unit suites (`test_lua` 668, `test_ipc` 215,
+  `test_gamma` 1235, etc.), smoke tests (6/6), and headless input tests (988)
+  pass cleanly, including under ASan+UBSan, with zero `libxcb` NEEDED.
 
   Version 0.2.17 on dev (W43) adds the Tamlinux 0.7.x Stage 2 (Milestones
   13 & 14) compositor primitives: logical monitor enable/disable with window
@@ -117,9 +128,11 @@ STATE
 
 NEXT
 
-  1. Phase P4 (plans/P4-dogfood-tamlinux-0.7.md): 0.3.0 — package
-     tam-pane in tamlinux-packages with a login session entry (keeping
-     Hyprland installed as fallback), and begin dogfooding in Tamlinux 0.7.
+  1. Phase P4 (plans/P4-dogfood-tamlinux-0.7.md): complete physical-hardware
+     acceptance checks during Fred's Tamlinux 0.7 Test/Run, and record any
+     daily-use issues in bugs/.
+  2. Phase P5 (plans/P5-visuals.md): rounded corners and shadows in our own
+     Mesa GLES visuals module (no scenefx).
 
 
 WAITING FOR FRED

@@ -211,6 +211,10 @@ bool tp_server_init(struct tp_server *s) {
 	}
 
 	s->compositor = wlr_compositor_create(s->display, 6, s->renderer);
+	if (!s->compositor) {
+		tam_log_error("cannot create compositor global");
+		return false;
+	}
 	wlr_subcompositor_create(s->display);
 	wlr_data_device_manager_create(s->display);
 	s->primary_selection_mgr =
@@ -226,13 +230,34 @@ bool tp_server_init(struct tp_server *s) {
 	wlr_presentation_create(s->display, s->backend, 2);
 
 	s->scene = wlr_scene_create();
-	for (int i = 0; i < TP_LAYER_COUNT; i++)
+	if (!s->scene) {
+		tam_log_error("cannot create scene graph");
+		return false;
+	}
+	for (int i = 0; i < TP_LAYER_COUNT; i++) {
 		s->layer[i] = wlr_scene_tree_create(&s->scene->tree);
+		if (!s->layer[i]) {
+			tam_log_error("cannot create scene layer %d", i);
+			return false;
+		}
+	}
 	s->output_layout = wlr_output_layout_create(s->display);
+	if (!s->output_layout) {
+		tam_log_error("cannot create output layout");
+		return false;
+	}
 	s->scene_layout = wlr_scene_attach_output_layout(s->scene, s->output_layout);
+	if (!s->scene_layout) {
+		tam_log_error("cannot attach output layout to scene");
+		return false;
+	}
 
 	s->xdg_shell = wlr_xdg_shell_create(s->display, 6);
 	s->layer_shell = wlr_layer_shell_v1_create(s->display, 4);
+	if (!s->xdg_shell || !s->layer_shell) {
+		tam_log_error("cannot create xdg-shell or layer-shell");
+		return false;
+	}
 	if (!tp_security_init(s) || !tp_foreign_toplevel_init(s) ||
 		!tp_workspace_init(s) || !tp_session_lock_init(s) ||
 		!tp_idle_init(s) || !tp_output_power_init(s) || !tp_capture_init(s) ||

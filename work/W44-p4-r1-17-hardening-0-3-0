@@ -1,0 +1,49 @@
+W44 P4 DOGFOOD BASELINE AND R1-17 HARDENING (0.3.0)
+
+Date: 2026-11-27
+AI harness: agy 1.5.18
+AI model: gemini-4-neon-medium
+
+GUIDANCE
+
+  Fred: "/plan Do the next work slice for tam-pane"
+  Fred selected P4 0.3.0 + R1-17 hardening, reviewed the implementation plan
+  in tam-view, and approved execution.
+
+DONE
+
+  - Bumped VERSION to 0.3.0, marked Phase P4 In progress in ROADMAP.md and
+    plans/P4-dogfood-tamlinux-0.7.md, and closed out Finding 17 in
+    reviews/R1-code-review-0.1.4.md (recording ON_DEMAND click-to-focus as
+    intentional).
+  - Implemented keyboard grouping (`wlr_keyboard_group` in `src/input/keyboard.c`,
+    `src/input/input.c`, `include/tam-pane/server.h`, `include/tam-pane/input.h`,
+    `src/ipc.c`) so modifiers held on one keyboard combine with keys pressed on
+    another, while keeping per-device `keyboards` IPC reporting and shared layout
+    / LED state.
+  - Replaced incomplete `string.find("", pat)` pattern validation in
+    `src/lua_rules.c` with a full O(N) Lua 5.5 pattern syntax validator so
+    patterns malformed after the first item are rejected at config load time.
+  - Added UTF-8-safe string truncation (`utf8_safe_len`) in `src/events.c` and
+    `src/lua_rules.c` so long titles/strings never slice mid-codepoint.
+  - Replaced blocking `wl_display_roundtrip_queue` in `setup_nested_scale`
+    (`src/monitor.c`, `include/tam-pane/monitor.h`) with asynchronous
+    `wl_display_sync` discovery on the remote display queue.
+  - Added NULL checks on scene, output-layout, and shell creation helpers in
+    `src/server.c`, `src/client.c`, and `src/layer.c`.
+  - Added unit and headless tests covering malformed multi-item Lua patterns,
+    UTF-8-safe rule and event truncation, and cross-keyboard modifier grouping.
+  - Full test suite passed: `test_tags` (28), `test_gamma` (1235),
+    `test_dwindle` (143), `test_layouts` (102), `test_lua` (668),
+    `test_ipc` (215), `test_chord`, `nm -D` symbol check, `smoke-headless.sh`
+    (6/6), and `test_input_headless` (988/988), plus ASan+UBSan verification,
+    with zero `libxcb` NEEDED.
+
+FAILED
+
+  - Nothing.
+
+HANDOFF
+
+  - Ready to pin `tam-pane 0.3.0` in `tamlinux` when Fred schedules the next
+    0.7.x candidate, or begin Phase P5 visuals (rounded corners & shadows).

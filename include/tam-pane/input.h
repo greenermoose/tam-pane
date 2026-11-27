@@ -15,12 +15,8 @@ struct tp_keyboard {
 	struct wl_list link; /* tp_server.keyboards */
 	struct tp_server *server;
 	struct wlr_keyboard *wlr;
-	struct wl_listener modifiers;
-	struct wl_listener key;
 	struct wl_listener destroy;
-	/* Linux KEY_MAX fits in twelve 64-bit words. */
-	uint64_t consumed_keys[12];
-	uint32_t last_layout_group;
+	bool grouped;
 };
 
 struct tp_input_device {
@@ -37,12 +33,14 @@ void tp_input_update_caps(struct tp_server *s);
 const char *tp_input_device_type_name(int type);
 
 /* Keyboards (keyboard.c). */
+bool tp_keyboards_init(struct tp_server *s);
 void tp_keyboard_add(struct tp_server *s, struct wlr_input_device *dev);
 void tp_keyboards_finish(struct tp_server *s);
 void tp_keyboards_apply_settings(struct tp_server *s);
 bool tp_keyboard_next_layout(struct tp_server *s, const char *name);
 bool tp_keyboard_send_key(struct tp_server *s, uint32_t mods,
 						  uint32_t sym);
+bool tp_keyboard_key_consumed(const struct tp_server *s, uint32_t code);
 
 /* Cursor and pointer devices (pointer.c). */
 bool tp_pointer_init(struct tp_server *s);
