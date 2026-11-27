@@ -449,7 +449,20 @@ bool tp_keyboard_send_key(struct tp_server *s, uint32_t mods, uint32_t sym) {
 	}
 	if (!evdev_code)
 		return false;
-	synthesize_chord(target, mods, evdev_code, 0);
+	/* Explicit dispatch supplies the whole chord, even while its caller's
+	 * shortcut modifiers are physically held. Leave the device's key state
+	 * alone so real modifier releases still reach the client normally. */
+	wlr_seat_set_keyboard(s->seat, target->wlr);
+	struct wlr_keyboard_modifiers real = sanitized_mods(target);
+	struct wlr_keyboard_modifiers chord = real;
+	chord.depressed = tp_mods_to_wlr(mods);
+	chord.latched = 0;
+	wlr_seat_keyboard_notify_modifiers(s->seat, &chord);
+	wlr_seat_keyboard_notify_key(s->seat, 0, evdev_code,
+							 WL_KEYBOARD_KEY_STATE_PRESSED);
+	wlr_seat_keyboard_notify_key(s->seat, 0, evdev_code,
+							 WL_KEYBOARD_KEY_STATE_RELEASED);
+	wlr_seat_keyboard_notify_modifiers(s->seat, &real);
 	return true;
 }
 

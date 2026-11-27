@@ -3,10 +3,14 @@ WHATNOW
 What tam-pane is doing now and what comes next. Read this first; revise
 it at the end of every session (work/README-work).
 
-Updated: 2026-11-26, with W37
+Updated: 2026-11-26, with W38
 
 
 STATE
+
+  Explicit key dispatch sends the requested modifiers and restores the
+  physical modifier state after the key pair (W38). The headless suite
+  and a private compositor trial passed. Live use awaits candidate Test.
 
   Version 0.2.12 on dev (W37) logs per-phase startup timings (`lua`, `init`,
   `start`, `total` ms via `CLOCK_MONOTONIC`) at `TAM_LOG_INFO` right after

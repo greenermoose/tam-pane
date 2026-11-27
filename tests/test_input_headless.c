@@ -156,6 +156,7 @@ struct test_client {
 	struct wl_surface *keyboard_focus;
 	unsigned int key_events, pointer_enters, pointer_motions, pointer_buttons;
 	uint32_t keys[8], key_states[8];
+	uint32_t depressed, key_mods[8];
 	int shm_fd;
 	void *shm_data;
 	struct wl_buffer *buffer;
@@ -222,13 +223,16 @@ static void keyboard_key(void *data, struct wl_keyboard *keyboard,
 	if (client->key_events < 8) {
 		client->keys[client->key_events] = key;
 		client->key_states[client->key_events] = state;
+		client->key_mods[client->key_events] = client->depressed;
 	}
 	client->key_events++;
 }
 
 static void keyboard_modifiers(void *data, struct wl_keyboard *keyboard,
 		uint32_t serial, uint32_t depressed, uint32_t latched,
-		uint32_t locked, uint32_t group) {}
+		uint32_t locked, uint32_t group) {
+	((struct test_client *)data)->depressed = depressed;
+}
 
 static void keyboard_repeat(void *data, struct wl_keyboard *keyboard,
 		int32_t rate, int32_t delay) {}
@@ -1727,6 +1731,31 @@ int main(void) {
 		client.key_states[2] == WL_KEYBOARD_KEY_STATE_PRESSED);
 	CHECK(client.keys[3] == 45 &&
 		client.key_states[3] == WL_KEYBOARD_KEY_STATE_RELEASED);
+
+	/* Dispatch a terminal paste while the physical macro modifiers are
+	 * still held. The synthetic key and real releases must stay distinct. */
+	client.key_events = 0;
+	send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_PRESSED, 22);
+	send_key(&keyboard, KEY_LEFTALT, WL_KEYBOARD_KEY_STATE_PRESSED, 23);
+	CHECK(tp_keyboard_send_key(&server, TP_MOD_CTRL | TP_MOD_SHIFT, XKB_KEY_v));
+	for (unsigned int i = 0; i < 20; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(client.key_events == 4);
+	CHECK(client.keys[2] == KEY_V &&
+		client.key_states[2] == WL_KEYBOARD_KEY_STATE_PRESSED);
+	CHECK(client.keys[3] == KEY_V &&
+		client.key_states[3] == WL_KEYBOARD_KEY_STATE_RELEASED);
+	CHECK(client.key_mods[2] == (WLR_MODIFIER_CTRL | WLR_MODIFIER_SHIFT));
+	CHECK(client.key_mods[3] == client.key_mods[2]);
+	CHECK(client.depressed == (WLR_MODIFIER_LOGO | WLR_MODIFIER_ALT));
+	send_key(&keyboard, KEY_LEFTALT, WL_KEYBOARD_KEY_STATE_RELEASED, 24);
+	send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_RELEASED, 25);
+	send_key(&keyboard, KEY_X, WL_KEYBOARD_KEY_STATE_PRESSED, 26);
+	send_key(&keyboard, KEY_X, WL_KEYBOARD_KEY_STATE_RELEASED, 27);
+	for (unsigned int i = 0; i < 20; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(client.key_events == 8 && client.depressed == 0);
+	CHECK(client.keys[6] == KEY_X && client.key_mods[6] == 0);
 
 	/* The pointer starts over the headless output. Motion and a button must
 	 * be delivered to the surface underneath it. */

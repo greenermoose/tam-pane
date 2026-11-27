@@ -1,0 +1,29 @@
+W38 EXACT KEY DISPATCH FOR TERMINAL MACROS
+
+Date: 2026-11-26
+AI harness: Codex CLI 0.172.0
+AI model: gpt-6.2-sol
+Commits: Same commit as this record.
+
+GUIDANCE
+
+  Fred: "3) Macros to work in every program running in tam-last." (excerpt)
+  Fred: "Implement the plan."
+
+DONE
+
+  - Explicit dispatch sends the requested modifiers and restores the
+    physical modifier state after sending the key pair. This lets the
+    terminal receive Ctrl+Shift+V while the macro keys are still held.
+  - The headless input suite passed 803 checks. A private tam-pane
+    session exercised terminal macros in Bash, tam-clam, tmux, Vim and
+    Codex. Vim received Ctrl+V for visual block mode.
+
+FAILED
+
+  - The first headless run needed outside-sandbox permission for its
+    private Wayland socket. The rerun passed.
+
+HANDOFF
+
+  - Include the fix in the next selected Tamlinux candidate for live Test.
