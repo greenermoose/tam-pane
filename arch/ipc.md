@@ -58,10 +58,10 @@ replaced with a space. Every record is guaranteed to occupy one line.
   - `version\tversion=<ver>\tsocket=<WAYLAND_DISPLAY>\tdisplay=<DISPLAY>` (`display` is empty when XWayland is disabled or unavailable)
 - `monitors`
   - One line per connected output:
-    `monitor\tname=<n>\tx=<x>\ty=<y>\tw=<w>\th=<h>\tusable_x=<x>\tusable_y=<y>\tusable_w=<w>\tusable_h=<h>\tscale=<f>\ttags=<mask>\tprev_tags=<mask>\tfocused=<0|1>\tlayout=<dwindle|master|scroller|monocle>`
+    `monitor\tname=<n>\tx=<x>\ty=<y>\tw=<w>\th=<h>\tphys_w=<w>\tphys_h=<h>\trefresh=<mHz>\ttransform=<0..7>\tusable_x=<x>\tusable_y=<y>\tusable_w=<w>\tusable_h=<h>\tscale=<f>\ttags=<mask>\tprev_tags=<mask>\tfocused=<0|1>\tlayout=<dwindle|master|scroller|monocle>\tdpms=<0|1>\tdescription=<d>\tenabled=<0|1>`
 - `windows`
   - One line per mapped toplevel:
-    `window\tmonitor=<n>\ttags=<mask>\tfocused=<0|1>\tfloating=<0|1>\tfullscreen=<0|1>\tscratchpad=<0|1>\txwayland=<0|1>\tx=<x>\ty=<y>\tw=<w>\th=<h>\tapp_id=<id>\ttitle=<t>`
+    `window\tmonitor=<n>\tid=0x<id>\tpid=<pid>\ttags=<mask>\tfocused=<0|1>\tfloating=<0|1>\tfullscreen=<0|1>\tpinned=<0|1>\tscratchpad=<0|1>\txwayland=<0|1>\tx=<x>\ty=<y>\tw=<w>\th=<h>\tapp_id=<id>\ttitle=<t>`
 - `focused`
   - Same `window\t...` record for `tp_focused(s)`, or zero lines if no
     window is focused.
@@ -90,6 +90,9 @@ replaced with a space. Every record is guaranteed to occupy one line.
     the current pointer coordinates). Refused with `ERR session is locked` while
     locked:
     `pixel\tx=<x>\ty=<y>\tr=<0..255>\tg=<0..255>\tb=<0..255>\thex=#rrggbb`
+- `devices` (0.2.17)
+  - Lists all connected input devices (allowed while locked):
+    `device\ttype=<keyboard|pointer|touch|tablet|tablet_pad|switch>\tname=<name>`
 
 ### Actions
 
@@ -99,15 +102,24 @@ replaced with a space. Every record is guaranteed to occupy one line.
     or `ERR <diagnostic>\n` on failure (keeping the last good config).
 - `dispatch <action> [args...]`
   - Runs a compositor dispatcher:
-    - `terminal`, `close`, `quit`, `reload`, `toggle_float`,
-      `toggle_fullscreen`
-    - `focus next|prev`
+    - `terminal`, `quit`, `reload`, `toggle_float`, `toggle_fullscreen`
+    - `close [0xID]` (0.2.17: optional window ID; defaults to focused window)
+    - `float [on|off|toggle] [0xID]` (0.2.17)
+    - `pin [on|off|toggle] [0xID]` (0.2.17: pins a floating window across all tags on its monitor)
+    - `resize_exact <w> <h> [0xID]` (0.2.17: exact floating dimensions in pixels, `1..16384`)
+    - `move_exact <x> <y> [0xID]` (0.2.17: floating position relative to monitor `usable` area)
+    - `center [0xID]` (0.2.17: center floating window on monitor `usable` area)
+    - `raise [0xID]` (0.2.17: raise window to top of its scene layer)
+    - `focus next|prev|left|right|up|down`
     - `swap left|right|up|down`
     - `move left|right|up|down`
     - `resize left|right|up|down [step]` (`step` in `1..4096`)
     - `tag view|toggle_view|move|toggle_client <1..9>`
     - `tag back`
     - `monitor focus|move next|prev|<output-name>`
+    - `monitor enable|disable <output|focused>` (0.2.17): logically enables or
+      disables a connected output (clamshell / laptop panel control), displacing
+      windows to an enabled heir on disable and reclaiming them on enable.
     - `monitor mode <output|focused> <W>x<H>[@<Hz>]` (0.2.14): sets one
       of the output's own modes (refresh within 10 mHz; without `@<Hz>`,
       the highest). Replies `OK` only when the commit went through, which
@@ -150,8 +162,8 @@ replaced with a space. Every record is guaranteed to occupy one line.
 While `s->locked` is true (`ext-session-lock-v1` / `tam-hide`):
 
 - Read-only queries (`version`, `monitors`, `windows`, `focused`, `tags`,
-  `cursor`, `binds`, `keyboards`, `chord`, `lock_state`, `gamma`, `freeze`),
-  `subscribe`, and `reload` remain allowed.
+  `cursor`, `binds`, `keyboards`, `devices`, `chord`, `lock_state`, `gamma`,
+  `freeze`), `subscribe`, and `reload` remain allowed.
 - `pixel` is refused with `ERR session is locked`.
 - `dispatch dpms on|off <output>` remains allowed while locked (matching
   `zwlr_output_power_manager_v1`); all other `dispatch` actions are refused with

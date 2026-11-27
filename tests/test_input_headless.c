@@ -5335,6 +5335,239 @@ int main(void) {
 		}
 	}
 
+	/* ---- 0.2.17: monitor enable/disable, devices IPC, window targeting/pin,
+	 *      and themeable focused/unfocused borders ---- */
+	{
+		char rep[4096];
+
+		/* 1. devices IPC lists input devices arriving via backend->events.new_input */
+		{
+			struct wlr_pointer tp_dev = {0};
+			wlr_pointer_init(&tp_dev, &pointer_impl, "SynPS/2 Synaptics TouchPad");
+			wl_signal_emit_mutable(&server.backend->events.new_input,
+								   &tp_dev.base);
+
+			struct wlr_input_device touch_dev = {
+				.type = WLR_INPUT_DEVICE_TOUCH,
+				.name = "ELAN Touchscreen",
+			};
+			wl_signal_init(&touch_dev.events.destroy);
+			wl_signal_emit_mutable(&server.backend->events.new_input,
+								   &touch_dev);
+
+			CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+									"devices\n", rep, sizeof(rep)));
+			CHECK(strstr(rep, "device\ttype=pointer\tname=SynPS/2 Synaptics TouchPad\n") != NULL);
+			CHECK(strstr(rep, "device\ttype=touch\tname=ELAN Touchscreen\n") != NULL);
+
+			wl_signal_emit_mutable(&touch_dev.events.destroy, &touch_dev);
+			wlr_pointer_finish(&tp_dev);
+
+			CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+									"devices\n", rep, sizeof(rep)));
+			CHECK(strstr(rep, "SynPS/2 Synaptics TouchPad") == NULL);
+			CHECK(strstr(rep, "ELAN Touchscreen") == NULL);
+		}
+
+		/* 2. Monitor enable/disable with window displacement & reclamation */
+		struct wlr_output *out_d =
+			wlr_headless_add_output(headless, 800, 600);
+		CHECK(out_d != NULL);
+		for (unsigned int i = 0; i < 10; i++)
+			pump(&client, &server);
+		struct tp_monitor *md = tp_monitor_by_name(&server, out_d->name);
+		CHECK(md != NULL && !md->disabled);
+
+		struct tp_monitor *m0 =
+			wl_container_of(server.monitors.next, m0, link);
+		tp_monitor_focus(&server, md);
+		size_t n_before = wl_list_length(&server.clients);
+		struct test_window wd = {0};
+		wd.client = &client;
+		configure_window(&client, &wd, "win-d");
+		for (unsigned int i = 0; i < 40 && (size_t)wl_list_length(&server.clients) == n_before; i++)
+			pump(&client, &server);
+		struct tp_client *cd = tp_focused(&server);
+		CHECK(cd != NULL && cd->mon == md);
+
+		char cmd[128];
+		snprintf(cmd, sizeof(cmd), "dispatch monitor disable %s\n",
+				 out_d->name);
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path, cmd, rep,
+								sizeof(rep)));
+		CHECK(strncmp(rep, "OK\nEND\n", 7) == 0);
+		CHECK(md->disabled && !out_d->enabled);
+		CHECK(server.selmon == m0);
+		CHECK(cd && cd->mon == m0 && cd->home_output &&
+			  strcmp(cd->home_output, out_d->name) == 0);
+
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path, "monitors\n",
+								rep, sizeof(rep)));
+		CHECK(strstr(rep, "\tenabled=0\n") != NULL);
+		CHECK(strstr(rep, "\tenabled=1\n") != NULL);
+
+		snprintf(cmd, sizeof(cmd), "dispatch monitor enable %s\n", out_d->name);
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path, cmd, rep,
+								sizeof(rep)));
+		CHECK(strncmp(rep, "OK\nEND\n", 7) == 0);
+		CHECK(!md->disabled && out_d->enabled);
+		CHECK(cd && cd->mon == md && cd->home_output == NULL);
+
+		/* Clean up extra output and its window */
+		destroy_window(&wd);
+		for (unsigned int i = 0; i < 10; i++)
+			pump(&client, &server);
+		wlr_output_destroy(out_d);
+		for (unsigned int i = 0; i < 10; i++)
+			pump(&client, &server);
+
+		/* 3. Pin, float, resize_exact, move_exact, center, raise, close by ID */
+		tp_monitor_focus(&server, m0);
+		n_before = wl_list_length(&server.clients);
+		struct test_window wa = {0};
+		wa.client = &client;
+		configure_window(&client, &wa, "win-a");
+		for (unsigned int i = 0; i < 40 && (size_t)wl_list_length(&server.clients) == n_before; i++)
+			pump(&client, &server);
+		struct tp_client *ca = tp_focused(&server);
+		CHECK(ca != NULL);
+		uint64_t id_a = ca ? ca->id : 0;
+
+		n_before = wl_list_length(&server.clients);
+		struct test_window wb = {0};
+		wb.client = &client;
+		configure_window(&client, &wb, "win-b");
+		for (unsigned int i = 0; i < 40 && (size_t)wl_list_length(&server.clients) == n_before; i++)
+			pump(&client, &server);
+		struct tp_client *cb = tp_focused(&server);
+		CHECK(cb != NULL && cb != ca);
+
+		/* Pin non-focused window ca by ID */
+		snprintf(cmd, sizeof(cmd), "dispatch pin on 0x%llx\n",
+				 (unsigned long long)id_a);
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path, cmd, rep,
+								sizeof(rep)));
+		CHECK(strncmp(rep, "OK\nEND\n", 7) == 0);
+		CHECK(ca->floating && ca->pinned);
+
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path, "windows\n",
+								rep, sizeof(rep)));
+		CHECK(strstr(rep, "\tpinned=1\t") != NULL);
+
+		/* Switch to tag 2: pinned ca stays visible, unpinned cb hides */
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+								"dispatch tag view 2\n", rep, sizeof(rep)));
+		CHECK(strncmp(rep, "OK\nEND\n", 7) == 0);
+		tp_arrange_flush(&server);
+		CHECK(tp_client_visible(ca));
+		CHECK(!tp_client_visible(cb));
+
+		/* resize_exact, move_exact, center, raise by ID */
+		snprintf(cmd, sizeof(cmd), "dispatch resize_exact 420 310 0x%llx\n",
+				 (unsigned long long)id_a);
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path, cmd, rep,
+								sizeof(rep)));
+		CHECK(strncmp(rep, "OK\nEND\n", 7) == 0);
+		CHECK(ca->float_geom.w == 420 && ca->float_geom.h == 310);
+
+		snprintf(cmd, sizeof(cmd), "dispatch move_exact 15 25 0x%llx\n",
+				 (unsigned long long)id_a);
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path, cmd, rep,
+								sizeof(rep)));
+		CHECK(strncmp(rep, "OK\nEND\n", 7) == 0);
+		CHECK(ca->float_geom.x == m0->usable.x + 15 &&
+			  ca->float_geom.y == m0->usable.y + 25);
+
+		snprintf(cmd, sizeof(cmd), "dispatch center 0x%llx\n",
+				 (unsigned long long)id_a);
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path, cmd, rep,
+								sizeof(rep)));
+		CHECK(strncmp(rep, "OK\nEND\n", 7) == 0);
+		CHECK(ca->float_geom.x == m0->usable.x + (m0->usable.w - 420) / 2 &&
+			  ca->float_geom.y == m0->usable.y + (m0->usable.h - 310) / 2);
+
+		snprintf(cmd, sizeof(cmd), "dispatch raise 0x%llx\n",
+				 (unsigned long long)id_a);
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path, cmd, rep,
+								sizeof(rep)));
+		CHECK(strncmp(rep, "OK\nEND\n", 7) == 0);
+
+		/* Unpin ca: now hidden on tag 2 */
+		snprintf(cmd, sizeof(cmd), "dispatch pin off 0x%llx\n",
+				 (unsigned long long)id_a);
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path, cmd, rep,
+								sizeof(rep)));
+		CHECK(strncmp(rep, "OK\nEND\n", 7) == 0);
+		tp_arrange_flush(&server);
+		CHECK(!ca->pinned && !tp_client_visible(ca));
+
+		/* Back to tag 1 for border & close tests */
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+								"dispatch tag view 1\n", rep, sizeof(rep)));
+		tp_arrange_flush(&server);
+
+		/* 4. Themeable focused & unfocused borders with live reload */
+		{
+			FILE *f = fopen(lua_cfg, "w");
+			CHECK(f != NULL);
+			fputs("tp.config({ border_width = 3, "
+				  "border_color_focused = '#ff0000', "
+				  "border_color_unfocused = '#0000ff80' })\n",
+				  f);
+			fclose(f);
+			CHECK(ipc_test_exchange(&client, &server, ipc_sock_path, "reload\n",
+									rep, sizeof(rep)));
+			CHECK(strncmp(rep, "OK\nEND\n", 7) == 0);
+			tp_arrange_flush(&server);
+			struct tp_client *foc = tp_focused(&server);
+			struct tp_client *unfoc = (foc == ca) ? cb : ca;
+			CHECK(foc && unfoc);
+			CHECK(foc->border[0] != NULL && foc->border[0]->node.enabled);
+			CHECK(foc->border[0]->color[0] > 0.99f &&
+				  foc->border[0]->color[1] == 0.0f &&
+				  foc->border[0]->color[3] == 1.0f);
+			CHECK(unfoc->border[0] != NULL && unfoc->border[0]->node.enabled);
+			CHECK(unfoc->border[0]->color[2] > 0.49f &&
+				  unfoc->border[0]->color[2] < 0.51f &&
+				  unfoc->border[0]->color[3] > 0.49f &&
+				  unfoc->border[0]->color[3] < 0.51f);
+
+			/* Reload with unfocused border disabled ('none') */
+			f = fopen(lua_cfg, "w");
+			CHECK(f != NULL);
+			fputs("tp.config({ border_width = 3, "
+				  "border_color_focused = '#00ff00', "
+				  "border_color_unfocused = 'none' })\n",
+				  f);
+			fclose(f);
+			CHECK(ipc_test_exchange(&client, &server, ipc_sock_path, "reload\n",
+									rep, sizeof(rep)));
+			CHECK(strncmp(rep, "OK\nEND\n", 7) == 0);
+			tp_arrange_flush(&server);
+			CHECK(foc->border[0]->node.enabled &&
+				  foc->border[0]->color[1] > 0.99f);
+			CHECK(!unfoc->border[0]->node.enabled);
+		}
+
+		/* Unknown window ID returns ERR */
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+								"dispatch close 0xdeadbeef\n", rep,
+								sizeof(rep)));
+		CHECK(strstr(rep, "ERR unknown window") != NULL);
+
+		/* Close non-focused window by ID */
+		snprintf(cmd, sizeof(cmd), "dispatch close 0x%llx\n",
+				 (unsigned long long)id_a);
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path, cmd, rep,
+								sizeof(rep)));
+		CHECK(strncmp(rep, "OK\nEND\n", 7) == 0);
+
+		destroy_window(&wa);
+		destroy_window(&wb);
+		for (unsigned int i = 0; i < 10; i++)
+			pump(&client, &server);
+	}
+
 	unlink(lua_cfg);
 	rmdir(lua_dir);
 

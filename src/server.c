@@ -161,6 +161,7 @@ bool tp_server_init(struct tp_server *s) {
 	wl_list_init(&s->clients);
 	wl_list_init(&s->focus_stack);
 	wl_list_init(&s->keyboards);
+	wl_list_init(&s->input_devices);
 	tp_events_init(s);
 	tp_gamma_init(s);
 	tp_chord_init(&s->chord);
@@ -405,6 +406,7 @@ void tp_server_finish(struct tp_server *s) {
 	if (s->backend)
 		wlr_backend_destroy(s->backend); /* outputs and devices go here */
 	tp_keyboards_finish(s);
+	tp_input_devices_finish(s);
 	if (s->sigterm)
 		wl_event_source_remove(s->sigterm);
 	if (s->sigint)

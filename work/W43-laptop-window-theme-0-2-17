@@ -1,0 +1,47 @@
+W43 MONITOR ENABLE/DISABLE, DEVICES IPC, WINDOW PIN/GEOMETRY, AND THEMEABLE BORDERS (0.2.17)
+
+Date: 2026-11-27
+AI harness: agy 1.5.18
+AI model: gemini-4-neon-medium
+
+GUIDANCE
+
+  Fred: "/plan Do the next work slice for tam-pane"
+  Fred selected Tamlinux 0.7.x Milestones 13 & 14 primitives in tam-pane and
+  approved the implementation plan after reviewing it in tam-view.
+
+DONE
+
+  - Bumped VERSION to 0.2.17 and updated ROADMAP.md (0.2.16 and 0.2.17).
+  - Added logical monitor enable/disable (`tp_monitor_set_enabled`, `m->disabled`,
+    `dispatch monitor enable|disable <output|focused>`, `tp.dsp.monitor("enable"|
+    "disable", output)`, `enabled=<0|1>` on `monitors` IPC), displacing windows
+    to an enabled heir on disable and reclaiming them on enable, and skipping
+    disabled monitors in `tp_monitor_cycle`.
+  - Added input device tracking (`s->input_devices` in `src/input/input.c`) and
+    read-only `devices` IPC query (allowed while locked) listing keyboards,
+    pointers, touchscreens, tablets, tablet pads, and switches.
+  - Added window pinning (`c->pinned`, `pinned=<0|1>` on `windows`/`focused` IPC)
+    and optional `0xID`-targeted window dispatches: `close [0xID]`,
+    `float [on|off|toggle] [0xID]`, `pin [on|off|toggle] [0xID]`,
+    `resize_exact <w> <h> [0xID]`, `move_exact <x> <y> [0xID]`, `center [0xID]`,
+    and `raise [0xID]`, plus `tp.dsp.pin`, `tp.dsp.center`, and `tp.dsp.raise`.
+  - Added themeable focused and unfocused window border colors
+    (`border_color_focused`, default `#00ff00ff`; `border_color_unfocused`,
+    default transparent `none`) in `tp.config({...})` with live reload updates.
+  - Updated `arch/ipc.md`, `arch/lua-api.md`, `ROADMAP.md`, and `work/WHATNOW`.
+  - Full test suite passed: `test_tags` (28), `test_gamma` (1235),
+    `test_dwindle` (143), `test_layouts` (102), `test_lua` (650),
+    `test_ipc` (215), `test_chord`, `nm -D` symbol check, `smoke-headless.sh`
+    (6/6), and `test_input_headless` (977/977), with zero `libxcb` NEEDED.
+
+FAILED
+
+  - Nothing.
+
+HANDOFF
+
+  - Wire Tamlinux Milestones 11–14 scripts (`tam-system-sleep-lock`,
+    `tam-toggle-nightlight`, `tam-capture-region`, color picker, clamshell/
+    laptop display scripts, `tam-hw-touchpad`/`touchscreen`, `window-pop`/
+    `close-all`, and theme templates) onto `tam-pane 0.2.17`.

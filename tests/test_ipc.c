@@ -477,6 +477,66 @@ static void test_parse_dispatch(void) {
 		tam_str_free(s);
 	}
 
+	/* 0.2.17: monitor enable/disable and targeted window dispatches */
+	CHECK(tp_ipc_parse_dispatch("monitor disable eDP-1", &act, mon, sizeof(mon),
+								err, sizeof(err)));
+	CHECK(act.kind == TP_ACT_MONITOR_ENABLE && act.dir == 0 &&
+		  strcmp(act.cmd, "eDP-1") == 0);
+	{
+		tam_str_t s = tp_ipc_format_action(tam_str_new(""), &act);
+		CHECK(s && strcmp(s, "monitor disable eDP-1") == 0);
+		tam_str_free(s);
+	}
+	CHECK(tp_ipc_parse_dispatch("monitor enable focused", &act, mon,
+								sizeof(mon), err, sizeof(err)));
+	CHECK(act.kind == TP_ACT_MONITOR_ENABLE && act.dir == 1 &&
+		  strcmp(act.cmd, "focused") == 0);
+	CHECK(!tp_ipc_parse_dispatch("monitor enable", &act, mon, sizeof(mon), err,
+								 sizeof(err)));
+
+	CHECK(tp_ipc_parse_dispatch("close 0x2a", &act, mon, sizeof(mon), err,
+								sizeof(err)));
+	CHECK(act.kind == TP_ACT_CLOSE && act.target_id == 0x2a);
+	CHECK(!tp_ipc_parse_dispatch("close 0x0", &act, mon, sizeof(mon), err,
+								 sizeof(err)));
+
+	CHECK(tp_ipc_parse_dispatch("pin", &act, mon, sizeof(mon), err,
+								sizeof(err)));
+	CHECK(act.kind == TP_ACT_PIN && act.dir == -1 && act.target_id == 0);
+	CHECK(tp_ipc_parse_dispatch("pin on 0x7", &act, mon, sizeof(mon), err,
+								sizeof(err)));
+	CHECK(act.kind == TP_ACT_PIN && act.dir == 1 && act.target_id == 7);
+	CHECK(tp_ipc_parse_dispatch("pin 0x9", &act, mon, sizeof(mon), err,
+								sizeof(err)));
+	CHECK(act.kind == TP_ACT_PIN && act.dir == -1 && act.target_id == 9);
+	CHECK(!tp_ipc_parse_dispatch("pin maybe", &act, mon, sizeof(mon), err,
+								 sizeof(err)));
+
+	CHECK(tp_ipc_parse_dispatch("float off 0x10", &act, mon, sizeof(mon), err,
+								sizeof(err)));
+	CHECK(act.kind == TP_ACT_FLOAT_SET && act.dir == 0 && act.target_id == 16);
+
+	CHECK(tp_ipc_parse_dispatch("resize_exact 800 600 0x3", &act, mon,
+								sizeof(mon), err, sizeof(err)));
+	CHECK(act.kind == TP_ACT_RESIZE_EXACT && act.mode_w == 800 &&
+		  act.mode_h == 600 && act.target_id == 3);
+	CHECK(!tp_ipc_parse_dispatch("resize_exact 0 600", &act, mon, sizeof(mon),
+								 err, sizeof(err)));
+
+	CHECK(tp_ipc_parse_dispatch("move_exact -10 25 0x4", &act, mon, sizeof(mon),
+								err, sizeof(err)));
+	CHECK(act.kind == TP_ACT_MOVE_EXACT && act.pos_x == -10 &&
+		  act.pos_y == 25 && act.target_id == 4);
+	CHECK(!tp_ipc_parse_dispatch("move_exact 10", &act, mon, sizeof(mon), err,
+								 sizeof(err)));
+
+	CHECK(tp_ipc_parse_dispatch("center 0x5", &act, mon, sizeof(mon), err,
+								sizeof(err)));
+	CHECK(act.kind == TP_ACT_CENTER && act.target_id == 5);
+	CHECK(tp_ipc_parse_dispatch("raise 0x6", &act, mon, sizeof(mon), err,
+								sizeof(err)));
+	CHECK(act.kind == TP_ACT_RAISE && act.target_id == 6);
+
 	/* Invalid dispatches */
 	CHECK(!tp_ipc_parse_dispatch("", &act, mon, sizeof(mon), err, sizeof(err)));
 	CHECK(!tp_ipc_parse_dispatch("unknown", &act, mon, sizeof(mon), err,

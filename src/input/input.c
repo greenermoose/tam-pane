@@ -2,6 +2,7 @@
 /* The seat, input-device discovery and the seat's client requests. */
 #include "tam-pane/input.h"
 #include "tam-pane/server.h"
+#include <stdlib.h>
 #include <tam.h>
 #include <wlr/backend.h>
 #include <wlr/types/wlr_cursor.h>
@@ -9,6 +10,53 @@
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/types/wlr_primary_selection.h>
 #include <wlr/types/wlr_seat.h>
+
+const char *tp_input_device_type_name(int type) {
+	switch (type) {
+	case WLR_INPUT_DEVICE_KEYBOARD:
+		return "keyboard";
+	case WLR_INPUT_DEVICE_POINTER:
+		return "pointer";
+	case WLR_INPUT_DEVICE_TOUCH:
+		return "touch";
+	case WLR_INPUT_DEVICE_TABLET:
+		return "tablet";
+	case WLR_INPUT_DEVICE_TABLET_PAD:
+		return "tablet_pad";
+	case WLR_INPUT_DEVICE_SWITCH:
+		return "switch";
+	default:
+		return "unknown";
+	}
+}
+
+static void on_input_device_destroy(struct wl_listener *l, void *data) {
+	(void)data;
+	struct tp_input_device *d = wl_container_of(l, d, destroy);
+	wl_list_remove(&d->destroy.link);
+	wl_list_remove(&d->link);
+	free(d);
+}
+
+static void track_input_device(struct tp_server *s,
+							   struct wlr_input_device *dev) {
+	struct tp_input_device *d = calloc(1, sizeof(*d));
+	if (!d)
+		return;
+	d->wlr = dev;
+	d->destroy.notify = on_input_device_destroy;
+	wl_signal_add(&dev->events.destroy, &d->destroy);
+	wl_list_insert(s->input_devices.prev, &d->link);
+}
+
+void tp_input_devices_finish(struct tp_server *s) {
+	struct tp_input_device *d, *tmp;
+	wl_list_for_each_safe(d, tmp, &s->input_devices, link) {
+		wl_list_remove(&d->destroy.link);
+		wl_list_remove(&d->link);
+		free(d);
+	}
+}
 
 void tp_input_update_caps(struct tp_server *s) {
 	uint32_t caps = WL_SEAT_CAPABILITY_POINTER;
@@ -20,6 +68,8 @@ void tp_input_update_caps(struct tp_server *s) {
 static void on_new_input(struct wl_listener *l, void *data) {
 	struct tp_server *s = wl_container_of(l, s, new_input);
 	struct wlr_input_device *dev = data;
+
+	track_input_device(s, dev);
 
 	switch (dev->type) {
 	case WLR_INPUT_DEVICE_KEYBOARD:

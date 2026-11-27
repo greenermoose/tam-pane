@@ -49,6 +49,7 @@ struct tp_client {
 	bool associated; /* XWayland: surface map/unmap listeners attached */
 	bool floating;
 	bool fullscreen;
+	bool pinned;
 	bool scratchpad;
 	bool scratchpad_visible;
 	struct tp_rect geom;	   /* current placement */
@@ -100,10 +101,16 @@ void tp_client_place(struct tp_client *c, struct tp_rect box);
 #define TP_FLOAT_MIN_H 64
 
 void tp_client_close(struct tp_client *c);
+struct tp_client *tp_client_by_id(struct tp_server *s, uint64_t id);
 void tp_client_toggle_tags(struct tp_client *c, tp_tags_t mask);
 void tp_client_set_tags(struct tp_client *c, tp_tags_t tags);
 void tp_client_set_floating(struct tp_client *c, bool floating);
 void tp_client_set_fullscreen(struct tp_client *c, bool fullscreen);
+void tp_client_set_pinned(struct tp_client *c, bool pinned);
+void tp_client_resize_exact(struct tp_client *c, int32_t w, int32_t h);
+void tp_client_move_exact(struct tp_client *c, int32_t x, int32_t y);
+void tp_client_center(struct tp_client *c);
+void tp_client_raise(struct tp_client *c);
 void tp_client_scratchpad_move(struct tp_client *c);
 void tp_scratchpad_toggle(struct tp_server *s);
 void tp_client_resize_floating(struct tp_client *c, enum tp_dir dir,

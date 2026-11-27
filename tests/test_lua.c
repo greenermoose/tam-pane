@@ -1695,6 +1695,88 @@ static void test_gamma_freeze_and_lock_events_0_2_16(void) {
 	tp_lua_destroy(lua);
 }
 
+static void test_controls_and_borders_0_2_17(void) {
+	struct tp_lua *lua = tp_lua_create();
+	CHECK(lua != NULL);
+	tp_lua_set_action_fn(lua, mock_action, NULL);
+
+	struct tp_settings base, out;
+	tp_settings_defaults(&base);
+	CHECK(base.border_color_focused[1] == 1.0f &&
+		  base.border_color_focused[3] == 1.0f);
+	CHECK(base.border_color_unfocused[3] == 0.0f);
+
+	const char *cfg =
+		"tp.config({\n"
+		"  border_width = 3,\n"
+		"  border_color_focused = '#ff8000',\n"
+		"  border_color_unfocused = '#4080c080',\n"
+		"})\n"
+		"tp.bind('Meta+Shift+1', tp.dsp.monitor('disable', 'eDP-1'))\n"
+		"tp.bind('Meta+Shift+2', tp.dsp.monitor('enable', 'eDP-1'))\n"
+		"tp.bind('Meta+Shift+3', tp.dsp.pin())\n"
+		"tp.bind('Meta+Shift+4', tp.dsp.pin('on'))\n"
+		"tp.bind('Meta+Shift+5', tp.dsp.center())\n"
+		"tp.bind('Meta+Shift+6', tp.dsp.raise())\n";
+	char err[256] = {0};
+	CHECK(tp_lua_exec_string(lua, cfg, strlen(cfg), "cfg_0_2_17",
+							 TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+							 TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+							 sizeof(err)));
+	CHECK(out.border_width == 3);
+	CHECK(out.border_color_focused[0] > 0.99f &&
+		  out.border_color_focused[1] > 0.49f &&
+		  out.border_color_focused[1] < 0.51f &&
+		  out.border_color_focused[2] == 0.0f &&
+		  out.border_color_focused[3] == 1.0f);
+	/* #4080c080 -> alpha ~ 128/255 = 0.502, premultiplied blue ~ 0.753*0.502 */
+	CHECK(out.border_color_unfocused[3] > 0.49f &&
+		  out.border_color_unfocused[3] < 0.51f);
+	CHECK(out.border_color_unfocused[2] > 0.36f &&
+		  out.border_color_unfocused[2] < 0.39f);
+
+	action_count = 0;
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT, XKB_KEY_1, false));
+	CHECK(action_count == 1 && last_action.kind == TP_ACT_MONITOR_ENABLE &&
+		  last_action.dir == 0 && strcmp(last_action.cmd, "eDP-1") == 0);
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT, XKB_KEY_2, false));
+	CHECK(action_count == 2 && last_action.kind == TP_ACT_MONITOR_ENABLE &&
+		  last_action.dir == 1 && strcmp(last_action.cmd, "eDP-1") == 0);
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT, XKB_KEY_3, false));
+	CHECK(action_count == 3 && last_action.kind == TP_ACT_PIN &&
+		  last_action.dir == -1);
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT, XKB_KEY_4, false));
+	CHECK(action_count == 4 && last_action.kind == TP_ACT_PIN &&
+		  last_action.dir == 1);
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT, XKB_KEY_5, false));
+	CHECK(action_count == 5 && last_action.kind == TP_ACT_CENTER);
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META | TP_MOD_SHIFT, XKB_KEY_6, false));
+	CHECK(action_count == 6 && last_action.kind == TP_ACT_RAISE);
+
+	const char *cfg_none =
+		"tp.config({ border_color_focused = '0x00ff00ff', "
+		"border_color_unfocused = 'none' })\n";
+	CHECK(tp_lua_exec_string(lua, cfg_none, strlen(cfg_none), "cfg_none",
+							 TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+							 TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+							 sizeof(err)));
+	CHECK(out.border_color_focused[1] == 1.0f &&
+		  out.border_color_unfocused[3] == 0.0f);
+
+	const char *bad_col = "tp.config({ border_color_focused = '#12345' })\n";
+	CHECK(!tp_lua_exec_string(lua, bad_col, strlen(bad_col), "bad_col",
+							  TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+							  TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+							  sizeof(err)));
+	const char *bad_pin = "tp.bind('Meta+p', tp.dsp.pin('maybe'))\n";
+	CHECK(!tp_lua_exec_string(lua, bad_pin, strlen(bad_pin), "bad_pin",
+							  TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+							  TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+							  sizeof(err)));
+
+	tp_lua_destroy(lua);
+}
+
 int main(void) {
 	tam_log_set_level(TAM_LOG_ERROR);
 	test_config_and_fallback();
@@ -1714,5 +1796,6 @@ int main(void) {
 	test_layouts_and_scratchpad();
 	test_controls_0_2_8();
 	test_gamma_freeze_and_lock_events_0_2_16();
+	test_controls_and_borders_0_2_17();
 	CHECK_DONE("test_lua");
 }

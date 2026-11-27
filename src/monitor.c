@@ -299,6 +299,65 @@ static bool unpark_monitor(struct tp_monitor *m) {
 	return true;
 }
 
+static struct tp_monitor *find_enabled_heir(struct tp_server *s,
+											struct tp_monitor *exclude) {
+	struct tp_monitor *m;
+	wl_list_for_each(m, &s->monitors, link) {
+		if (m != exclude && !m->disabled && m->output && m->output->enabled)
+			return m;
+	}
+	return NULL;
+}
+
+static void displace_monitor_clients(struct tp_server *s, struct tp_monitor *m,
+									 struct tp_monitor *heir, const char *name,
+									 struct tp_rect area,
+									 struct tp_rect usable) {
+	struct tp_client *c;
+	wl_list_for_each(c, &s->clients, link) {
+		if (c->mon != m)
+			continue;
+		if (!c->home_output && name && *name) {
+			c->home_output = strdup(name);
+			c->home_float_geom = c->float_geom;
+			c->home_float_geom.x -= area.x;
+			c->home_float_geom.y -= area.y;
+		}
+		if (heir)
+			tp_client_carry_float(c, usable, heir->usable);
+		tp_client_attach(c, heir, 0);
+		if (!heir)
+			wlr_scene_node_set_enabled(&c->tree->node, false);
+	}
+}
+
+static bool reclaim_monitor_clients(struct tp_server *s, struct tp_monitor *m) {
+	bool moved = false;
+	const char *name = m->output ? m->output->name : NULL;
+	struct tp_client *c;
+	wl_list_for_each(c, &s->clients, link) {
+		bool match = c->home_output && name &&
+					 strcmp(c->home_output, name) == 0;
+		if (!match && c->mon != NULL)
+			continue;
+		struct tp_monitor *old = c->mon;
+		if (match) {
+			/* Back where it floated before, kept on the output. */
+			c->float_geom = c->home_float_geom;
+			c->float_geom.x += m->area.x;
+			c->float_geom.y += m->area.y;
+			tp_client_carry_float(c, m->usable, m->usable);
+		} else if (old && old != m) {
+			tp_client_carry_float(c, old->usable, m->usable);
+		}
+		tp_client_attach(c, m, 0);
+		if (match)
+			tp_client_clear_home(c);
+		moved = true;
+	}
+	return moved;
+}
+
 static void on_destroy(struct wl_listener *l, void *data) {
 	struct tp_monitor *m = wl_container_of(l, m, destroy);
 	struct tp_server *s = m->server;
@@ -307,6 +366,7 @@ static void on_destroy(struct wl_listener *l, void *data) {
 	if (name)
 		snprintf(mon_name, sizeof(mon_name), "%s", name);
 	struct tp_rect area = m->area;
+	struct tp_rect usable = m->usable;
 	float scale = m->output->scale;
 
 	if (s->grab.client && s->grab.client->mon == m)
@@ -328,25 +388,8 @@ static void on_destroy(struct wl_listener *l, void *data) {
 
 	/* Windows move to another monitor, keeping their tags and remembering
 	 * their original output name so they return when it comes back. */
-	struct tp_monitor *heir = wl_list_empty(&s->monitors)
-								  ? NULL
-								  : wl_container_of(s->monitors.next, heir, link);
-	struct tp_client *c;
-	wl_list_for_each(c, &s->clients, link) {
-		if (c->mon != m)
-			continue;
-		if (!c->home_output && name && *name) {
-			c->home_output = strdup(name);
-			c->home_float_geom = c->float_geom;
-			c->home_float_geom.x -= area.x;
-			c->home_float_geom.y -= area.y;
-		}
-		if (heir)
-			tp_client_carry_float(c, m->usable, heir->usable);
-		tp_client_attach(c, heir, 0);
-		if (!heir)
-			wlr_scene_node_set_enabled(&c->tree->node, false);
-	}
+	struct tp_monitor *heir = find_enabled_heir(s, NULL);
+	displace_monitor_clients(s, m, heir, name, area, usable);
 	if (s->selmon == m)
 		s->selmon = heir;
 	free(m);
@@ -485,50 +528,37 @@ static void on_new_output(struct wl_listener *l, void *data) {
 	wl_signal_add(&output->events.destroy, &m->destroy);
 	wl_list_insert(s->monitors.prev, &m->link);
 
-	struct wlr_output_layout_output *lo = NULL;
-	if (has_rule && rule.has_pos && !rule.pos_auto) {
-		lo = wlr_output_layout_add(s->output_layout, output, rule.pos_x,
-								   rule.pos_y);
-	} else {
-		lo = wlr_output_layout_add_auto(s->output_layout, output);
-	}
 	m->scene_output = wlr_scene_output_create(s->scene, output);
-	wlr_scene_output_layout_add_output(s->scene_layout, lo, m->scene_output);
-	update_area(m);
-	setup_nested_scale(m);
-	tp_workspace_monitor_init(m);
-	if (!s->selmon)
-		s->selmon = m;
+	if (output->enabled) {
+		struct wlr_output_layout_output *lo = NULL;
+		if (has_rule && rule.has_pos && !rule.pos_auto) {
+			lo = wlr_output_layout_add(s->output_layout, output, rule.pos_x,
+									   rule.pos_y);
+		} else {
+			lo = wlr_output_layout_add_auto(s->output_layout, output);
+		}
+		if (m->scene_output && lo)
+			wlr_scene_output_layout_add_output(s->scene_layout, lo,
+											   m->scene_output);
+		update_area(m);
+		setup_nested_scale(m);
+		tp_workspace_monitor_init(m);
+		if (!s->selmon || s->selmon->disabled)
+			s->selmon = m;
+	} else {
+		m->disabled = true;
+		tp_workspace_monitor_init(m);
+	}
 	tp_session_lock_arrange(s);
 	tp_output_mgmt_update(s);
 
 	/* Reclaim windows displaced when this output was unplugged, and adopt
 	 * any orphaned windows that had no monitor left. */
-	bool moved = false;
-	struct tp_client *c;
-	wl_list_for_each(c, &s->clients, link) {
-		bool match = c->home_output && output->name &&
-					 strcmp(c->home_output, output->name) == 0;
-		if (!match && c->mon != NULL)
-			continue;
-		struct tp_monitor *old = c->mon;
-		if (match) {
-			/* Back where it floated before, kept on the output. */
-			c->float_geom = c->home_float_geom;
-			c->float_geom.x += m->area.x;
-			c->float_geom.y += m->area.y;
-			tp_client_carry_float(c, m->usable, m->usable);
-		} else if (old && old != m) {
-			tp_client_carry_float(c, old->usable, m->usable);
-		}
-		tp_client_attach(c, m, 0);
-		if (match)
-			tp_client_clear_home(c);
-		moved = true;
-	}
+	bool moved = !m->disabled && reclaim_monitor_clients(s, m);
 	/* A restored layout may still name windows that went elsewhere for
 	 * good while this output was away; only this output's windows stay. */
 	if (restored) {
+		struct tp_client *c;
 		wl_list_for_each(c, &s->clients, link) {
 			if (c->mon != m)
 				tp_monitor_forget(m, c);
@@ -595,10 +625,18 @@ struct tp_monitor *tp_monitor_by_name(struct tp_server *s, const char *name) {
 struct tp_monitor *tp_monitor_cycle(struct tp_server *s, int dir) {
 	if (!s->selmon || wl_list_length(&s->monitors) < 2)
 		return NULL;
-	struct wl_list *pos = dir >= 0 ? s->selmon->link.next : s->selmon->link.prev;
-	if (pos == &s->monitors)
-		pos = dir >= 0 ? s->monitors.next : s->monitors.prev;
-	return wl_container_of(pos, (struct tp_monitor *)NULL, link);
+	struct wl_list *pos = &s->selmon->link;
+	for (;;) {
+		pos = dir >= 0 ? pos->next : pos->prev;
+		if (pos == &s->monitors)
+			pos = dir >= 0 ? s->monitors.next : s->monitors.prev;
+		if (pos == &s->selmon->link)
+			return NULL;
+		struct tp_monitor *m = NULL;
+		m = wl_container_of(pos, m, link);
+		if (!m->disabled)
+			return m;
+	}
 }
 
 struct tp_monitor *tp_monitor_in_dir(struct tp_server *s, struct tp_monitor *m,
@@ -671,14 +709,20 @@ void tp_monitors_apply_config(struct tp_server *s) {
 		struct tp_monitor_config rule = {0};
 		if (!tp_lua_monitor_rule(s->lua, m->output->name, &rule))
 			continue;
+		if (rule.has_enabled && !rule.enabled) {
+			tp_monitor_set_enabled(s, m->output->name, false, NULL, 0);
+			continue;
+		}
+		if (m->disabled) {
+			tp_monitor_set_enabled(s, m->output->name, true, NULL, 0);
+			continue;
+		}
 		if (!apply_monitor_rule_to_output(s, m->output, &rule)) {
 			tam_log_warn("reload: output %s rejected configured mode/state",
 						 m->output->name);
 			continue;
 		}
-		if (rule.has_enabled && !rule.enabled) {
-			wlr_output_layout_remove(s->output_layout, m->output);
-		} else if (rule.has_pos && !rule.pos_auto) {
+		if (rule.has_pos && !rule.pos_auto) {
 			bool was_in =
 				wlr_output_layout_get(s->output_layout, m->output) != NULL;
 			struct wlr_output_layout_output *lo = wlr_output_layout_add(
@@ -766,5 +810,104 @@ bool tp_monitor_set_scale(struct tp_server *s, const char *name, float scale) {
 	update_area(m);
 	tp_arrange_all(s);
 	tp_output_mgmt_update(s);
+	return true;
+}
+
+bool tp_monitor_set_enabled(struct tp_server *s, const char *name, bool enabled,
+							char *err, size_t err_size) {
+	if (!s) {
+		set_err(err, err_size, "compositor unavailable");
+		return false;
+	}
+	struct tp_monitor *m = (!name || !*name || strcmp(name, "focused") == 0)
+							   ? s->selmon
+							   : tp_monitor_by_name(s, name);
+	if (!m || !m->output) {
+		set_err(err, err_size, "unknown monitor");
+		return false;
+	}
+
+	if (!enabled) {
+		if (m->disabled)
+			return true;
+		if (wlr_output_is_wl(m->output)) {
+			set_err(err, err_size, "cannot disable nested Wayland output");
+			return false;
+		}
+		if (s->grab.client && s->grab.client->mon == m)
+			tp_pointer_cancel_grab(s, NULL);
+		if (s->frozen)
+			tp_capture_unfreeze(s);
+
+		struct wlr_output_state state;
+		wlr_output_state_init(&state);
+		wlr_output_state_set_enabled(&state, false);
+		bool ok = wlr_output_commit_state(m->output, &state);
+		wlr_output_state_finish(&state);
+		if (!ok) {
+			set_err(err, err_size, "monitor disable failed");
+			return false;
+		}
+
+		struct tp_rect area = m->area;
+		struct tp_rect usable = m->usable;
+		m->disabled = true;
+		wlr_output_layout_remove(s->output_layout, m->output);
+		m->area = (struct tp_rect){0};
+		m->usable = (struct tp_rect){0};
+
+		struct tp_monitor *heir = find_enabled_heir(s, m);
+		displace_monitor_clients(s, m, heir, m->output->name, area, usable);
+		if (s->selmon == m)
+			s->selmon = heir;
+		if (heir)
+			tp_arrange(heir);
+		tp_session_lock_arrange(s);
+		tp_output_mgmt_update(s);
+		tp_focus_refresh(s);
+		tam_log_info("output %s: disabled", m->output->name);
+		return true;
+	}
+
+	if (!m->disabled && m->output->enabled)
+		return true;
+
+	struct tp_monitor_config rule = {0};
+	bool has_rule =
+		s->lua && tp_lua_monitor_rule(s->lua, m->output->name, &rule);
+	if (has_rule) {
+		rule.has_enabled = true;
+		rule.enabled = true;
+	}
+	bool ok = apply_monitor_rule_to_output(s, m->output, has_rule ? &rule : NULL);
+	if (!ok && has_rule)
+		ok = apply_monitor_rule_to_output(s, m->output, NULL);
+	if (!ok) {
+		set_err(err, err_size, "monitor enable failed");
+		return false;
+	}
+
+	m->disabled = false;
+	struct wlr_output_layout_output *lo = NULL;
+	if (has_rule && rule.has_pos && !rule.pos_auto) {
+		lo = wlr_output_layout_add(s->output_layout, m->output, rule.pos_x,
+								   rule.pos_y);
+	} else {
+		lo = wlr_output_layout_add_auto(s->output_layout, m->output);
+	}
+	if (!m->scene_output)
+		m->scene_output = wlr_scene_output_create(s->scene, m->output);
+	if (m->scene_output && lo)
+		wlr_scene_output_layout_add_output(s->scene_layout, lo,
+										   m->scene_output);
+	update_area(m);
+	if (!s->selmon || s->selmon->disabled)
+		s->selmon = m;
+	reclaim_monitor_clients(s, m);
+	tp_arrange_all(s);
+	tp_session_lock_arrange(s);
+	tp_output_mgmt_update(s);
+	tp_focus_refresh(s);
+	tam_log_info("output %s: enabled", m->output->name);
 	return true;
 }

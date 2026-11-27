@@ -3,10 +3,23 @@ WHATNOW
 What tam-pane is doing now and what comes next. Read this first; revise
 it at the end of every session (work/README-work).
 
-Updated: 2026-11-27, with W42
+Updated: 2026-11-27, with W43
 
 
 STATE
+
+  Version 0.2.17 on dev (W43) adds the Tamlinux 0.7.x Stage 2 (Milestones
+  13 & 14) compositor primitives: logical monitor enable/disable with window
+  displacement and reclamation (`dispatch monitor enable|disable`,
+  `tp.dsp.monitor("enable"|"disable", ...)`, `enabled=<0|1>` on `monitors`),
+  connected input device listing (`devices` IPC, allowed while locked),
+  window pinning and `0xID`-targeted window dispatches (`close`, `float`,
+  `pin`, `resize_exact`, `move_exact`, `center`, `raise`, plus `tp.dsp.pin`,
+  `tp.dsp.center`, `tp.dsp.raise`, and `pinned=<0|1>` on `windows`/`focused`),
+  and themeable focused/unfocused window border colors (`border_color_focused`,
+  `border_color_unfocused` in `tp.config`, live-updated on reload).
+  All native unit suites (`test_lua` 650, `test_ipc` 215, `test_gamma` 1235,
+  etc.) and headless input tests (977 checks) pass with zero `libxcb` NEEDED.
 
   Version 0.2.16 on dev (W42) adds the Tamlinux 0.7.x Phase 2 (Milestones
   11 & 12) compositor primitives: `lock_state` IPC query, `session.lock` /

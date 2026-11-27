@@ -23,10 +23,18 @@ struct tp_keyboard {
 	uint32_t last_layout_group;
 };
 
+struct tp_input_device {
+	struct wl_list link; /* tp_server.input_devices */
+	struct wlr_input_device *wlr;
+	struct wl_listener destroy;
+};
+
 /* Seat, device discovery and seat requests (input.c). */
 bool tp_input_init(struct tp_server *s);
 void tp_input_finish(struct tp_server *s);
+void tp_input_devices_finish(struct tp_server *s);
 void tp_input_update_caps(struct tp_server *s);
+const char *tp_input_device_type_name(int type);
 
 /* Keyboards (keyboard.c). */
 void tp_keyboard_add(struct tp_server *s, struct wlr_input_device *dev);

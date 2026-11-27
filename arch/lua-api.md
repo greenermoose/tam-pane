@@ -66,7 +66,9 @@ or out-of-range values raise a Lua error.
 | `gaps` | integer | `0..256`; sets both `gap_inner` and `gap_outer` (overridden by specific keys) | `8` |
 | `gap_inner` | integer | `0..256` pixels between tiled windows | `8` |
 | `gap_outer` | integer | `0..256` pixels between windows and usable monitor edge | `8` |
-| `border_width` | integer | `0..16` logical pixels for the focused window's green border. `0` disables the frame. | `0` |
+| `border_width` | integer | `0..16` logical pixels for window borders. `0` disables borders. | `0` |
+| `border_color_focused` | string | `#RRGGBB[AA]`, `0xRRGGBB[AA]`, or `"none"`/`""` (0.2.17) | `"#00ff00ff"` |
+| `border_color_unfocused` | string | `#RRGGBB[AA]`, `0xRRGGBB[AA]`, or `"none"`/`""` (0.2.17) | `"none"` |
 | `focus_follows_mouse` | boolean | Give the window under the moving pointer keyboard focus. | `false` |
 | `locker` | string | Absolute executable path for `tam-pane msg lock`. An empty string disables the command. | `""` |
 | `split_ratio` | number | `0.05..0.95` first child's share for a new split | `0.5` |
@@ -377,3 +379,9 @@ into a **fresh** sandboxed Lua state starting from compiled-in defaults
   the freeze.
 - **Events:** `"session.lock"`, `"session.unlock"`, and `"gamma.change"` are
   available to `tp.on(...)` hooks and IPC `subscribe`.
+
+## Shipped in 0.2.17
+
+- **Themeable window borders:** `tp.config({ border_color_focused = "#RRGGBB[AA]", border_color_unfocused = "#RRGGBB[AA]" | "none" })`, live-updated on `reload`.
+- **Monitor enable/disable:** `tp.dsp.monitor("enable" | "disable", output_name)` for clamshell and laptop panel control.
+- **Window pinning and floating helpers:** `tp.dsp.pin(["on" | "off" | "toggle"])`, `tp.dsp.center()`, and `tp.dsp.raise()`.

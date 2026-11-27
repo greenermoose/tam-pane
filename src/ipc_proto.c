@@ -300,6 +300,36 @@ static bool parse_positive_int(const char *s, long min_v, long max_v,
 	return true;
 }
 
+static bool parse_signed_int(const char *s, long min_v, long max_v, long *out) {
+	if (!s || !*s || isspace((unsigned char)s[0]))
+		return false;
+	char *end = NULL;
+	errno = 0;
+	long v = strtol(s, &end, 10);
+	if (errno != 0 || !end || *end != '\0')
+		return false;
+	if (v < min_v || v > max_v)
+		return false;
+	*out = v;
+	return true;
+}
+
+static bool parse_window_id(const char *token, uint64_t *out) {
+	if (!token || strncmp(token, "0x", 2) != 0 || token[2] == '\0')
+		return false;
+	size_t hex_len = strlen(token + 2);
+	if (hex_len == 0 || hex_len > 16 ||
+		strspn(token + 2, "0123456789abcdefABCDEF") != hex_len)
+		return false;
+	char *end = NULL;
+	errno = 0;
+	unsigned long long v = strtoull(token + 2, &end, 16);
+	if (errno != 0 || !end || *end != '\0' || v == 0)
+		return false;
+	*out = (uint64_t)v;
+	return true;
+}
+
 bool tp_ipc_parse_dispatch(const char *args, struct tp_action *out,
 						   char *mon_name, size_t mon_name_size, char *err,
 						   size_t err_size) {
@@ -317,9 +347,8 @@ bool tp_ipc_parse_dispatch(const char *args, struct tp_action *out,
 		return false;
 	}
 
-	if (strcmp(verb, "terminal") == 0 || strcmp(verb, "close") == 0 ||
-		strcmp(verb, "quit") == 0 || strcmp(verb, "reload") == 0 ||
-		strcmp(verb, "toggle_float") == 0 ||
+	if (strcmp(verb, "terminal") == 0 || strcmp(verb, "quit") == 0 ||
+		strcmp(verb, "reload") == 0 || strcmp(verb, "toggle_float") == 0 ||
 		strcmp(verb, "toggle_fullscreen") == 0 ||
 		strcmp(verb, "chord_toggle") == 0 ||
 		strcmp(verb, "chord_cancel") == 0) {
@@ -330,8 +359,6 @@ bool tp_ipc_parse_dispatch(const char *args, struct tp_action *out,
 		}
 		if (strcmp(verb, "terminal") == 0)
 			out->kind = TP_ACT_TERMINAL;
-		else if (strcmp(verb, "close") == 0)
-			out->kind = TP_ACT_CLOSE;
 		else if (strcmp(verb, "quit") == 0)
 			out->kind = TP_ACT_QUIT;
 		else if (strcmp(verb, "reload") == 0)
@@ -344,6 +371,116 @@ bool tp_ipc_parse_dispatch(const char *args, struct tp_action *out,
 			out->kind = TP_ACT_CHORD_TOGGLE;
 		else
 			out->kind = TP_ACT_CHORD_CANCEL;
+		return true;
+	}
+
+	if (strcmp(verb, "close") == 0 || strcmp(verb, "center") == 0 ||
+		strcmp(verb, "raise") == 0) {
+		char tok[32];
+		if (next_token(&p, tok, sizeof(tok))) {
+			if (!parse_window_id(tok, &out->target_id) || has_extra_tokens(p)) {
+				if (err && err_size > 0)
+					snprintf(err, err_size, "%s expects an optional 0xID", verb);
+				return false;
+			}
+		}
+		if (strcmp(verb, "close") == 0)
+			out->kind = TP_ACT_CLOSE;
+		else if (strcmp(verb, "center") == 0)
+			out->kind = TP_ACT_CENTER;
+		else
+			out->kind = TP_ACT_RAISE;
+		return true;
+	}
+
+	if (strcmp(verb, "pin") == 0 || strcmp(verb, "float") == 0) {
+		out->kind = strcmp(verb, "pin") == 0 ? TP_ACT_PIN : TP_ACT_FLOAT_SET;
+		out->dir = -1; /* toggle by default */
+		char tok[32];
+		if (next_token(&p, tok, sizeof(tok))) {
+			if (strcmp(tok, "on") == 0) {
+				out->dir = 1;
+			} else if (strcmp(tok, "off") == 0) {
+				out->dir = 0;
+			} else if (strcmp(tok, "toggle") == 0) {
+				out->dir = -1;
+			} else if (parse_window_id(tok, &out->target_id)) {
+				if (has_extra_tokens(p)) {
+					if (err && err_size > 0)
+						snprintf(err, err_size,
+								 "%s expects [on|off|toggle] [0xID]", verb);
+					return false;
+				}
+				return true;
+			} else {
+				if (err && err_size > 0)
+					snprintf(err, err_size,
+							 "%s expects [on|off|toggle] [0xID]", verb);
+				return false;
+			}
+			char id_tok[32];
+			if (next_token(&p, id_tok, sizeof(id_tok))) {
+				if (!parse_window_id(id_tok, &out->target_id) ||
+					has_extra_tokens(p)) {
+					if (err && err_size > 0)
+						snprintf(err, err_size,
+								 "%s expects [on|off|toggle] [0xID]", verb);
+					return false;
+				}
+			}
+		}
+		return true;
+	}
+
+	if (strcmp(verb, "resize_exact") == 0) {
+		char w_tok[32], h_tok[32], id_tok[32];
+		long w = 0, h = 0;
+		if (!next_token(&p, w_tok, sizeof(w_tok)) ||
+			!next_token(&p, h_tok, sizeof(h_tok)) ||
+			!parse_positive_int(w_tok, 1, 16384, &w) ||
+			!parse_positive_int(h_tok, 1, 16384, &h)) {
+			if (err && err_size > 0)
+				snprintf(err, err_size,
+						 "resize_exact expects <w> <h> [0xID]");
+			return false;
+		}
+		if (next_token(&p, id_tok, sizeof(id_tok))) {
+			if (!parse_window_id(id_tok, &out->target_id) ||
+				has_extra_tokens(p)) {
+				if (err && err_size > 0)
+					snprintf(err, err_size,
+							 "resize_exact expects <w> <h> [0xID]");
+				return false;
+			}
+		}
+		out->kind = TP_ACT_RESIZE_EXACT;
+		out->mode_w = (int32_t)w;
+		out->mode_h = (int32_t)h;
+		return true;
+	}
+
+	if (strcmp(verb, "move_exact") == 0) {
+		char x_tok[32], y_tok[32], id_tok[32];
+		long x = 0, y = 0;
+		if (!next_token(&p, x_tok, sizeof(x_tok)) ||
+			!next_token(&p, y_tok, sizeof(y_tok)) ||
+			!parse_signed_int(x_tok, -32768, 32768, &x) ||
+			!parse_signed_int(y_tok, -32768, 32768, &y)) {
+			if (err && err_size > 0)
+				snprintf(err, err_size, "move_exact expects <x> <y> [0xID]");
+			return false;
+		}
+		if (next_token(&p, id_tok, sizeof(id_tok))) {
+			if (!parse_window_id(id_tok, &out->target_id) ||
+				has_extra_tokens(p)) {
+				if (err && err_size > 0)
+					snprintf(err, err_size, "move_exact expects <x> <y> [0xID]");
+				return false;
+			}
+		}
+		out->kind = TP_ACT_MOVE_EXACT;
+		out->pos_x = (int32_t)x;
+		out->pos_y = (int32_t)y;
 		return true;
 	}
 
@@ -485,9 +622,26 @@ bool tp_ipc_parse_dispatch(const char *args, struct tp_action *out,
 		char sub[32], target[128];
 		if (!next_token(&p, sub, sizeof(sub))) {
 			if (err && err_size > 0)
-				snprintf(err, err_size,
-						 "monitor expects 'focus', 'move', 'scale', or 'mode'");
+				snprintf(
+					err, err_size,
+					"monitor expects 'focus', 'move', 'scale', 'mode', "
+					"'enable', or 'disable'");
 			return false;
+		}
+		if (strcmp(sub, "enable") == 0 || strcmp(sub, "disable") == 0) {
+			if (!next_token(&p, target, sizeof(target)) ||
+				has_extra_tokens(p)) {
+				if (err && err_size > 0)
+					snprintf(err, err_size,
+							 "monitor %s expects <output|focused>", sub);
+				return false;
+			}
+			out->kind = TP_ACT_MONITOR_ENABLE;
+			out->dir = strcmp(sub, "enable") == 0 ? 1 : 0;
+			snprintf(out->cmd, sizeof(out->cmd), "%s", target);
+			if (mon_name && mon_name_size > 0)
+				snprintf(mon_name, mon_name_size, "%s", target);
+			return true;
 		}
 		if (strcmp(sub, "mode") == 0) {
 			char mode_tok[64];
@@ -959,6 +1113,26 @@ tam_str_t tp_ipc_format_action(tam_str_t s, const struct tp_action *act) {
 		return tam_str_cat_printf(s, "gamma %u", act->gamma_temp);
 	case TP_ACT_FREEZE:
 		return tam_str_cat(s, act->dir ? "freeze on" : "freeze off");
+	case TP_ACT_MONITOR_ENABLE:
+		s = tam_str_cat(s, act->dir ? "monitor enable " : "monitor disable ");
+		return tp_ipc_escape_append(s, act->cmd[0] ? act->cmd : "focused");
+	case TP_ACT_PIN:
+		return tam_str_cat(s, act->dir < 0 ? "pin toggle"
+										   : (act->dir ? "pin on" : "pin off"));
+	case TP_ACT_FLOAT_SET:
+		return tam_str_cat(
+			s, act->dir < 0 ? "float toggle"
+							: (act->dir ? "float on" : "float off"));
+	case TP_ACT_RESIZE_EXACT:
+		return tam_str_cat_printf(s, "resize_exact %d %d", act->mode_w,
+								  act->mode_h);
+	case TP_ACT_MOVE_EXACT:
+		return tam_str_cat_printf(s, "move_exact %d %d", act->pos_x,
+								  act->pos_y);
+	case TP_ACT_CENTER:
+		return tam_str_cat(s, "center");
+	case TP_ACT_RAISE:
+		return tam_str_cat(s, "raise");
 	}
 	return tam_str_cat(s, "unknown");
 }
@@ -982,6 +1156,7 @@ static void msg_usage(FILE *out) {
 		"  cursor                     show pointer coordinates and monitor\n"
 		"  binds                      list active key bindings\n"
 		"  keyboards                  list seat keyboards and active layouts\n"
+		"  devices                    list connected input devices\n"
 		"  lock_state                 show session-lock status and surface count\n"
 		"  gamma                      show active color temperature\n"
 		"  freeze                     show whether screen freeze is active\n"

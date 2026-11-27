@@ -358,6 +358,22 @@ static int l_tp_config(lua_State *L) {
 			s->focus_follows_mouse = lua_toboolean(L, -1);
 		} else if (strcmp(key, "border_width") == 0) {
 			s->border_width = check_int_range(L, -1, key, 0, 16);
+		} else if (strcmp(key, "border_color_focused") == 0) {
+			if (lua_type(L, -1) != LUA_TSTRING)
+				return luaL_error(L, "tp.config.border_color_focused: expected string");
+			if (!tp_settings_parse_color(lua_tostring(L, -1),
+										 s->border_color_focused))
+				return luaL_error(
+					L, "tp.config.border_color_focused: expected '#RRGGBB[AA]', "
+					   "'0xRRGGBB[AA]', or 'none'");
+		} else if (strcmp(key, "border_color_unfocused") == 0) {
+			if (lua_type(L, -1) != LUA_TSTRING)
+				return luaL_error(L, "tp.config.border_color_unfocused: expected string");
+			if (!tp_settings_parse_color(lua_tostring(L, -1),
+										 s->border_color_unfocused))
+				return luaL_error(
+					L, "tp.config.border_color_unfocused: expected '#RRGGBB[AA]', "
+					   "'0xRRGGBB[AA]', or 'none'");
 		} else if (strcmp(key, "locker") == 0) {
 			check_string_buf(L, -1, key, true, s->locker, sizeof(s->locker));
 			if (s->locker[0] && s->locker[0] != '/')

@@ -3,7 +3,7 @@
 `tam-pane` is Tamlinux's tiling Wayland compositor with Lua configuration,
 written in C17 on top of `libtam`.
 
-- **Current version:** `0.2.15` (branch `dev`)
+- **Current version:** `0.2.17` (branch `dev`)
 - **Progress:** 3 of 7 phases done (P1–P3 done; P4 next)
 - **Versioning:** Semantic versioning; during 0.x, minor marks a phase and
   patch marks milestones or fixes within it.
@@ -74,6 +74,8 @@ Fred decided these on 2026-11-17:
 | **0.2.13** | Restore monitor configuration after suspend (B10) | Done (2026-11-26) |
 | **0.2.14** | Dispatch monitor mode and log every modeset | Done (2026-11-26) |
 | **0.2.15** | Pointer focus, cross-display drag, and guarded macro paste | Done (2026-11-26) |
+| **0.2.16** | `lock_state`/events, DPMS-while-locked, native gamma LUTs, screen freeze, and pixel sampling | Done (2026-11-27) |
+| **0.2.17** | Monitor enable/disable, `devices` IPC, window pinning/targeting/pop geometry, and themeable focused/unfocused borders | Done (2026-11-27) |
 
 ### Phase P4: Dogfood in Tamlinux 0.7 (0.3.x) — [P4-dogfood-tamlinux-0.7.md](plans/P4-dogfood-tamlinux-0.7.md)
 

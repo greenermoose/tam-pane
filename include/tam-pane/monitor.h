@@ -43,6 +43,7 @@ struct tp_monitor {
 	float host_scale;
 	int32_t host_w, host_h;
 	struct tp_monitor_workspaces *workspaces;
+	bool disabled; /* logically disabled (clamshell / tp.monitor disabled) */
 	bool arrange_dirty;
 	uint64_t arrange_count;
 };
@@ -111,5 +112,11 @@ bool tp_monitor_set_mode(struct tp_server *s, const char *name, int32_t w,
 
 /* Change scale on a connected monitor (NULL or "focused" = s->selmon). */
 bool tp_monitor_set_scale(struct tp_server *s, const char *name, float scale);
+
+/* Logically enable or disable a connected monitor (clamshell / laptop display).
+ * Disabling removes the output from the layout and displaces its windows to an
+ * enabled heir; enabling restores it and reclaims displaced windows. */
+bool tp_monitor_set_enabled(struct tp_server *s, const char *name, bool enabled,
+							char *err, size_t err_size);
 
 #endif

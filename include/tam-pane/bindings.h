@@ -63,6 +63,13 @@ enum tp_action_kind {
 	TP_ACT_MOUSE_RESIZE,
 	TP_ACT_GAMMA,
 	TP_ACT_FREEZE,
+	TP_ACT_MONITOR_ENABLE,
+	TP_ACT_PIN,
+	TP_ACT_FLOAT_SET,
+	TP_ACT_RESIZE_EXACT,
+	TP_ACT_MOVE_EXACT,
+	TP_ACT_CENTER,
+	TP_ACT_RAISE,
 };
 
 struct tp_action {
@@ -73,11 +80,12 @@ struct tp_action {
 	uint32_t mods;	  /* TP_MOD_* for TP_ACT_SEND_KEY */
 	xkb_keysym_t sym; /* keysym for TP_ACT_SEND_KEY */
 	float scale;	  /* scale for TP_ACT_MONITOR_SCALE */
-	/* TP_ACT_MONITOR_MODE: size, and refresh in mHz (0 = the highest). */
+	/* TP_ACT_MONITOR_MODE / TP_ACT_RESIZE_EXACT: size, and refresh in mHz. */
 	int32_t mode_w, mode_h, mode_refresh;
+	int32_t pos_x, pos_y; /* TP_ACT_MOVE_EXACT coordinates relative to usable */
 	uint32_t gamma_temp; /* Kelvin for TP_ACT_GAMMA (6500 = identity) */
 	bool append_target; /* append the focused client ID for TP_ACT_SPAWN */
-	uint64_t target_id; /* required focused client for TP_ACT_SEND_KEY */
+	uint64_t target_id; /* optional window ID for targeted actions */
 	char cmd[256];	  /* command string for TP_ACT_SPAWN/CAPTURE/DPMS/FOCUS_APP */
 };
 

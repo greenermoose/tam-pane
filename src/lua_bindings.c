@@ -726,12 +726,23 @@ static int l_dsp_tag(lua_State *L) {
 static int l_dsp_monitor(lua_State *L) {
 	const char *op = luaL_checkstring(L, 1);
 	struct tp_action act = {0};
+	if (strcmp(op, "enable") == 0 || strcmp(op, "disable") == 0) {
+		size_t len = 0;
+		const char *target = luaL_checklstring(L, 2, &len);
+		if (len == 0 || len >= sizeof(act.cmd))
+			return luaL_error(L, "tp.dsp.monitor: invalid output name");
+		act.kind = TP_ACT_MONITOR_ENABLE;
+		act.dir = strcmp(op, "enable") == 0 ? 1 : 0;
+		memcpy(act.cmd, target, len + 1);
+		return push_dispatcher(L, &act);
+	}
 	if (strcmp(op, "focus") == 0)
 		act.kind = TP_ACT_MONITOR_FOCUS;
 	else if (strcmp(op, "move") == 0)
 		act.kind = TP_ACT_MONITOR_MOVE;
 	else
-		return luaL_error(L, "tp.dsp.monitor: expected 'focus' or 'move'");
+		return luaL_error(
+			L, "tp.dsp.monitor: expected 'focus', 'move', 'enable', or 'disable'");
 	act.dir = check_cycle_dir(L, 2, "monitor");
 	return push_dispatcher(L, &act);
 }
@@ -816,6 +827,32 @@ static int l_dsp_freeze(lua_State *L) {
 		act.dir = 0;
 	else
 		return luaL_error(L, "tp.dsp.freeze: expected 'on' or 'off'");
+	return push_dispatcher(L, &act);
+}
+
+static int l_dsp_pin(lua_State *L) {
+	struct tp_action act = {.kind = TP_ACT_PIN, .dir = -1};
+	if (!lua_isnoneornil(L, 1)) {
+		const char *mode = luaL_checkstring(L, 1);
+		if (strcmp(mode, "on") == 0)
+			act.dir = 1;
+		else if (strcmp(mode, "off") == 0)
+			act.dir = 0;
+		else if (strcmp(mode, "toggle") == 0)
+			act.dir = -1;
+		else
+			return luaL_error(L, "tp.dsp.pin: expected 'on', 'off', or 'toggle'");
+	}
+	return push_dispatcher(L, &act);
+}
+
+static int l_dsp_center(lua_State *L) {
+	struct tp_action act = {.kind = TP_ACT_CENTER};
+	return push_dispatcher(L, &act);
+}
+
+static int l_dsp_raise(lua_State *L) {
+	struct tp_action act = {.kind = TP_ACT_RAISE};
 	return push_dispatcher(L, &act);
 }
 
@@ -1032,6 +1069,9 @@ static const luaL_Reg dsp_funcs[] = {
 	{"scratchpad", l_dsp_scratchpad},
 	{"gamma", l_dsp_gamma},
 	{"freeze", l_dsp_freeze},
+	{"pin", l_dsp_pin},
+	{"center", l_dsp_center},
+	{"raise", l_dsp_raise},
 	{NULL, NULL},
 };
 

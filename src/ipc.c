@@ -180,11 +180,11 @@ static tam_str_t append_window_line(tam_str_t out, const struct tp_server *s,
 	out = tam_str_cat_printf(
 		out,
 		"\tid=0x%llx\tpid=%d\ttags=%u\tfocused=%d\tfloating=%d\tfullscreen=%d"
-		"\tscratchpad=%d\txwayland=%d\tx=%d\ty=%d\tw=%d\th=%d\tapp_id=",
+		"\tpinned=%d\tscratchpad=%d\txwayland=%d\tx=%d\ty=%d\tw=%d\th=%d\tapp_id=",
 		(unsigned long long)c->id, tp_client_pid(c), c->tags, focused ? 1 : 0,
-		c->floating ? 1 : 0, c->fullscreen ? 1 : 0, c->scratchpad ? 1 : 0,
-		tp_client_is_xwayland(c) ? 1 : 0, c->geom.x, c->geom.y, c->geom.w,
-		c->geom.h);
+		c->floating ? 1 : 0, c->fullscreen ? 1 : 0, c->pinned ? 1 : 0,
+		c->scratchpad ? 1 : 0, tp_client_is_xwayland(c) ? 1 : 0, c->geom.x,
+		c->geom.y, c->geom.w, c->geom.h);
 	out = tp_ipc_escape_append(out, app_id);
 	out = tam_str_cat(out, "\ttitle=");
 	out = tp_ipc_escape_append(out, title);
@@ -214,6 +214,7 @@ static tam_str_t build_monitors(const struct tp_server *s) {
 		else if (m->output && m->output->model && *m->output->model)
 			desc = m->output->model;
 		int dpms = (m->output && !m->output->enabled) ? 0 : 1;
+		int enabled = m->disabled ? 0 : 1;
 		float scale = m->output ? m->output->scale : 1.0f;
 		int phys_w = m->output ? m->output->width : m->area.w;
 		int phys_h = m->output ? m->output->height : m->area.h;
@@ -233,7 +234,7 @@ static tam_str_t build_monitors(const struct tp_server *s) {
 			scale, cur, prev, s->selmon == m ? 1 : 0,
 			tp_layout_kind_name(tp_monitor_layout(m)->kind), dpms);
 		out = tp_ipc_escape_append(out, desc);
-		out = tam_str_cat_len(out, "\n", 1);
+		out = tam_str_cat_printf(out, "\tenabled=%d\n", enabled);
 		if (!out)
 			return NULL;
 	}
@@ -414,6 +415,25 @@ static tam_str_t build_keyboards(const struct tp_server *s) {
 	return tam_str_cat(out, "END\n");
 }
 
+static tam_str_t build_devices(const struct tp_server *s) {
+	tam_str_t out = tam_str_new("OK\n");
+	struct tp_input_device *d;
+	wl_list_for_each(d, &s->input_devices, link) {
+		if (!d->wlr)
+			continue;
+		const char *type = tp_input_device_type_name(d->wlr->type);
+		const char *name = d->wlr->name ? d->wlr->name : "";
+		out = tam_str_cat(out, "device\ttype=");
+		out = tp_ipc_escape_append(out, type);
+		out = tam_str_cat(out, "\tname=");
+		out = tp_ipc_escape_append(out, name);
+		out = tam_str_cat_len(out, "\n", 1);
+		if (!out)
+			return NULL;
+	}
+	return tam_str_cat(out, "END\n");
+}
+
 static tam_str_t build_chord(const struct tp_server *s) {
 	const struct tp_chord_state *st = &s->chord;
 	char cbuf[64];
@@ -514,8 +534,9 @@ static bool handle_line(struct tp_ipc_client *c, char *line) {
 		strcmp(line, "windows") == 0 || strcmp(line, "focused") == 0 ||
 		strcmp(line, "tags") == 0 || strcmp(line, "cursor") == 0 ||
 		strcmp(line, "binds") == 0 || strcmp(line, "keyboards") == 0 ||
-		strcmp(line, "chord") == 0 || strcmp(line, "lock_state") == 0 ||
-		strcmp(line, "gamma") == 0 || strcmp(line, "freeze") == 0) {
+		strcmp(line, "devices") == 0 || strcmp(line, "chord") == 0 ||
+		strcmp(line, "lock_state") == 0 || strcmp(line, "gamma") == 0 ||
+		strcmp(line, "freeze") == 0) {
 		if (*args)
 			return ipc_send_err(c, "command takes no arguments");
 		tam_str_t reply = NULL;
@@ -537,6 +558,8 @@ static bool handle_line(struct tp_ipc_client *c, char *line) {
 			reply = build_binds(s);
 		else if (strcmp(line, "keyboards") == 0)
 			reply = build_keyboards(s);
+		else if (strcmp(line, "devices") == 0)
+			reply = build_devices(s);
 		else if (strcmp(line, "chord") == 0)
 			reply = build_chord(s);
 		else if (strcmp(line, "lock_state") == 0)
@@ -646,6 +669,22 @@ static bool handle_line(struct tp_ipc_client *c, char *line) {
 									 act.mode_refresh, why, sizeof(why)))
 				return ipc_send_err(c, why[0] ? why : "monitor mode failed");
 			return ipc_client_queue(c, "OK\nEND\n", 7);
+		}
+
+		if (act.kind == TP_ACT_MONITOR_ENABLE) {
+			char why[128] = {0};
+			if (!tp_monitor_set_enabled(s, act.cmd, act.dir != 0, why,
+										sizeof(why)))
+				return ipc_send_err(c, why[0] ? why : "monitor enable failed");
+			return ipc_client_queue(c, "OK\nEND\n", 7);
+		}
+
+		if ((act.kind == TP_ACT_CLOSE || act.kind == TP_ACT_PIN ||
+			 act.kind == TP_ACT_FLOAT_SET || act.kind == TP_ACT_RESIZE_EXACT ||
+			 act.kind == TP_ACT_MOVE_EXACT || act.kind == TP_ACT_CENTER ||
+			 act.kind == TP_ACT_RAISE) &&
+			act.target_id != 0 && !tp_client_by_id(s, act.target_id)) {
+			return ipc_send_err(c, "unknown window");
 		}
 
 		if (act.kind == TP_ACT_DPMS) {

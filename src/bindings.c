@@ -97,6 +97,13 @@ static void view_changed(struct tp_server *s, tp_tags_t prev_tags) {
 	tp_focus_refresh(s);
 }
 
+static struct tp_client *resolve_client(struct tp_server *s,
+										uint64_t target_id) {
+	if (target_id != 0)
+		return tp_client_by_id(s, target_id);
+	return tp_focused(s);
+}
+
 void tp_action_run(struct tp_server *s, const struct tp_action *act) {
 	if (!s || !act)
 		return;
@@ -120,7 +127,7 @@ void tp_action_run(struct tp_server *s, const struct tp_action *act) {
 		tp_spawn(s->settings.terminal);
 		break;
 	case TP_ACT_CLOSE: {
-		struct tp_client *c = tp_focused(s);
+		struct tp_client *c = resolve_client(s, act->target_id);
 		if (c)
 			tp_client_close(c);
 		break;
@@ -320,6 +327,47 @@ void tp_action_run(struct tp_server *s, const struct tp_action *act) {
 		else
 			tp_capture_unfreeze(s);
 		break;
+	case TP_ACT_MONITOR_ENABLE:
+		tp_monitor_set_enabled(s, act->cmd[0] ? act->cmd : NULL, act->dir != 0,
+							   NULL, 0);
+		break;
+	case TP_ACT_PIN: {
+		struct tp_client *c = resolve_client(s, act->target_id);
+		if (c)
+			tp_client_set_pinned(c, act->dir < 0 ? !c->pinned : act->dir != 0);
+		break;
+	}
+	case TP_ACT_FLOAT_SET: {
+		struct tp_client *c = resolve_client(s, act->target_id);
+		if (c)
+			tp_client_set_floating(c,
+								   act->dir < 0 ? !c->floating : act->dir != 0);
+		break;
+	}
+	case TP_ACT_RESIZE_EXACT: {
+		struct tp_client *c = resolve_client(s, act->target_id);
+		if (c)
+			tp_client_resize_exact(c, act->mode_w, act->mode_h);
+		break;
+	}
+	case TP_ACT_MOVE_EXACT: {
+		struct tp_client *c = resolve_client(s, act->target_id);
+		if (c)
+			tp_client_move_exact(c, act->pos_x, act->pos_y);
+		break;
+	}
+	case TP_ACT_CENTER: {
+		struct tp_client *c = resolve_client(s, act->target_id);
+		if (c)
+			tp_client_center(c);
+		break;
+	}
+	case TP_ACT_RAISE: {
+		struct tp_client *c = resolve_client(s, act->target_id);
+		if (c)
+			tp_client_raise(c);
+		break;
+	}
 	}
 }
 

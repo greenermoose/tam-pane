@@ -23,6 +23,8 @@ struct tp_settings {
 	int32_t gap_inner;	 /* pixels between tiled windows */
 	int32_t gap_outer;	 /* pixels between windows and the monitor edge */
 	int32_t border_width;
+	float border_color_focused[4];   /* premultiplied RGBA; alpha 0 = disabled */
+	float border_color_unfocused[4]; /* premultiplied RGBA; alpha 0 = disabled */
 	bool focus_follows_mouse;
 	char locker[TP_SETTINGS_TERMINAL_MAX];
 	float split_ratio;	 /* first child's share for a new split */
@@ -56,6 +58,13 @@ struct tp_settings {
 };
 
 void tp_settings_defaults(struct tp_settings *s);
+
+/*
+ * Parse a color string ("#RRGGBB", "#RRGGBBAA", "0xRRGGBB", "0xRRGGBBAA",
+ * "none", or "") into premultiplied float RGBA [0..1] for wlroots scene rects.
+ * Returns false on invalid syntax.
+ */
+bool tp_settings_parse_color(const char *str, float out[4]);
 
 static inline const char *tp_settings_cursor_theme(const struct tp_settings *s) {
 	return s->cursor_theme[0] ? s->cursor_theme : NULL;

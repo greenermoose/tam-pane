@@ -269,6 +269,7 @@ void tp_client_apply_unmap(struct tp_client *c) {
 	c->mapped = false;
 	wlr_scene_node_set_enabled(&c->tree->node, false);
 	c->fullscreen = false;
+	c->pinned = false;
 	c->scratchpad = false;
 	c->scratchpad_visible = false;
 	tp_foreign_toplevel_unmap(c);
@@ -499,9 +500,10 @@ static int32_t client_border_width(const struct tp_client *c) {
 }
 
 static void update_border(struct tp_client *c, bool active) {
-	const float green[4] = {0.0f, 1.0f, 0.0f, 1.0f};
+	const float *col = active ? c->server->settings.border_color_focused
+							  : c->server->settings.border_color_unfocused;
 	int32_t b = client_border_width(c);
-	bool show = active && c->tree && b > 0 && tp_client_visible(c);
+	bool show = c->tree && b > 0 && tp_client_visible(c) && col[3] > 0.0f;
 	struct tp_rect edges[4] = {
 		{0, 0, c->geom.w, b}, {0, c->geom.h - b, c->geom.w, b},
 		{0, b, b, c->geom.h - 2 * b},
@@ -510,13 +512,14 @@ static void update_border(struct tp_client *c, bool active) {
 	for (size_t i = 0; i < 4; i++) {
 		struct tp_rect edge = edges[i];
 		if (show && !c->border[i]) {
-			c->border[i] = wlr_scene_rect_create(c->tree, edge.w, edge.h, green);
+			c->border[i] = wlr_scene_rect_create(c->tree, edge.w, edge.h, col);
 			if (c->border[i])
 				wlr_scene_node_lower_to_bottom(&c->border[i]->node);
 		}
 		if (!c->border[i])
 			continue;
 		if (show) {
+			wlr_scene_rect_set_color(c->border[i], col);
 			wlr_scene_rect_set_size(c->border[i], edge.w, edge.h);
 			wlr_scene_node_set_position(&c->border[i]->node, edge.x, edge.y);
 		}
@@ -539,6 +542,8 @@ bool tp_client_visible(const struct tp_client *c) {
 		return false;
 	if (c->scratchpad)
 		return c->scratchpad_visible;
+	if (c->floating && c->pinned)
+		return true;
 	return tp_tags_visible(c->tags, &c->mon->view);
 }
 
@@ -570,6 +575,17 @@ void tp_client_close(struct tp_client *c) {
 		tp_xwayland_close(c);
 	else if (c->toplevel)
 		wlr_xdg_toplevel_send_close(c->toplevel);
+}
+
+struct tp_client *tp_client_by_id(struct tp_server *s, uint64_t id) {
+	if (!s || id == 0)
+		return NULL;
+	struct tp_client *c;
+	wl_list_for_each(c, &s->clients, link) {
+		if (c->mapped && c->id == id)
+			return c;
+	}
+	return NULL;
 }
 
 void tp_client_toggle_tags(struct tp_client *c, tp_tags_t mask) {
@@ -604,6 +620,8 @@ void tp_client_set_floating(struct tp_client *c, bool floating) {
 		return;
 	tp_pointer_cancel_grab(c->server, c);
 	c->floating = floating;
+	if (!floating)
+		c->pinned = false;
 	if (!floating && c->scratchpad) {
 		c->scratchpad = false;
 		c->scratchpad_visible = false;
@@ -630,6 +648,63 @@ void tp_client_set_fullscreen(struct tp_client *c, bool fullscreen) {
 	apply_fullscreen(c, fullscreen);
 	if (c->mon)
 		tp_arrange(c->mon);
+}
+
+void tp_client_set_pinned(struct tp_client *c, bool pinned) {
+	if (!c || !c->mapped || c->fullscreen)
+		return;
+	if (pinned && !c->floating)
+		tp_client_set_floating(c, true);
+	if (c->pinned == pinned)
+		return;
+	c->pinned = pinned;
+	if (pinned && c->tree)
+		wlr_scene_node_raise_to_top(&c->tree->node);
+	if (c->mon)
+		tp_arrange(c->mon);
+	tp_focus_refresh(c->server);
+	tp_events_emit_window(c->server, TP_EVENT_WINDOW_CHANGE, c,
+						  tp_focused(c->server) == c);
+}
+
+void tp_client_resize_exact(struct tp_client *c, int32_t w, int32_t h) {
+	if (!c || !c->mapped || c->fullscreen)
+		return;
+	if (w < TP_FLOAT_MIN_W)
+		w = TP_FLOAT_MIN_W;
+	if (w > 16384)
+		w = 16384;
+	if (h < TP_FLOAT_MIN_H)
+		h = TP_FLOAT_MIN_H;
+	if (h > 16384)
+		h = 16384;
+	c->float_geom.w = w;
+	c->float_geom.h = h;
+	if (c->floating)
+		tp_client_place(c, c->float_geom);
+}
+
+void tp_client_move_exact(struct tp_client *c, int32_t x, int32_t y) {
+	if (!c || !c->mapped || !c->mon || c->fullscreen)
+		return;
+	c->float_geom.x = c->mon->usable.x + x;
+	c->float_geom.y = c->mon->usable.y + y;
+	if (c->floating)
+		tp_client_place(c, c->float_geom);
+}
+
+void tp_client_center(struct tp_client *c) {
+	if (!c || !c->mapped || !c->mon || c->fullscreen)
+		return;
+	center_float(c);
+	if (c->floating)
+		tp_client_place(c, c->float_geom);
+}
+
+void tp_client_raise(struct tp_client *c) {
+	if (!c || !c->mapped || !c->tree)
+		return;
+	wlr_scene_node_raise_to_top(&c->tree->node);
 }
 
 void tp_client_scratchpad_move(struct tp_client *c) {

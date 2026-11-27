@@ -208,7 +208,8 @@ struct tp_server {
 	struct wl_listener xwayland_new_surface;
 
 	struct wlr_seat *seat;
-	struct wl_list keyboards; /* tp_keyboard.link */
+	struct wl_list keyboards;     /* tp_keyboard.link */
+	struct wl_list input_devices; /* tp_input_device.link */
 	struct wl_listener new_input;
 	struct wl_listener request_cursor;
 	struct wl_listener request_set_selection;
