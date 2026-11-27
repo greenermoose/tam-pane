@@ -11,8 +11,10 @@ STATE
   Version 0.2.13 on dev (W39): a monitor that is removed and returns,
   as when a suspend drops and re-adds a display, comes back on the tags
   it showed, with its tiled layouts and its windows' floating places
-  (B10). Headless tests pass, also under AddressSanitizer. Not yet
-  installed or checked on a real suspend.
+  (B10). Headless tests pass, also under AddressSanitizer. Installed
+  at ~/.local/bin/tam-pane from 0eb26d2 (SHA-256 d2ed747d19eea6da...);
+  it takes effect at the next tam-pane login. Not yet checked on a real
+  suspend.
 
   Explicit key dispatch sends the requested modifiers and restores the
   physical modifier state after the key pair (W38). The headless suite

@@ -45,5 +45,6 @@ FAILED
 
 HANDOFF
 
-  - Not installed. Fred's check: a suspend that drops a display, on the
-    0.2.13 development build.
+  - Installed at ~/.local/bin/tam-pane from 0eb26d2 on Fred's word
+    (SHA-256 d2ed747d19eea6da...); dev pushed. Fred's check: after his
+    next tam-pane login, a suspend that drops a display.
