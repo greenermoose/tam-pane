@@ -37,7 +37,9 @@ Hyprland still installed as the fallback session.
 - At that first run, on Fred's three monitors: drag a floating window
   onto another monitor and back, move windows with Meta+Shift+Comma and
   Meta+Shift+Period, and unplug and replug a monitor. Its windows leave
-  and come back. These check 0.1.10's attach/detach refactor, which needs
+  and come back, and the monitor returns on the tags it showed, with
+  Meta+Tab going to the same former tag and floating windows where they
+  were (B10, 0.2.13; a suspend that drops a display checks the same). These check 0.1.10's attach/detach refactor, which needs
   two or more monitors; the nested window has one. Fred deferred this
   check to this phase on 2026-11-21. In the same run, press Meta+V on a
   tiled window on the second or third monitor: it floats centred at

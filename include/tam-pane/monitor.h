@@ -45,6 +45,21 @@ struct tp_monitor {
 	uint64_t arrange_count;
 };
 
+/* What a removed monitor was showing, kept by output name so the same
+ * output picks up where it left off when it returns, as after a suspend
+ * that drops and re-adds a display. The layouts still hold the windows
+ * that were tiled there; those windows are on another monitor meanwhile,
+ * and tp_monitors_forget_parked drops one that closes or is moved for good. */
+struct tp_parked_monitor {
+	struct wl_list link; /* tp_server.parked_monitors */
+	char *name;
+	struct tp_tagview view;
+	struct tp_layout layouts[TP_TAG_SLOTS];
+};
+
+/* At most this many removed monitors are remembered; the oldest goes. */
+#define TP_PARKED_MONITORS_MAX 8
+
 void tp_monitors_init(struct tp_server *s);
 void tp_monitors_finish(struct tp_server *s);
 
@@ -66,6 +81,13 @@ void tp_monitor_focus(struct tp_server *s, struct tp_monitor *m);
 
 /* The layout for the monitor's current view. */
 struct tp_layout *tp_monitor_layout(struct tp_monitor *m);
+
+/* The remembered state of the removed output `name`, or NULL. */
+struct tp_parked_monitor *tp_monitor_parked_find(struct tp_server *s,
+												 const char *name);
+
+/* Drop a window from every remembered monitor's layouts. */
+void tp_monitors_forget_parked(struct tp_server *s, struct tp_client *c);
 
 /* Drop a window from every layout slot on the monitor. */
 void tp_monitor_forget(struct tp_monitor *m, struct tp_client *c);

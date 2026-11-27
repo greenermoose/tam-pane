@@ -34,6 +34,9 @@ struct tp_client {
 	struct tp_server *server;
 	struct tp_monitor *mon;
 	char *home_output; /* original output name when displaced by hot-plug */
+	/* float_geom when it left home_output, relative to that output's
+	 * origin; valid while home_output is set. */
+	struct tp_rect home_float_geom;
 	enum tp_client_kind kind;
 	struct wlr_xdg_toplevel *toplevel;
 	struct wlr_xwayland_surface *xwayland;

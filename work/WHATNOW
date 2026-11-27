@@ -3,10 +3,16 @@ WHATNOW
 What tam-pane is doing now and what comes next. Read this first; revise
 it at the end of every session (work/README-work).
 
-Updated: 2026-11-26, with W38
+Updated: 2026-11-26, with W39
 
 
 STATE
+
+  Version 0.2.13 on dev (W39): a monitor that is removed and returns,
+  as when a suspend drops and re-adds a display, comes back on the tags
+  it showed, with its tiled layouts and its windows' floating places
+  (B10). Headless tests pass, also under AddressSanitizer. Not yet
+  installed or checked on a real suspend.
 
   Explicit key dispatch sends the requested modifiers and restores the
   physical modifier state after the key pair (W38). The headless suite
@@ -83,6 +89,8 @@ NEXT
 
 WAITING FOR FRED
 
+  - A suspend that drops a display, on 0.2.13 (B10): the display comes
+    back on its former tags and its windows where they were.
   - Whether to report GTK 4.24.1's divide by a zero refresh upstream
     (B6).
   - At the first run on real hardware (P4): the VT half of B5, and the

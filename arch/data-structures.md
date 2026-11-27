@@ -141,6 +141,24 @@ the same commit as any change to them.
   monotonic completed-arrange counter (`src/layout/arrange.c`, 0.2.4) used
   to coalesce repeated `tp_arrange()` calls onto one pass per idle.
 
+## tp_parked_monitor (`include/tam-pane/monitor.h`, 0.2.13)
+
+- What a removed monitor showed, kept in `tp_server.parked_monitors`
+  (newest first, at most `TP_PARKED_MONITORS_MAX`, 8) under its output
+  name, so an output dropped and re-added by a suspend comes back as it
+  was (B10).
+- **Fields:** `name`, `view` (both tag-view slots, so Meta+Tab still
+  goes to the former tag) and the `layouts` slots, moved out of the
+  monitor whole.
+- **Lifetime:** `on_destroy` in `src/monitor.c` parks the monitor before
+  its windows move to the heir; `on_new_output` gives an entry with the
+  same name back and frees it, then drops from the restored layouts
+  every window that is no longer on that monitor.
+- **No freed windows:** the kept layouts still hold the windows that were
+  tiled there. `tp_monitors_forget_parked` drops a window from every
+  entry when it unmaps (`tp_client_apply_unmap`) and when its home is
+  cleared by an explicit move (`tp_client_clear_home`).
+
 ## tp_layer_surface (`include/tam-pane/layer.h`)
 
 - One `wlr_layer_surface_v1` (panel, bar, launcher, or notification) bound to
@@ -165,7 +183,9 @@ the same commit as any change to them.
   as `tp_xwayland_unmanaged` outside `tp_server.clients`.
 - **Fields:** its monitor; `home_output` (remembered output name when
   displaced by hot-plug disconnect, cleared when reclaimed or explicitly moved
-  to another monitor); its tag mask; whether it is mapped, floating,
+  to another monitor); `home_float_geom` (its floating place when it left
+  `home_output`, relative to that output's origin, given back on return,
+  0.2.13); its tag mask; whether it is mapped, floating,
   fullscreen, or in the scratchpad (`scratchpad`, `scratchpad_visible`,
   0.2.5); its current and floating geometry; its scene tree; and its
   listeners.
@@ -200,7 +220,8 @@ the same commit as any change to them.
   `on_map`, `tp_client_set_monitor`, a floating drag in `update_grab`,
   and hot-plug in `src/monitor.c`. `tp_client_carry_float` moves the
   floating place between usable areas, and `tp_client_clear_home`
-  forgets `home_output`. `on_unmap` detaches without changing `mon`.
+  forgets `home_output` and drops the window from kept layouts
+  (`tp_parked_monitor`). `on_unmap` detaches without changing `mon`.
 
 ## Tags (`include/tam-pane/tags.h`)
 

@@ -113,3 +113,7 @@ IN THIS REPOSITORY
     B9-meta-v-floats-at-top-left.md   Meta+V floats a window at the
                                       layout's top-left, at its first
                                       size
+    B10-monitor-forgets-tags-after-resume.md
+                                      a display that returns after a
+                                      suspend forgets its tags and
+                                      layout

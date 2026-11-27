@@ -155,6 +155,7 @@ static void server_capture_argv(const char *const argv[], void *userdata) {
 
 bool tp_server_init(struct tp_server *s) {
 	wl_list_init(&s->monitors);
+	wl_list_init(&s->parked_monitors);
 	wl_list_init(&s->clients);
 	wl_list_init(&s->focus_stack);
 	wl_list_init(&s->keyboards);

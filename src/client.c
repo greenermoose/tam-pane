@@ -276,6 +276,7 @@ void tp_client_apply_unmap(struct tp_client *c) {
 		s->focused_client = NULL;
 	tp_pointer_cancel_grab(s, c);
 	tp_client_detach(c);
+	tp_monitors_forget_parked(s, c);
 	wl_list_remove(&c->link);
 	wl_list_remove(&c->flink);
 	wl_list_init(&c->link);
@@ -815,6 +816,8 @@ void tp_client_carry_float(struct tp_client *c, struct tp_rect from,
 }
 
 void tp_client_clear_home(struct tp_client *c) {
+	if (c->home_output)
+		tp_monitors_forget_parked(c->server, c);
 	free(c->home_output);
 	c->home_output = NULL;
 }

@@ -2491,6 +2491,19 @@ int main(void) {
 		if (!pump(&client, &server)) goto fail;
 	CHECK(m2->usable.y == m2->area.y + 24);
 
+	/* A monitor that is removed and returns, as when a suspend drops and
+	 * re-adds a display, comes back on the tags it showed, with its tiled
+	 * layout and its windows' floating places. */
+	tp_tagview_show(&m2->view, tp_tag_mask(3));
+	tp_tagview_show(&m2->view, c1->tags);
+	struct tp_tagview saved_view = m2->view;
+	c1->float_geom = (struct tp_rect){m2->area.x + 100, m2->area.y + 80,
+		300, 200};
+	tp_arrange(m2);
+	for (unsigned int i = 0; i < 20; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(tp_layout_contains(tp_monitor_layout(m2), c1));
+
 	tp_tags_t saved_tags = c1->tags;
 	char saved_name[64];
 	snprintf(saved_name, sizeof(saved_name), "%s", o2->name);
@@ -2503,10 +2516,29 @@ int main(void) {
 	CHECK(c1->mon == m1);
 	CHECK(c1->tags == saved_tags);
 	CHECK(c1->home_output != NULL && strcmp(c1->home_output, saved_name) == 0);
+	struct tp_parked_monitor *parked =
+		tp_monitor_parked_find(&server, saved_name);
+	unsigned int saved_slot = tp_tags_slot(tp_tagview_current(&saved_view));
+	const void *saved_root = NULL;
+	CHECK(parked != NULL);
+	if (parked) {
+		saved_root = parked->layouts[saved_slot].dwindle.root;
+		CHECK(saved_root != NULL);
+		CHECK(tp_tagview_current(&parked->view) ==
+			tp_tagview_current(&saved_view));
+		CHECK(tp_layout_contains(
+			&parked->layouts[tp_tags_slot(tp_tagview_current(&saved_view))],
+			c1));
+	}
 
-	/* When a monitor with the remembered name returns, c1 moves back. */
+	/* When a monitor with the remembered name returns, c1 moves back.
+	 * Headless outputs never reuse a name, so rename what was kept. */
 	free(c1->home_output);
 	c1->home_output = strdup("HEADLESS-3");
+	if (parked) {
+		free(parked->name);
+		parked->name = strdup("HEADLESS-3");
+	}
 	struct wlr_output *o3 = wlr_headless_add_output(headless, 800, 600);
 	CHECK(o3 != NULL && strcmp(o3->name, "HEADLESS-3") == 0);
 	for (unsigned int i = 0; i < 20; i++)
@@ -2514,6 +2546,16 @@ int main(void) {
 	CHECK(c1->mon == o3->data);
 	CHECK(c1->home_output == NULL);
 	CHECK(c1->tags == saved_tags);
+	struct tp_monitor *m3 = o3->data;
+	CHECK(tp_tagview_current(&m3->view) == tp_tagview_current(&saved_view));
+	CHECK(m3->view.slot[m3->view.cur ^ 1u] == tp_tag_mask(3));
+	CHECK(tp_layout_contains(tp_monitor_layout(m3), c1));
+	/* The same tiled layout tree, not a fresh one built around c1. */
+	CHECK((const void *)m3->layouts[saved_slot].dwindle.root == saved_root);
+	CHECK(c1->float_geom.x == m3->area.x + 100 &&
+		c1->float_geom.y == m3->area.y + 80 && c1->float_geom.w == 300 &&
+		c1->float_geom.h == 200);
+	CHECK(tp_monitor_parked_find(&server, "HEADLESS-3") == NULL);
 
 	/*
 	 * Lua 0.1.0 + 0.1.1 integration: load a real init.lua setting custom gaps,
@@ -2660,11 +2702,46 @@ int main(void) {
 	for (unsigned int i = 0; i < 10; i++)
 		if (!pump(&client, &server)) goto fail;
 	CHECK(has_hook_event("madd:HEADLESS-4:640x480"));
+
+	/* A window tiled on a removed monitor stays in its kept layout until
+	 * it closes; closing it drops it there too, so the kept layout never
+	 * holds a freed window. */
+	struct tp_monitor *m4 = o4->data;
+	struct tp_monitor *keep_selmon = server.selmon;
+	struct tp_client *keep_focus = tp_focused(&server);
+	tp_monitor_focus(&server, m4);
+	struct test_window parked_win;
+	configure_window(&client, &parked_win, "parked-tile");
+	for (unsigned int i = 0; i < 100 && !parked_win.configured; i++)
+		if (!pump(&client, &server)) goto fail;
+	for (unsigned int i = 0; i < 20; i++)
+		if (!pump(&client, &server)) goto fail;
+	struct tp_client *parked_c = tp_focused(&server);
+	CHECK(parked_c != NULL && parked_c->mon == m4 && !parked_c->floating);
+	CHECK(tp_layout_contains(tp_monitor_layout(m4), parked_c));
+
 	hook_event_count = 0;
 	wlr_output_destroy(o4);
 	for (unsigned int i = 0; i < 10; i++)
 		if (!pump(&client, &server)) goto fail;
 	CHECK(has_hook_event("mrem:HEADLESS-4:640x480"));
+	struct tp_parked_monitor *p4 = tp_monitor_parked_find(&server, "HEADLESS-4");
+	CHECK(p4 != NULL);
+	bool p4_held = false;
+	for (unsigned int i = 0; p4 && i < TP_TAG_SLOTS; i++)
+		p4_held |= tp_layout_contains(&p4->layouts[i], parked_c);
+	CHECK(p4_held);
+	destroy_window(&parked_win);
+	for (unsigned int i = 0; i < 20; i++)
+		if (!pump(&client, &server)) goto fail;
+	p4 = tp_monitor_parked_find(&server, "HEADLESS-4");
+	CHECK(p4 != NULL);
+	for (unsigned int i = 0; p4 && i < TP_TAG_SLOTS; i++)
+		CHECK(tp_layout_count(&p4->layouts[i]) == 0);
+	tp_monitor_focus(&server, keep_selmon);
+	if (keep_focus)
+		tp_focus(&server, keep_focus);
+	hook_event_count = 0;
 
 	/* Runaway while true do end in a hook is cut off by the watchdog and the
 	 * compositor keeps handling subsequent input. */

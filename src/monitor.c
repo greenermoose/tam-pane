@@ -182,6 +182,86 @@ static void on_request_state(struct wl_listener *l, void *data) {
 	tp_output_mgmt_update(m->server);
 }
 
+static void parked_free(struct tp_parked_monitor *p) {
+	wl_list_remove(&p->link);
+	for (unsigned int i = 0; i < TP_TAG_SLOTS; i++)
+		tp_layout_clear(&p->layouts[i]);
+	free(p->name);
+	free(p);
+}
+
+struct tp_parked_monitor *tp_monitor_parked_find(struct tp_server *s,
+												 const char *name) {
+	if (!s || !name || !*name)
+		return NULL;
+	struct tp_parked_monitor *p;
+	wl_list_for_each(p, &s->parked_monitors, link) {
+		if (strcmp(p->name, name) == 0)
+			return p;
+	}
+	return NULL;
+}
+
+void tp_monitors_forget_parked(struct tp_server *s, struct tp_client *c) {
+	if (!s || !c)
+		return;
+	struct tp_parked_monitor *p;
+	wl_list_for_each(p, &s->parked_monitors, link) {
+		for (unsigned int i = 0; i < TP_TAG_SLOTS; i++)
+			tp_layout_forget(&p->layouts[i], c);
+	}
+}
+
+/* Keep m's tag view and layouts under its output name, leaving m with
+ * empty layouts. False when there is nothing to keep them under. */
+static bool park_monitor(struct tp_monitor *m, const char *name) {
+	struct tp_server *s = m->server;
+	if (s->stopping || !name || !*name)
+		return false;
+	struct tp_parked_monitor *old = tp_monitor_parked_find(s, name);
+	if (old)
+		parked_free(old);
+	struct tp_parked_monitor *p = calloc(1, sizeof(*p));
+	if (!p)
+		return false;
+	p->name = strdup(name);
+	if (!p->name) {
+		free(p);
+		return false;
+	}
+	p->view = m->view;
+	for (unsigned int i = 0; i < TP_TAG_SLOTS; i++) {
+		p->layouts[i] = m->layouts[i];
+		tp_layout_init(&m->layouts[i], &s->settings);
+	}
+	wl_list_insert(&s->parked_monitors, &p->link);
+	while (wl_list_length(&s->parked_monitors) > TP_PARKED_MONITORS_MAX) {
+		struct tp_parked_monitor *oldest =
+			wl_container_of(s->parked_monitors.prev, oldest, link);
+		parked_free(oldest);
+	}
+	return true;
+}
+
+/* Give m back what its output showed before it was removed. True when
+ * there was something to restore. */
+static bool unpark_monitor(struct tp_monitor *m) {
+	struct tp_server *s = m->server;
+	struct tp_parked_monitor *p =
+		tp_monitor_parked_find(s, m->output ? m->output->name : NULL);
+	if (!p)
+		return false;
+	m->view = p->view;
+	for (unsigned int i = 0; i < TP_TAG_SLOTS; i++) {
+		tp_layout_clear(&m->layouts[i]);
+		m->layouts[i] = p->layouts[i];
+		tp_layout_init(&p->layouts[i], NULL);
+		tp_layout_apply_settings(&m->layouts[i], &s->settings);
+	}
+	parked_free(p);
+	return true;
+}
+
 static void on_destroy(struct wl_listener *l, void *data) {
 	struct tp_monitor *m = wl_container_of(l, m, destroy);
 	struct tp_server *s = m->server;
@@ -202,6 +282,7 @@ static void on_destroy(struct wl_listener *l, void *data) {
 	wl_list_remove(&m->request_state.link);
 	wl_list_remove(&m->destroy.link);
 	wl_list_remove(&m->link);
+	bool parked = park_monitor(m, mon_name);
 	for (unsigned int i = 0; i < TP_TAG_SLOTS; i++)
 		tp_layout_clear(&m->layouts[i]);
 
@@ -214,8 +295,12 @@ static void on_destroy(struct wl_listener *l, void *data) {
 	wl_list_for_each(c, &s->clients, link) {
 		if (c->mon != m)
 			continue;
-		if (!c->home_output && name && *name)
+		if (!c->home_output && name && *name) {
 			c->home_output = strdup(name);
+			c->home_float_geom = c->float_geom;
+			c->home_float_geom.x -= area.x;
+			c->home_float_geom.y -= area.y;
+		}
 		if (heir)
 			tp_client_carry_float(c, m->usable, heir->usable);
 		tp_client_attach(c, heir, 0);
@@ -228,6 +313,8 @@ static void on_destroy(struct wl_listener *l, void *data) {
 
 	if (s->stopping)
 		return;
+	tam_log_info("output %s: removed%s", mon_name,
+				 parked ? "; its tags and layouts are kept for its return" : "");
 	if (heir)
 		tp_arrange(heir);
 	tp_session_lock_arrange(s);
@@ -346,6 +433,7 @@ static void on_new_output(struct wl_listener *l, void *data) {
 	tp_tagview_init(&m->view, tp_tag_mask(1));
 	for (unsigned int i = 0; i < TP_TAG_SLOTS; i++)
 		tp_layout_init(&m->layouts[i], &s->settings);
+	bool restored = unpark_monitor(m);
 
 	m->frame.notify = on_frame;
 	wl_signal_add(&output->events.frame, &m->frame);
@@ -382,14 +470,29 @@ static void on_new_output(struct wl_listener *l, void *data) {
 		if (!match && c->mon != NULL)
 			continue;
 		struct tp_monitor *old = c->mon;
-		if (old && old != m)
+		if (match) {
+			/* Back where it floated before, kept on the output. */
+			c->float_geom = c->home_float_geom;
+			c->float_geom.x += m->area.x;
+			c->float_geom.y += m->area.y;
+			tp_client_carry_float(c, m->usable, m->usable);
+		} else if (old && old != m) {
 			tp_client_carry_float(c, old->usable, m->usable);
+		}
 		tp_client_attach(c, m, 0);
 		if (match)
 			tp_client_clear_home(c);
 		moved = true;
 	}
-	if (moved) {
+	/* A restored layout may still name windows that went elsewhere for
+	 * good while this output was away; only this output's windows stay. */
+	if (restored) {
+		wl_list_for_each(c, &s->clients, link) {
+			if (c->mon != m)
+				tp_monitor_forget(m, c);
+		}
+	}
+	if (moved || restored) {
 		tp_arrange_all(s);
 		if (!tp_focused(s))
 			tp_focus_refresh(s);
@@ -422,6 +525,11 @@ void tp_monitors_finish(struct tp_server *s) {
 	if (s->layout_change.notify)
 		wl_list_remove(&s->layout_change.link);
 	s->new_output.notify = s->layout_change.notify = NULL;
+	while (!wl_list_empty(&s->parked_monitors)) {
+		struct tp_parked_monitor *p =
+			wl_container_of(s->parked_monitors.next, p, link);
+		parked_free(p);
+	}
 }
 
 struct tp_monitor *tp_monitor_at(struct tp_server *s, double x, double y) {

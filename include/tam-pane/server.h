@@ -118,6 +118,7 @@ struct tp_server {
 	struct wlr_scene_output_layout *scene_layout;
 
 	struct wl_list monitors;	/* tp_monitor.link */
+	struct wl_list parked_monitors; /* tp_parked_monitor.link, newest first */
 	struct tp_monitor *selmon;	/* monitor that receives new windows */
 	struct wl_listener new_output;
 	struct wl_listener layout_change;

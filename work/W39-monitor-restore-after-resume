@@ -1,0 +1,49 @@
+W39 MONITORS COME BACK AS THEY WERE AFTER A SUSPEND (B10)
+
+Date: 2026-11-26
+AI harness: Claude Code 2.1.332
+AI model: Claude Opus 5.5 (claude-opus-5-5)
+Commits: Same commit as this record.
+Transcript: Retained privately by the author.
+
+GUIDANCE
+
+  Fred: "System went into suspend, and I lost my window placements.
+  Where is my browser window?"
+  Fred: "Yes, look into the tag restore bug"
+  Fred: "Yes, go ahead and fix it"
+  Fred: "3" (draft the patch now, apply it when the checkout is free)
+  Fred: "Codex is done, apply the patch"
+
+DONE
+
+  - Found the window: Chromium was on HDMI-A-1, tag 1, while that
+    monitor showed tag 3. The resume had dropped and re-added HDMI-A-1
+    and DP-1, and each came back on tag 1 with fresh layouts (B10).
+  - Version 0.2.13: a removed monitor's tag view and layouts are kept
+    under its output name and given back when it returns; displaced
+    windows get their floating place back, relative to their home
+    output; a window that closes or is moved on purpose is dropped from
+    the kept layouts; removing an output is logged.
+  - Tests: the hot-plug part of test_input_headless checks the returned
+    tags, the same layout tree and the floating place, and a window that
+    closes while its monitor is away. Turning off each part of the fix
+    fails its check. The headless suite was clean under AddressSanitizer
+    and UBSan. make test passed (829 headless input checks).
+  - Docs: bugs/B10, arch/data-structures.md, plans/P4 acceptance.
+
+FAILED
+
+  - The first look used hyprctl; Fred runs tam-pane, whose queries are
+    `tam-pane msg windows|monitors|tags`.
+  - Codex held the checkout exclusively, so the patch was drafted
+    against dev HEAD in a scratch copy and applied after Codex finished.
+  - The first layout check passed even without the fix, because a single
+    window is re-tiled anyway; it now compares the layout tree itself.
+  - Why HDMI-A-1 then moved to tag 3 is unknown: tam-pane does not log
+    tag changes. It may have been a key press or a bar click.
+
+HANDOFF
+
+  - Not installed. Fred's check: a suspend that drops a display, on the
+    0.2.13 development build.
