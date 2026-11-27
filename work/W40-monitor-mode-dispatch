@@ -1,0 +1,39 @@
+W40 MONITOR MODE DISPATCH FOR THE MSI RETRAIN
+
+Date: 2026-11-26
+AI harness: Claude Code 2.1.332
+AI model: Claude Opus 5.5 (claude-opus-5-5)
+Commits: Same commit as this record.
+Transcript: Retained privately by the author.
+
+GUIDANCE
+
+  Fred: "Fix the MSI resume workaround for tam-pane"
+
+DONE
+
+  - Version 0.2.14: `tam-pane msg dispatch monitor mode <output|focused>
+    <W>x<H>[@<Hz>]` sets one of the output's own modes (refresh within
+    10 mHz; an output with no fixed modes gets a custom mode). It replies
+    OK only when the commit went through, and refuses an output that is
+    off, where a commit would retrain nothing.
+  - Every modeset logs "output <name>: modeset <W>x<H>@<Hz>Hz", whoever
+    asked for it (new output, DPMS on, mode change, monitor rule, output
+    management), from the output's commit event. Fred's MSI MP161 resume
+    workaround reads it as proof of a retrain.
+  - Tests: parsing and formatting in test_ipc; a real mode commit, an
+    unknown monitor and an output that is off in test_input_headless.
+    make test passed (841 headless input checks, 161 IPC checks).
+  - Docs: arch/ipc.md.
+
+FAILED
+
+  - Nothing in tam-pane. While adapting the workaround's own tests, a
+    run reached the live compositor (0.2.10) once, before its fixture
+    shadowed tam-pane: `dpms on DP-2`, already on, and `monitor mode`,
+    which 0.2.10 rejects. DP-2 stayed at 60 Hz and nothing was logged.
+
+HANDOFF
+
+  - The running compositor predates this; the dispatch works after
+    Fred's next tam-pane login on 0.2.14.

@@ -10,6 +10,7 @@
 #include "tam-pane/layout/arrange.h"
 #include "tam-pane/lua.h"
 #include "tam-pane/monitor.h"
+#include "tam-pane/output_power.h"
 #include "tam-pane/security.h"
 #include <errno.h>
 #include <sys/socket.h>
@@ -2556,6 +2557,30 @@ int main(void) {
 		c1->float_geom.y == m3->area.y + 80 && c1->float_geom.w == 300 &&
 		c1->float_geom.h == 200);
 	CHECK(tp_monitor_parked_find(&server, "HEADLESS-3") == NULL);
+
+	/* 0.2.14: monitor mode commits a mode, and refuses an output that is
+	 * off, where a commit would retrain nothing. */
+	{
+		char why[128] = {0};
+		CHECK(tp_monitor_set_mode(&server, o3->name, 1024, 768, 50000, why,
+			sizeof(why)));
+		CHECK(o3->width == 1024 && o3->height == 768 && o3->refresh == 50000);
+		CHECK(m3->area.w == 1024 && m3->area.h == 768);
+		CHECK(!tp_monitor_set_mode(&server, "NO-SUCH-OUTPUT", 800, 600, 0, why,
+			sizeof(why)));
+		CHECK(strcmp(why, "unknown monitor") == 0);
+		CHECK(tp_output_power_set(&server, o3, false));
+		CHECK(!tp_monitor_set_mode(&server, o3->name, 800, 600, 60000, why,
+			sizeof(why)));
+		CHECK(strstr(why, "off") != NULL);
+		CHECK(o3->width == 1024);
+		CHECK(tp_output_power_set(&server, o3, true));
+		CHECK(tp_monitor_set_mode(&server, o3->name, 800, 600, 60000, why,
+			sizeof(why)));
+		CHECK(o3->width == 800 && o3->height == 600 && o3->refresh == 60000);
+		for (unsigned int i = 0; i < 20; i++)
+			if (!pump(&client, &server)) goto fail;
+	}
 
 	/*
 	 * Lua 0.1.0 + 0.1.1 integration: load a real init.lua setting custom gaps,

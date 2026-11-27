@@ -94,6 +94,13 @@ replaced with a space. Every record is guaranteed to occupy one line.
     - `tag view|toggle_view|move|toggle_client <1..9>`
     - `tag back`
     - `monitor focus|move next|prev|<output-name>`
+    - `monitor mode <output|focused> <W>x<H>[@<Hz>]` (0.2.14): sets one
+      of the output's own modes (refresh within 10 mHz; without `@<Hz>`,
+      the highest). Replies `OK` only when the commit went through, which
+      on a real display is a full modeset; an output that is off, or has
+      no such mode, gets `ERR`. Every modeset, whoever asks for it, logs
+      `output <name>: modeset <W>x<H>@<Hz>Hz` (refresh to two decimals),
+      which display recovery scripts read as proof of a retrain.
     - `layout set dwindle|master|scroller|monocle`
     - `layout next|prev`
     - `layout nmaster inc|dec`

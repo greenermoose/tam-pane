@@ -6,6 +6,7 @@
 #include "tam-pane/layout/layout.h"
 #include "tam-pane/tags.h"
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <wayland-server-core.h>
 
@@ -32,6 +33,7 @@ struct tp_monitor {
 	struct tp_layout layouts[TP_TAG_SLOTS]; /* see tp_tags_slot() */
 	struct wl_listener frame;
 	struct wl_listener request_state;
+	struct wl_listener commit; /* logs each modeset */
 	struct wl_listener destroy;
 	/* Nested Wayland output: native fractional scale on the host surface. */
 	struct wp_viewporter *host_viewporter;
@@ -97,6 +99,15 @@ void tp_monitors_apply_settings(struct tp_server *s);
 
 /* Apply staged tp.monitor rules to all connected monitors (on reload). */
 void tp_monitors_apply_config(struct tp_server *s);
+
+/* Change a connected, powered-on monitor's mode (NULL or "focused" =
+ * s->selmon). refresh_mhz 0 takes the highest refresh for that size; else
+ * the output's own mode within 10 mHz of it. An output with no fixed modes
+ * (headless, nested) gets a custom mode. True only when the commit went
+ * through, which on DRM is a full modeset; on failure, err says why. */
+bool tp_monitor_set_mode(struct tp_server *s, const char *name, int32_t w,
+						 int32_t h, int32_t refresh_mhz, char *err,
+						 size_t err_size);
 
 /* Change scale on a connected monitor (NULL or "focused" = s->selmon). */
 bool tp_monitor_set_scale(struct tp_server *s, const char *name, float scale);

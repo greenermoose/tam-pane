@@ -58,6 +58,7 @@ enum tp_action_kind {
 	TP_ACT_SEND_KEY,
 	TP_ACT_CAPTURE,
 	TP_ACT_MONITOR_SCALE,
+	TP_ACT_MONITOR_MODE,
 	TP_ACT_MOUSE_MOVE,
 	TP_ACT_MOUSE_RESIZE,
 };
@@ -70,6 +71,8 @@ struct tp_action {
 	uint32_t mods;	  /* TP_MOD_* for TP_ACT_SEND_KEY */
 	xkb_keysym_t sym; /* keysym for TP_ACT_SEND_KEY */
 	float scale;	  /* scale for TP_ACT_MONITOR_SCALE */
+	/* TP_ACT_MONITOR_MODE: size, and refresh in mHz (0 = the highest). */
+	int32_t mode_w, mode_h, mode_refresh;
 	char cmd[256];	  /* command string for TP_ACT_SPAWN/CAPTURE/DPMS/FOCUS_APP */
 };
 

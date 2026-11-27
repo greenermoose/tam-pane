@@ -290,6 +290,10 @@ void tp_action_run(struct tp_server *s, const struct tp_action *act) {
 	case TP_ACT_MONITOR_SCALE:
 		tp_monitor_set_scale(s, act->cmd[0] ? act->cmd : NULL, act->scale);
 		break;
+	case TP_ACT_MONITOR_MODE:
+		tp_monitor_set_mode(s, act->cmd[0] ? act->cmd : NULL, act->mode_w,
+							act->mode_h, act->mode_refresh, NULL, 0);
+		break;
 	case TP_ACT_MOUSE_MOVE:
 	case TP_ACT_MOUSE_RESIZE:
 		break;

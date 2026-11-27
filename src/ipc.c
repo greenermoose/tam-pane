@@ -541,6 +541,14 @@ static bool handle_line(struct tp_ipc_client *c, char *line) {
 			return ipc_client_queue(c, "OK\nEND\n", 7);
 		}
 
+		if (act.kind == TP_ACT_MONITOR_MODE) {
+			char why[128] = {0};
+			if (!tp_monitor_set_mode(s, act.cmd, act.mode_w, act.mode_h,
+									 act.mode_refresh, why, sizeof(why)))
+				return ipc_send_err(c, why[0] ? why : "monitor mode failed");
+			return ipc_client_queue(c, "OK\nEND\n", 7);
+		}
+
 		if (act.kind == TP_ACT_DPMS) {
 			struct tp_monitor *m = tp_monitor_by_name(s, mon_name);
 			if (!m || !m->output)

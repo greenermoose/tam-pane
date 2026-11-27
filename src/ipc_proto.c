@@ -473,8 +473,47 @@ bool tp_ipc_parse_dispatch(const char *args, struct tp_action *out,
 		if (!next_token(&p, sub, sizeof(sub))) {
 			if (err && err_size > 0)
 				snprintf(err, err_size,
-						 "monitor expects 'focus', 'move', or 'scale'");
+						 "monitor expects 'focus', 'move', 'scale', or 'mode'");
 			return false;
+		}
+		if (strcmp(sub, "mode") == 0) {
+			char mode_tok[64];
+			if (!next_token(&p, target, sizeof(target)) ||
+				!next_token(&p, mode_tok, sizeof(mode_tok)) ||
+				has_extra_tokens(p)) {
+				if (err && err_size > 0)
+					snprintf(err, err_size,
+							 "monitor mode expects <output|focused> <W>x<H>[@<Hz>]");
+				return false;
+			}
+			char *end = NULL;
+			long w = strtol(mode_tok, &end, 10);
+			long h = 0;
+			double hz = 0.0;
+			bool ok = end && *end == 'x';
+			if (ok) {
+				h = strtol(end + 1, &end, 10);
+				if (*end == '@') {
+					const char *hz_start = end + 1;
+					hz = strtod(hz_start, &end);
+					ok = end != hz_start && hz >= 1.0 && hz <= 1000.0;
+				}
+				ok = ok && *end == '\0';
+			}
+			if (!ok || w < 1 || w > 16384 || h < 1 || h > 16384) {
+				if (err && err_size > 0)
+					snprintf(err, err_size,
+							 "monitor mode expects <W>x<H>[@<Hz>], e.g. 1920x1080@59.94");
+				return false;
+			}
+			out->kind = TP_ACT_MONITOR_MODE;
+			out->mode_w = (int32_t)w;
+			out->mode_h = (int32_t)h;
+			out->mode_refresh = (int32_t)(hz * 1000.0 + 0.5);
+			snprintf(out->cmd, sizeof(out->cmd), "%s", target);
+			if (mon_name && mon_name_size > 0)
+				snprintf(mon_name, mon_name_size, "%s", target);
+			return true;
 		}
 		if (strcmp(sub, "scale") == 0) {
 			char scale_tok[32];
@@ -507,7 +546,7 @@ bool tp_ipc_parse_dispatch(const char *args, struct tp_action *out,
 		else {
 			if (err && err_size > 0)
 				snprintf(err, err_size,
-						 "monitor expects 'focus', 'move', or 'scale'");
+						 "monitor expects 'focus', 'move', 'scale', or 'mode'");
 			return false;
 		}
 		if (!next_token(&p, target, sizeof(target)) || has_extra_tokens(p)) {
@@ -826,6 +865,15 @@ tam_str_t tp_ipc_format_action(tam_str_t s, const struct tp_action *act) {
 		return tam_str_cat_printf(s, "monitor scale %s %.2f",
 								  act->cmd[0] ? act->cmd : "focused",
 								  act->scale);
+	case TP_ACT_MONITOR_MODE:
+		if (act->mode_refresh > 0)
+			return tam_str_cat_printf(s, "monitor mode %s %dx%d@%.3f",
+									  act->cmd[0] ? act->cmd : "focused",
+									  act->mode_w, act->mode_h,
+									  act->mode_refresh / 1000.0);
+		return tam_str_cat_printf(s, "monitor mode %s %dx%d",
+								  act->cmd[0] ? act->cmd : "focused",
+								  act->mode_w, act->mode_h);
 	case TP_ACT_MOUSE_MOVE:
 		return tam_str_cat(s, "mouse_move");
 	case TP_ACT_MOUSE_RESIZE:

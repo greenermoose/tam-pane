@@ -43,6 +43,25 @@ static void on_frame(struct wl_listener *l, void *data) {
 	wlr_scene_output_send_frame_done(m->scene_output, &now);
 }
 
+/* One journal line per modeset, whoever asked for it (a new output, DPMS
+ * on, a mode change, a monitor rule or output management): display
+ * recovery scripts take this line as proof the link was retrained. */
+static void log_modeset(struct wlr_output *o) {
+	tam_log_info("output %s: modeset %dx%d@%.2fHz", o->name ? o->name : "",
+				 o->width, o->height, o->refresh / 1000.0);
+}
+
+static void on_output_commit(struct wl_listener *l, void *data) {
+	struct tp_monitor *m = wl_container_of(l, m, commit);
+	struct wlr_output_event_commit *ev = data;
+	if (!ev || !ev->state || !m->output->enabled)
+		return;
+	uint32_t c = ev->state->committed;
+	if ((c & WLR_OUTPUT_STATE_MODE) ||
+		((c & WLR_OUTPUT_STATE_ENABLED) && ev->state->enabled))
+		log_modeset(m->output);
+}
+
 static void apply_nested_scale(struct tp_monitor *m, int32_t logical_w,
 							   int32_t logical_h, int32_t refresh) {
 	if (!m->host_viewport || m->host_scale <= 0.0f || logical_w <= 0 ||
@@ -280,6 +299,7 @@ static void on_destroy(struct wl_listener *l, void *data) {
 	finish_nested_scale(m);
 	wl_list_remove(&m->frame.link);
 	wl_list_remove(&m->request_state.link);
+	wl_list_remove(&m->commit.link);
 	wl_list_remove(&m->destroy.link);
 	wl_list_remove(&m->link);
 	bool parked = park_monitor(m, mon_name);
@@ -439,6 +459,8 @@ static void on_new_output(struct wl_listener *l, void *data) {
 	wl_signal_add(&output->events.frame, &m->frame);
 	m->request_state.notify = on_request_state;
 	wl_signal_add(&output->events.request_state, &m->request_state);
+	m->commit.notify = on_output_commit;
+	wl_signal_add(&output->events.commit, &m->commit);
 	m->destroy.notify = on_destroy;
 	wl_signal_add(&output->events.destroy, &m->destroy);
 	wl_list_insert(s->monitors.prev, &m->link);
@@ -497,6 +519,7 @@ static void on_new_output(struct wl_listener *l, void *data) {
 		if (!tp_focused(s))
 			tp_focus_refresh(s);
 	}
+	log_modeset(output);
 	tam_log_info("output %s: %dx%d at %d,%d scale %.2f", output->name,
 				 m->area.w, m->area.h, m->area.x, m->area.y, output->scale);
 	tp_events_emit_monitor(s, TP_EVENT_MONITOR_ADD, output->name, m->area,
@@ -647,6 +670,60 @@ void tp_monitors_apply_config(struct tp_server *s) {
 		update_area(m);
 	}
 	tp_output_mgmt_update(s);
+}
+
+static void set_err(char *err, size_t err_size, const char *msg) {
+	if (err && err_size > 0)
+		snprintf(err, err_size, "%s", msg);
+}
+
+bool tp_monitor_set_mode(struct tp_server *s, const char *name, int32_t w,
+						 int32_t h, int32_t refresh_mhz, char *err,
+						 size_t err_size) {
+	if (!s || w < 1 || h < 1 || refresh_mhz < 0) {
+		set_err(err, err_size, "invalid mode");
+		return false;
+	}
+	struct tp_monitor *m = (!name || !*name || strcmp(name, "focused") == 0)
+							   ? s->selmon
+							   : tp_monitor_by_name(s, name);
+	if (!m || !m->output) {
+		set_err(err, err_size, "unknown monitor");
+		return false;
+	}
+	/* A mode committed to an output that is off changes nothing on the
+	 * link, so refuse instead of reporting a modeset that never happened. */
+	if (!m->output->enabled) {
+		set_err(err, err_size, "monitor is off (dpms on first)");
+		return false;
+	}
+	struct wlr_output_state state;
+	wlr_output_state_init(&state);
+	if (wl_list_empty(&m->output->modes)) {
+		wlr_output_state_set_custom_mode(&state, w, h, refresh_mhz);
+	} else {
+		struct wlr_output_mode *mode =
+			find_matching_mode(m->output, w, h, refresh_mhz);
+		int32_t diff = mode ? mode->refresh - refresh_mhz : 0;
+		if (diff < 0)
+			diff = -diff;
+		if (!mode || (refresh_mhz > 0 && diff > 10)) {
+			wlr_output_state_finish(&state);
+			set_err(err, err_size, "the monitor has no such mode");
+			return false;
+		}
+		wlr_output_state_set_mode(&state, mode);
+	}
+	bool ok = wlr_output_commit_state(m->output, &state);
+	wlr_output_state_finish(&state);
+	if (!ok) {
+		set_err(err, err_size, "mode commit failed");
+		return false;
+	}
+	update_area(m);
+	tp_arrange_all(s);
+	tp_output_mgmt_update(s);
+	return true;
 }
 
 bool tp_monitor_set_scale(struct tp_server *s, const char *name, float scale) {

@@ -368,6 +368,34 @@ static void test_parse_dispatch(void) {
 		  act.scale > 1.24f && act.scale < 1.26f);
 	CHECK(!tp_ipc_parse_dispatch("monitor scale DP-1 99", &act, mon,
 								 sizeof(mon), err, sizeof(err)));
+
+	/* 0.2.14: monitor mode, for retraining a display link. */
+	CHECK(tp_ipc_parse_dispatch("monitor mode DP-2 1920x1080@59.94", &act,
+								mon, sizeof(mon), err, sizeof(err)));
+	CHECK(act.kind == TP_ACT_MONITOR_MODE && strcmp(act.cmd, "DP-2") == 0 &&
+		  strcmp(mon, "DP-2") == 0 && act.mode_w == 1920 &&
+		  act.mode_h == 1080 && act.mode_refresh == 59940);
+	CHECK(tp_ipc_parse_dispatch("monitor mode focused 2560x1440", &act, mon,
+								sizeof(mon), err, sizeof(err)));
+	CHECK(act.kind == TP_ACT_MONITOR_MODE && act.mode_w == 2560 &&
+		  act.mode_h == 1440 && act.mode_refresh == 0);
+	{
+		tam_str_t f = tp_ipc_format_action(tam_str_new(""), &act);
+		CHECK(f && strcmp(f, "monitor mode focused 2560x1440") == 0);
+		tam_str_free(f);
+	}
+	CHECK(!tp_ipc_parse_dispatch("monitor mode DP-2 1920x1080@", &act, mon,
+								 sizeof(mon), err, sizeof(err)));
+	CHECK(!tp_ipc_parse_dispatch("monitor mode DP-2 1920x", &act, mon,
+								 sizeof(mon), err, sizeof(err)));
+	CHECK(!tp_ipc_parse_dispatch("monitor mode DP-2 0x1080@60", &act, mon,
+								 sizeof(mon), err, sizeof(err)));
+	CHECK(!tp_ipc_parse_dispatch("monitor mode DP-2 1920x1080@60Hz", &act,
+								 mon, sizeof(mon), err, sizeof(err)));
+	CHECK(!tp_ipc_parse_dispatch("monitor mode DP-2", &act, mon, sizeof(mon),
+								 err, sizeof(err)));
+	CHECK(!tp_ipc_parse_dispatch("monitor mode DP-2 1920x1080 extra", &act,
+								 mon, sizeof(mon), err, sizeof(err)));
 	CHECK(!tp_ipc_parse_dispatch("send_key   ", &act, mon, sizeof(mon), err,
 								 sizeof(err)));
 	CHECK(!tp_ipc_parse_dispatch("capture   ", &act, mon, sizeof(mon), err,

@@ -3,10 +3,15 @@ WHATNOW
 What tam-pane is doing now and what comes next. Read this first; revise
 it at the end of every session (work/README-work).
 
-Updated: 2026-11-26, with W39
+Updated: 2026-11-26, with W40
 
 
 STATE
+
+  Version 0.2.14 on dev (W40) adds `dispatch monitor mode <output>
+  <W>x<H>[@<Hz>]`, which replies OK only when the mode commit went
+  through, and logs "output <name>: modeset <W>x<H>@<Hz>Hz" for every
+  modeset. Fred's MSI MP161 resume workaround uses both under tam-pane.
 
   Version 0.2.13 on dev (W39): a monitor that is removed and returns,
   as when a suspend drops and re-adds a display, comes back on the tags
@@ -91,6 +96,8 @@ NEXT
 
 WAITING FOR FRED
 
+  - After the next login on 0.2.14: a resume where the MSI workaround
+    logs "Modeset DP-2 -> 1920x1080@60 reached DRM" (W40).
   - A suspend that drops a display, on 0.2.13 (B10): the display comes
     back on its former tags and its windows where they were.
   - Whether to report GTK 4.24.1's divide by a zero refresh upstream
