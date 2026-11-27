@@ -57,3 +57,6 @@ IN THIS REPOSITORY
     PR01-hyprland-vs-tam-pane-launch.md
                                       Hyprland vs tam-pane session launch
                                       startup time and peak memory
+    PR02-tam-desktop-launch-follow-up.md
+                                      Four desktop launches on one boot,
+                                      startup stages and short-session resources

@@ -1,0 +1,30 @@
+W46 DESKTOP LAUNCH PERFORMANCE REPORT
+
+Date: 2026-11-27
+AI harness: Codex 0.172.0
+AI model: gpt-6.2-sol
+Commits: Same commit as this record.
+
+GUIDANCE
+
+  Fred: "File a performance report for tam-pane. I want updated stats
+  after the last few tam-desktop launched."
+  Fred: "Implement the plan."
+
+DONE
+
+  - Filed PR02 with two tam-pane and two Hyprland launches from one boot.
+    Checked the timings and resource figures against the journal window.
+  - Verified the launches used tam-pane 0.2.14 from the startup banners.
+    PR02 also records the versions from the two earlier PR01 banners.
+
+FAILED
+
+  - The installed benchmark rejected compare --since. Filtering
+    journal records before passing them to its parser verified the
+    fixed window.
+
+HANDOFF
+
+  - PR02 is the latest launch baseline. WHATNOW tracks the open
+    development and hardware checks.

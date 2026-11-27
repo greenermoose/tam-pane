@@ -3,10 +3,14 @@ WHATNOW
 What tam-pane is doing now and what comes next. Read this first; revise
 it at the end of every session (work/README-work).
 
-Updated: 2026-11-27, with W45
+Updated: 2026-11-27, with W46
 
 
 STATE
+
+  PR02 (W46) records four desktop launches on one boot. tam-pane 0.2.14
+  reached the desktop in a median of 1,567 ms versus 2,591 ms for
+  Hyprland. See perf/PR02-tam-desktop-launch-follow-up.md.
 
   Version 0.4.0 on dev (W45) starts Phase P5 (Visuals) with our own Mesa
   GLES2 visuals module (`src/visuals.c`, `src/visuals_math.c`, no scenefx,
