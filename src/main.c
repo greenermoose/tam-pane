@@ -9,8 +9,16 @@
 #include <stdlib.h>
 #include <string.h>
 #include <tam.h>
+#include <time.h>
 #include <unistd.h>
 #include <wlr/util/log.h>
+
+static double monotonic_ms(void) {
+	struct timespec ts;
+	if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
+		return 0.0;
+	return (double)ts.tv_sec * 1000.0 + (double)ts.tv_nsec / 1e6;
+}
 
 static void usage(FILE *out) {
 	fprintf(out, "usage: tam-pane [-v | --version] [-d] [-c config-file] [-s startup-command]\n"
@@ -68,6 +76,7 @@ int main(int argc, char *argv[]) {
 	tam_log_set_level(debug ? TAM_LOG_DEBUG : TAM_LOG_INFO);
 	wlr_log_init(debug ? WLR_DEBUG : WLR_ERROR, NULL);
 
+	double t0 = monotonic_ms();
 	struct tp_server server = {0};
 	tp_settings_defaults(&server.settings);
 
@@ -90,15 +99,23 @@ int main(int argc, char *argv[]) {
 	} else {
 		tam_log_error("cannot create Lua state (using compiled-in defaults)");
 	}
+	double t_lua = monotonic_ms();
 
 	int status = 1;
-	if (tp_server_init(&server) && tp_server_start(&server)) {
-		tam_log_info("tam-pane %s running on WAYLAND_DISPLAY=%s", TP_VERSION,
-					 server.socket);
-		if (startup)
-			tp_spawn(startup);
-		tp_server_run(&server);
-		status = 0;
+	if (tp_server_init(&server)) {
+		double t_init = monotonic_ms();
+		if (tp_server_start(&server)) {
+			double t_start = monotonic_ms();
+			tam_log_info("tam-pane %s running on WAYLAND_DISPLAY=%s", TP_VERSION,
+						 server.socket);
+			tam_log_info("tam-pane startup: lua=%.1fms init=%.1fms start=%.1fms total=%.1fms",
+						 t_lua - t0, t_init - t_lua, t_start - t_init,
+						 t_start - t0);
+			if (startup)
+				tp_spawn(startup);
+			tp_server_run(&server);
+			status = 0;
+		}
 	}
 	tp_server_finish(&server);
 	return status;

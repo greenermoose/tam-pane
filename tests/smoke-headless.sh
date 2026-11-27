@@ -91,8 +91,12 @@ else
 fi
 
 run start-stop socket
-if [ "$socket" = yes ] && [ "$status" -eq 0 ]; then report ok
-else report bad "socket: $socket, exit status: $status"; fi
+if [ "$socket" = yes ] && [ "$status" -eq 0 ] &&
+	printf '%s\n' "$log" | grep -Eq 'tam-pane startup: lua=[0-9.]+ms init=[0-9.]+ms start=[0-9.]+ms total=[0-9.]+ms'; then
+	report ok
+else
+	report bad "socket: $socket, exit status: $status (expected startup timing log)"
+fi
 
 if command -v foot >/dev/null 2>&1; then
 	run windows windows -d -s "foot sh -c 'sleep 0.15' & foot sh -c 'sleep 5'"

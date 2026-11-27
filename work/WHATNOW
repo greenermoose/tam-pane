@@ -3,10 +3,15 @@ WHATNOW
 What tam-pane is doing now and what comes next. Read this first; revise
 it at the end of every session (work/README-work).
 
-Updated: 2026-11-26, with W36
+Updated: 2026-11-26, with W37
 
 
 STATE
+
+  Version 0.2.12 on dev (W37) logs per-phase startup timings (`lua`, `init`,
+  `start`, `total` ms via `CLOCK_MONOTONIC`) at `TAM_LOG_INFO` right after
+  the Wayland and IPC sockets are up, so `tam-session-bench startup` can
+  break down internal compositor startup alongside systemd session stages.
 
   Version 0.2.11 on dev (W36) adds the opt-in bright green focus frame
   and a configured manual locker. Tamlinux selects a three-logical-pixel
