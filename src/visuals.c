@@ -12,6 +12,7 @@
 #include "tam-pane/monitor.h"
 #include "tam-pane/server.h"
 #include "tam-pane/visuals_math.h"
+#include "visuals_internal.h"
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
@@ -32,89 +33,18 @@
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_xdg_shell.h>
 
-enum {
-	TP_BLUR_MAX_LEVELS = 7, /* level 0 = full res, 1..6 = half-res pyramid */
-};
-
-struct tp_tex_prog {
-	GLuint id;
-	GLint a_pos;
-	GLint a_uv;
-	GLint u_tex;
-	GLint u_alpha;
-	GLint u_clip_enabled;
-	GLint u_clip_center;
-	GLint u_clip_half;
-	GLint u_clip_radius;
-};
-
-struct tp_rect_prog {
-	GLuint id;
-	GLint a_pos;
-	GLint u_color;
-	GLint u_ring_enabled;
-	GLint u_center;
-	GLint u_outer_half;
-	GLint u_outer_radius;
-	GLint u_inner_half;
-	GLint u_inner_radius;
-};
-
-struct tp_shadow_prog {
-	GLuint id;
-	GLint a_pos;
-	GLint u_color;
-	GLint u_center;
-	GLint u_half;
-	GLint u_radius;
-	GLint u_blur;
-};
-
-struct tp_blur_prog {
-	GLuint id;
-	GLint a_pos;
-	GLint a_uv;
-	GLint u_tex;
-	GLint u_halfpixel;
-	GLint u_offset;
-	GLint u_uv_max;
-};
-
-struct tp_visuals {
-	bool gl_ready;
-	bool gl_failed;
-	bool fallback_warned;
-	bool ext_oes_supported;
-	struct tp_tex_prog tex_2d;
-	struct tp_tex_prog tex_ext;
-	struct tp_rect_prog rect;
-	struct tp_shadow_prog shadow;
-	struct tp_blur_prog blur_down;
-	struct tp_blur_prog blur_up;
-	GLuint blur_fbo[TP_BLUR_MAX_LEVELS];
-	GLuint blur_tex[TP_BLUR_MAX_LEVELS];
-	int blur_w[TP_BLUR_MAX_LEVELS];
-	int blur_h[TP_BLUR_MAX_LEVELS];
-	int blur_levels;
-	int blur_fb_w;
-	int blur_fb_h;
-	uint64_t blur_ops;
-	uint64_t frames_visual;
-	uint64_t frames_plain;
-};
-
-struct tp_egl_saved {
-	EGLDisplay dpy;
-	EGLSurface draw;
-	EGLSurface read;
-	EGLContext ctx;
-};
-
 struct tp_clip_box {
 	bool enabled;
 	float cx, cy;
 	float hw, hh;
 	float radius;
+};
+
+struct tp_node_xform {
+	bool enabled;
+	struct tp_rect src;
+	struct tp_rect dst;
+	float alpha;
 };
 
 struct tp_frame_ctx {
@@ -126,6 +56,7 @@ struct tp_frame_ctx {
 	float scale;
 	struct tp_rect damage; /* framebuffer-space scissor box */
 	bool has_damage;
+	uint64_t now_ms;
 };
 
 /* ---- GLES2 Shaders ---- */
@@ -288,7 +219,7 @@ static const char *FRAG_BLUR_UP_SRC =
 
 /* ---- EGL context helpers ---- */
 
-static bool egl_enter(struct tp_server *s, struct tp_egl_saved *saved) {
+bool tp_visuals_egl_enter(struct tp_server *s, struct tp_egl_saved *saved) {
 	struct wlr_egl *wlr_egl = wlr_gles2_renderer_get_egl(s->renderer);
 	if (!wlr_egl)
 		return false;
@@ -307,7 +238,8 @@ static bool egl_enter(struct tp_server *s, struct tp_egl_saved *saved) {
 	return true;
 }
 
-static void egl_leave(struct tp_server *s, const struct tp_egl_saved *saved) {
+void tp_visuals_egl_leave(struct tp_server *s,
+						  const struct tp_egl_saved *saved) {
 	if (saved->dpy != EGL_NO_DISPLAY && saved->ctx != EGL_NO_CONTEXT) {
 		eglMakeCurrent(saved->dpy, saved->draw, saved->read, saved->ctx);
 		return;
@@ -472,6 +404,7 @@ static bool ensure_blur_fbos(struct tp_visuals *v, int fb_w, int fb_h,
 
 static void destroy_gl_programs(struct tp_visuals *v) {
 	destroy_blur_fbos(v);
+	tp_visuals_anim_clear_gl(v);
 	if (v->tex_2d.id)
 		glDeleteProgram(v->tex_2d.id);
 	if (v->tex_ext.id)
@@ -493,7 +426,7 @@ static void destroy_gl_programs(struct tp_visuals *v) {
 	v->gl_ready = false;
 }
 
-static bool ensure_gl_ready(struct tp_server *s, struct tp_visuals *v) {
+bool tp_visuals_ensure_gl_ready(struct tp_server *s, struct tp_visuals *v) {
 	if (v->gl_ready)
 		return true;
 	if (v->gl_failed)
@@ -909,9 +842,35 @@ static void draw_shadow(const struct tp_frame_ctx *fc, struct tp_rect win,
 	glDisableVertexAttribArray((GLuint)p->a_pos);
 }
 
+static void xform_logical_rect(const struct tp_node_xform *xf, bool is_popup,
+							   double lx, double ly, double lw, double lh,
+							   double *ox, double *oy, double *ow, double *oh) {
+	if (!xf || !xf->enabled || xf->src.w <= 0 || xf->src.h <= 0) {
+		*ox = lx;
+		*oy = ly;
+		*ow = lw;
+		*oh = lh;
+		return;
+	}
+	if (is_popup) {
+		*ox = lx + (double)(xf->dst.x - xf->src.x);
+		*oy = ly + (double)(xf->dst.y - xf->src.y);
+		*ow = lw;
+		*oh = lh;
+		return;
+	}
+	double sx = (double)xf->dst.w / (double)xf->src.w;
+	double sy = (double)xf->dst.h / (double)xf->src.h;
+	*ox = (double)xf->dst.x + (lx - (double)xf->src.x) * sx;
+	*oy = (double)xf->dst.y + (ly - (double)xf->src.y) * sy;
+	*ow = lw * sx;
+	*oh = lh * sy;
+}
+
 static void draw_scene_buffer(const struct tp_frame_ctx *fc,
 							  struct wlr_scene_buffer *sb, int lx, int ly,
 							  const struct tp_clip_box *clip,
+							  const struct tp_node_xform *xf,
 							  bool blur_backdrop) {
 	if (!sb)
 		return;
@@ -949,16 +908,25 @@ static void draw_scene_buffer(const struct tp_frame_ctx *fc,
 		return;
 	}
 
+	bool is_popup =
+		ss && ss->surface && wlr_xdg_popup_try_from_wlr_surface(ss->surface);
+	double dlx = lx, dly = ly, dlw = dw, dlh = dh;
+	xform_logical_rect(xf, is_popup, lx, ly, dw, dh, &dlx, &dly, &dlw, &dlh);
+	float alpha = sb->opacity * ((xf && xf->enabled) ? xf->alpha : 1.0f);
+	if (alpha <= 0.001f) {
+		if (owned_tex)
+			wlr_texture_destroy(tex);
+		return;
+	}
+
 	float x0, y0, x1, y1;
-	logical_rect_to_fb(fc, lx, ly, dw, dh, &x0, &y0, &x1, &y1);
+	logical_rect_to_fb(fc, dlx, dly, dlw, dlh, &x0, &y0, &x1, &y1);
 	if (!fb_rect_visible(fc, x0, y0, x1, y1)) {
 		if (owned_tex)
 			wlr_texture_destroy(tex);
 		return;
 	}
 
-	bool is_popup =
-		ss && ss->surface && wlr_xdg_popup_try_from_wlr_surface(ss->surface);
 	if (blur_backdrop && !is_popup && scene_buffer_is_transparent(sb, dw, dh)) {
 		apply_backdrop_blur(fc, x0, y0, x1, y1, clip);
 	}
@@ -1000,10 +968,9 @@ static void draw_scene_buffer(const struct tp_frame_ctx *fc,
 
 	glUseProgram(p->id);
 	glUniform1i(p->u_tex, 0);
-	glUniform1f(p->u_alpha, sb->opacity);
+	glUniform1f(p->u_alpha, alpha);
 	bool apply_clip = clip && clip->enabled && clip->radius > 0.0f;
-	if (apply_clip && ss && ss->surface &&
-		wlr_xdg_popup_try_from_wlr_surface(ss->surface))
+	if (apply_clip && is_popup)
 		apply_clip = false;
 	if (apply_clip) {
 		glUniform1f(p->u_clip_enabled, 1.0f);
@@ -1032,7 +999,8 @@ static void draw_scene_buffer(const struct tp_frame_ctx *fc,
 static void render_node_tree(const struct tp_frame_ctx *fc,
 							 struct wlr_scene_node *node, int parent_x,
 							 int parent_y, const struct tp_clip_box *clip,
-							 bool skip_rects, bool blur_backdrop) {
+							 const struct tp_node_xform *xf, bool skip_rects,
+							 bool blur_backdrop) {
 	if (!node || !node->enabled)
 		return;
 	int nx = parent_x + node->x;
@@ -1043,7 +1011,7 @@ static void render_node_tree(const struct tp_frame_ctx *fc,
 		struct wlr_scene_tree *tree = wlr_scene_tree_from_node(node);
 		struct wlr_scene_node *child;
 		wl_list_for_each(child, &tree->children, link) {
-			render_node_tree(fc, child, nx, ny, clip, skip_rects,
+			render_node_tree(fc, child, nx, ny, clip, xf, skip_rects,
 							 blur_backdrop);
 		}
 		break;
@@ -1052,16 +1020,99 @@ static void render_node_tree(const struct tp_frame_ctx *fc,
 		if (skip_rects)
 			break;
 		struct wlr_scene_rect *r = wlr_scene_rect_from_node(node);
+		double dlx = nx, dly = ny, dlw = r->width, dlh = r->height;
+		xform_logical_rect(xf, false, nx, ny, r->width, r->height, &dlx, &dly,
+						   &dlw, &dlh);
+		float a = (xf && xf->enabled) ? xf->alpha : 1.0f;
+		float col[4] = {
+			r->color[0] * a,
+			r->color[1] * a,
+			r->color[2] * a,
+			r->color[3] * a,
+		};
 		float x0, y0, x1, y1;
-		logical_rect_to_fb(fc, nx, ny, r->width, r->height, &x0, &y0, &x1, &y1);
-		draw_solid_rect(fc, x0, y0, x1, y1, r->color);
+		logical_rect_to_fb(fc, dlx, dly, dlw, dlh, &x0, &y0, &x1, &y1);
+		draw_solid_rect(fc, x0, y0, x1, y1, col);
 		break;
 	}
 	case WLR_SCENE_NODE_BUFFER: {
 		struct wlr_scene_buffer *sb = wlr_scene_buffer_from_node(node);
-		draw_scene_buffer(fc, sb, nx, ny, clip, blur_backdrop);
+		draw_scene_buffer(fc, sb, nx, ny, clip, xf, blur_backdrop);
 		break;
 	}
+	}
+}
+
+static void draw_close_ghost(const struct tp_frame_ctx *fc,
+							 const struct tp_close_ghost *g) {
+	if (!g || !g->in_use || !g->tex || g->mon != fc->m)
+		return;
+	const struct tp_settings *cfg = &fc->s->settings;
+	float p = tp_visuals_anim_progress(g->start_ms, fc->now_ms, g->duration_ms);
+	float e = tp_visuals_anim_ease(cfg->animation_curve, p);
+	float alpha = 1.0f - e;
+	if (alpha <= 0.001f)
+		return;
+	float scale = 1.0f - 0.10f * e;
+	struct tp_rect geom = tp_visuals_rect_scale_center(g->geom, scale);
+	struct tp_rect content = tp_rect_inset(geom, g->border_w);
+	if (content.w <= 0 || content.h <= 0)
+		return;
+
+	float outer_r = tp_visuals_clamp_radius(cfg->corner_radius, geom.w, geom.h);
+	float scol[4] = {
+		g->shadow_color[0] * alpha,
+		g->shadow_color[1] * alpha,
+		g->shadow_color[2] * alpha,
+		g->shadow_color[3] * alpha,
+	};
+	draw_shadow(fc, geom, outer_r, scol);
+
+	float cx0, cy0, cx1, cy1;
+	logical_rect_to_fb(fc, content.x, content.y, content.w, content.h, &cx0,
+					   &cy0, &cx1, &cy1);
+	if (fb_rect_visible(fc, cx0, cy0, cx1, cy1)) {
+		float inner_r = tp_visuals_inner_radius(outer_r, g->border_w);
+		const struct tp_tex_prog *prog = &fc->v->tex_2d;
+		GLfloat pos[8];
+		quad_ndc(fc, cx0, cy0, cx1, cy1, pos);
+		static const GLfloat uv[8] = {
+			0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f,
+		};
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, g->tex);
+		glUseProgram(prog->id);
+		glUniform1i(prog->u_tex, 0);
+		glUniform1f(prog->u_alpha, alpha);
+		if (inner_r > 0.0f) {
+			glUniform1f(prog->u_clip_enabled, 1.0f);
+			glUniform2f(prog->u_clip_center, 0.5f * (cx0 + cx1),
+						0.5f * (cy0 + cy1));
+			glUniform2f(prog->u_clip_half, 0.5f * (cx1 - cx0),
+						0.5f * (cy1 - cy0));
+			glUniform1f(prog->u_clip_radius, inner_r * fc->scale);
+		} else {
+			glUniform1f(prog->u_clip_enabled, 0.0f);
+		}
+		glVertexAttribPointer((GLuint)prog->a_pos, 2, GL_FLOAT, GL_FALSE, 0,
+							  pos);
+		glEnableVertexAttribArray((GLuint)prog->a_pos);
+		glVertexAttribPointer((GLuint)prog->a_uv, 2, GL_FLOAT, GL_FALSE, 0, uv);
+		glEnableVertexAttribArray((GLuint)prog->a_uv);
+		glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+		glDisableVertexAttribArray((GLuint)prog->a_uv);
+		glDisableVertexAttribArray((GLuint)prog->a_pos);
+		glBindTexture(GL_TEXTURE_2D, 0);
+	}
+
+	if (g->border_w > 0 && g->border_color[3] > 0.0f) {
+		float bcol[4] = {
+			g->border_color[0] * alpha,
+			g->border_color[1] * alpha,
+			g->border_color[2] * alpha,
+			g->border_color[3] * alpha,
+		};
+		draw_rounded_border(fc, geom, g->border_w, outer_r, bcol);
 	}
 }
 
@@ -1070,30 +1121,46 @@ static void render_client_tree(const struct tp_frame_ctx *fc,
 	if (!c || !c->tree || !c->tree->node.enabled)
 		return;
 	if (c->fullscreen) {
-		render_node_tree(fc, &c->tree->node, 0, 0, NULL, false, false);
+		render_node_tree(fc, &c->tree->node, 0, 0, NULL, NULL, false, false);
 		return;
 	}
 
 	const struct tp_settings *cfg = &fc->s->settings;
 	bool active = (fc->s->focused_client == c && !fc->s->locked);
+
+	struct tp_anim_transform tr = {0};
+	tp_visuals_anim_client_transform(fc->s, fc->v, c, fc->now_ms, &tr);
+	struct tp_rect geom = tr.active ? tr.geom : c->geom;
+	float alpha = tr.active ? tr.alpha : 1.0f;
+	if (alpha <= 0.001f)
+		return;
+
 	float outer_r =
-		tp_visuals_clamp_radius(cfg->corner_radius, c->geom.w, c->geom.h);
+		tp_visuals_clamp_radius(cfg->corner_radius, geom.w, geom.h);
 	int32_t border_w = c->content_geom.x - c->geom.x;
 	if (border_w < 0)
 		border_w = 0;
+	struct tp_rect content_geom =
+		tr.active ? tp_rect_inset(geom, border_w) : c->content_geom;
 
 	/* 1. Drop shadow behind the window. */
-	const float *scol = active ? cfg->shadow_color : cfg->shadow_inactive_color;
-	draw_shadow(fc, c->geom, outer_r, scol);
+	const float *base_scol =
+		active ? cfg->shadow_color : cfg->shadow_inactive_color;
+	float scol[4] = {
+		base_scol[0] * alpha,
+		base_scol[1] * alpha,
+		base_scol[2] * alpha,
+		base_scol[3] * alpha,
+	};
+	draw_shadow(fc, geom, outer_r, scol);
 
 	/* 2. Backdrop blur (only for transparent windows) + client content. */
 	struct tp_clip_box clip = {0};
 	float inner_r = tp_visuals_inner_radius(outer_r, border_w);
 	float cx0 = 0.0f, cy0 = 0.0f, cx1 = 0.0f, cy1 = 0.0f;
-	if (c->content_geom.w > 0 && c->content_geom.h > 0) {
-		logical_rect_to_fb(fc, c->content_geom.x, c->content_geom.y,
-						   c->content_geom.w, c->content_geom.h, &cx0, &cy0,
-						   &cx1, &cy1);
+	if (content_geom.w > 0 && content_geom.h > 0) {
+		logical_rect_to_fb(fc, content_geom.x, content_geom.y, content_geom.w,
+						   content_geom.h, &cx0, &cy0, &cx1, &cy1);
 		if (inner_r > 0.0f) {
 			clip.enabled = true;
 			clip.cx = 0.5f * (cx0 + cx1);
@@ -1103,24 +1170,35 @@ static void render_client_tree(const struct tp_frame_ctx *fc,
 			clip.radius = inner_r * fc->scale;
 		}
 	}
+	struct tp_node_xform xf = {
+		.enabled = tr.active,
+		.src = c->content_geom,
+		.dst = content_geom,
+		.alpha = alpha,
+	};
 	if (c->content) {
-		if (tp_visuals_blur_active(cfg) && c->content_geom.w > 0 &&
-			c->content_geom.h > 0 &&
-			fb_rect_visible(fc, cx0, cy0, cx1, cy1) &&
+		if (tp_visuals_blur_active(cfg) && content_geom.w > 0 &&
+			content_geom.h > 0 && fb_rect_visible(fc, cx0, cy0, cx1, cy1) &&
 			tree_has_transparent_buffer(&c->content->node)) {
 			apply_backdrop_blur(fc, cx0, cy0, cx1, cy1,
 								clip.enabled ? &clip : NULL);
 		}
 		render_node_tree(fc, &c->content->node, c->tree->node.x,
-						 c->tree->node.y, clip.enabled ? &clip : NULL, false,
-						 false);
+						 c->tree->node.y, clip.enabled ? &clip : NULL,
+						 tr.active ? &xf : NULL, false, false);
 	}
 
 	/* 3. Rounded (or sharp) border ring on top of content edges. */
-	const float *bcol = active ? cfg->border_color_focused
-							   : cfg->border_color_unfocused;
-	if (border_w > 0 && bcol[3] > 0.0f) {
-		draw_rounded_border(fc, c->geom, border_w, outer_r, bcol);
+	const float *base_bcol =
+		active ? cfg->border_color_focused : cfg->border_color_unfocused;
+	if (border_w > 0 && base_bcol[3] > 0.0f) {
+		float bcol[4] = {
+			base_bcol[0] * alpha,
+			base_bcol[1] * alpha,
+			base_bcol[2] * alpha,
+			base_bcol[3] * alpha,
+		};
+		draw_rounded_border(fc, geom, border_w, outer_r, bcol);
 	}
 }
 
@@ -1134,7 +1212,8 @@ static void render_layer(const struct tp_frame_ctx *fc, int layer_idx) {
 			fc->s->settings.blur_panels &&
 			(layer_idx == TP_LAYER_BOTTOM || layer_idx == TP_LAYER_TOP ||
 			 layer_idx == TP_LAYER_OVERLAY);
-		render_node_tree(fc, &layer->node, 0, 0, NULL, false, blur_panel_layer);
+		render_node_tree(fc, &layer->node, 0, 0, NULL, NULL, false,
+						 blur_panel_layer);
 		return;
 	}
 	struct wlr_scene_node *child;
@@ -1145,8 +1224,13 @@ static void render_layer(const struct tp_frame_ctx *fc, int layer_idx) {
 			render_client_tree(fc, child->data);
 		} else {
 			render_node_tree(fc, child, layer->node.x, layer->node.y, NULL,
-							 false, false);
+							 NULL, false, false);
 		}
+	}
+	for (int i = 0; i < TP_CLOSE_GHOST_MAX; i++) {
+		const struct tp_close_ghost *g = &fc->v->close_ghosts[i];
+		if (g->in_use && g->mon == fc->m && g->layer == layer_idx)
+			draw_close_ghost(fc, g);
 	}
 }
 
@@ -1158,6 +1242,7 @@ bool tp_visuals_init(struct tp_server *s) {
 	struct tp_visuals *v = calloc(1, sizeof(*v));
 	if (!v)
 		return false;
+	v->battery_override = -1;
 	s->visuals = v;
 	return true;
 }
@@ -1168,11 +1253,14 @@ void tp_visuals_reset_renderer(struct tp_server *s) {
 	struct tp_visuals *v = s->visuals;
 	if (v->gl_ready && s->renderer && wlr_renderer_is_gles2(s->renderer)) {
 		struct tp_egl_saved saved;
-		if (egl_enter(s, &saved)) {
+		if (tp_visuals_egl_enter(s, &saved)) {
 			destroy_gl_programs(v);
-			egl_leave(s, &saved);
+			tp_visuals_egl_leave(s, &saved);
 		}
 	}
+	memset(v->client_anims, 0, sizeof(v->client_anims));
+	memset(v->close_ghosts, 0, sizeof(v->close_ghosts));
+	memset(v->tag_anims, 0, sizeof(v->tag_anims));
 	v->tex_2d.id = 0;
 	v->tex_ext.id = 0;
 	v->rect.id = 0;
@@ -1211,6 +1299,16 @@ void tp_visuals_damage_all(struct tp_server *s) {
 	}
 }
 
+bool tp_visuals_needs_render(const struct tp_server *s) {
+	if (!s)
+		return false;
+	if (tp_visuals_enabled(&s->settings))
+		return true;
+	if (s->visuals && tp_visuals_anim_count(s->visuals) > 0)
+		return true;
+	return false;
+}
+
 void tp_visuals_note_plain_frame(struct tp_server *s) {
 	if (s && s->visuals)
 		s->visuals->frames_plain++;
@@ -1223,13 +1321,21 @@ void tp_visuals_get_stats(const struct tp_server *s,
 	memset(out, 0, sizeof(*out));
 	if (!s)
 		return;
-	out->active = tp_visuals_enabled(&s->settings);
 	out->gles2 = s->renderer && wlr_renderer_is_gles2(s->renderer);
 	if (s->visuals) {
+		uint64_t now_ms = tp_visuals_now_ms();
+		out->on_battery = tp_visuals_is_on_battery(s->visuals, now_ms, false);
+		out->animations_active =
+			tp_visuals_anim_allowed(&s->settings, out->on_battery);
+		out->active_animations = tp_visuals_anim_count(s->visuals);
 		out->blur_ops = s->visuals->blur_ops;
 		out->frames_visual = s->visuals->frames_visual;
 		out->frames_plain = s->visuals->frames_plain;
+	} else {
+		out->animations_active = tp_visuals_anim_allowed(&s->settings, false);
 	}
+	out->active =
+		tp_visuals_enabled(&s->settings) || out->active_animations > 0;
 }
 
 bool tp_visuals_commit_output(struct tp_server *s, struct tp_monitor *m) {
@@ -1245,9 +1351,15 @@ bool tp_visuals_commit_output(struct tp_server *s, struct tp_monitor *m) {
 		return false;
 	}
 
+	uint64_t now_ms = tp_visuals_now_ms();
+	bool anim_on_m = tp_visuals_anim_has_active_on_monitor(v, m);
+
 	/* Idle desktop: draw no frames when the output has no pending damage. */
-	if (!m->output->needs_frame)
+	if (!m->output->needs_frame && !anim_on_m)
 		return true;
+
+	if (anim_on_m && m->scene_output)
+		wlr_damage_ring_add_whole(&m->scene_output->damage_ring);
 
 	struct wlr_output_state state;
 	wlr_output_state_init(&state);
@@ -1319,7 +1431,7 @@ bool tp_visuals_commit_output(struct tp_server *s, struct tp_monitor *m) {
 
 	if (need_draw) {
 		struct tp_egl_saved saved;
-		if (!egl_enter(s, &saved)) {
+		if (!tp_visuals_egl_enter(s, &saved)) {
 			if (have_ring)
 				wlr_damage_ring_add_whole(&m->scene_output->damage_ring);
 			pixman_region32_fini(&buffer_damage);
@@ -1329,8 +1441,8 @@ bool tp_visuals_commit_output(struct tp_server *s, struct tp_monitor *m) {
 			return false;
 		}
 
-		if (!ensure_gl_ready(s, v)) {
-			egl_leave(s, &saved);
+		if (!tp_visuals_ensure_gl_ready(s, v)) {
+			tp_visuals_egl_leave(s, &saved);
 			if (have_ring)
 				wlr_damage_ring_add_whole(&m->scene_output->damage_ring);
 			pixman_region32_fini(&buffer_damage);
@@ -1345,7 +1457,7 @@ bool tp_visuals_commit_output(struct tp_server *s, struct tp_monitor *m) {
 
 		GLuint fbo = wlr_gles2_renderer_get_buffer_fbo(s->renderer, buf);
 		if (!fbo) {
-			egl_leave(s, &saved);
+			tp_visuals_egl_leave(s, &saved);
 			if (have_ring)
 				wlr_damage_ring_add_whole(&m->scene_output->damage_ring);
 			pixman_region32_fini(&buffer_damage);
@@ -1365,6 +1477,7 @@ bool tp_visuals_commit_output(struct tp_server *s, struct tp_monitor *m) {
 			.scale = scale,
 			.damage = render_damage,
 			.has_damage = have_ring,
+			.now_ms = now_ms,
 		};
 
 		restore_frame_state(&fc);
@@ -1381,7 +1494,7 @@ bool tp_visuals_commit_output(struct tp_server *s, struct tp_monitor *m) {
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		glFlush();
 
-		egl_leave(s, &saved);
+		tp_visuals_egl_leave(s, &saved);
 	}
 
 	/* Draw software cursors (if any) on top using wlroots' buffer pass. */
@@ -1407,7 +1520,10 @@ bool tp_visuals_commit_output(struct tp_server *s, struct tp_monitor *m) {
 	wlr_buffer_unlock(buf);
 	wlr_output_state_finish(&state);
 
-	if (ok)
+	if (ok) {
 		v->frames_visual++;
+		if (anim_on_m && tp_visuals_anim_prune_monitor(s, v, m, now_ms))
+			wlr_output_schedule_frame(m->output);
+	}
 	return ok;
 }

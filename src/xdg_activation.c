@@ -6,6 +6,7 @@
 #include "tam-pane/monitor.h"
 #include "tam-pane/server.h"
 #include "tam-pane/server_events.h"
+#include "tam-pane/visuals.h"
 #include "tam-pane/workspace.h"
 #include "tam-pane/xwayland.h"
 #include <tam.h>
@@ -36,6 +37,8 @@ static void on_request_activate(struct wl_listener *l, void *data) {
 		if (first > 0) {
 			tp_tags_t prev = tp_tagview_current(&c->mon->view);
 			if (tp_tagview_show(&c->mon->view, tp_tag_mask(first))) {
+				tp_visuals_notify_tag_change(
+					s, c->mon, prev, tp_tagview_current(&c->mon->view));
 				tp_arrange(c->mon);
 				tp_events_emit_tag(s, c->mon, prev,
 								   tp_tagview_current(&c->mon->view));

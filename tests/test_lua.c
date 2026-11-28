@@ -1867,6 +1867,10 @@ static void test_visuals_config_0_4_0(void) {
 	CHECK(base.blur_radius == 8);
 	CHECK(base.blur_passes == 2);
 	CHECK(base.blur_panels);
+	CHECK(!base.animations_enabled);
+	CHECK(!base.animations_on_battery);
+	CHECK(base.animation_duration_ms == 180);
+	CHECK(base.animation_curve == TP_ANIM_CURVE_EASE_OUT);
 
 	/* Valid visual settings. */
 	const char *good =
@@ -1882,6 +1886,10 @@ static void test_visuals_config_0_4_0(void) {
 		"  blur_radius = 12,\n"
 		"  blur_passes = 3,\n"
 		"  blur_panels = false,\n"
+		"  animations_enabled = true,\n"
+		"  animations_on_battery = true,\n"
+		"  animation_duration_ms = 240,\n"
+		"  animation_curve = 'ease_in_out',\n"
 		"})\n";
 	CHECK(tp_lua_exec_string(lua, good, strlen(good), "visuals_good",
 							 TP_LUA_CONFIG_MAX_INSTRUCTIONS,
@@ -1898,6 +1906,10 @@ static void test_visuals_config_0_4_0(void) {
 	CHECK(out.blur_radius == 12);
 	CHECK(out.blur_passes == 3);
 	CHECK(!out.blur_panels);
+	CHECK(out.animations_enabled);
+	CHECK(out.animations_on_battery);
+	CHECK(out.animation_duration_ms == 240);
+	CHECK(out.animation_curve == TP_ANIM_CURVE_EASE_IN_OUT);
 
 	/* Out-of-range and invalid-type rejections. */
 	const char *bad[] = {
@@ -1915,6 +1927,13 @@ static void test_visuals_config_0_4_0(void) {
 		"tp.config({ blur_passes = 0 })\n",
 		"tp.config({ blur_passes = 7 })\n",
 		"tp.config({ blur_panels = 'no' })\n",
+		"tp.config({ animations_enabled = 'yes' })\n",
+		"tp.config({ animations_on_battery = 1 })\n",
+		"tp.config({ animation_duration_ms = -1 })\n",
+		"tp.config({ animation_duration_ms = 1001 })\n",
+		"tp.config({ animation_duration_ms = 12.5 })\n",
+		"tp.config({ animation_curve = 'bounce' })\n",
+		"tp.config({ animation_curve = 42 })\n",
 	};
 	for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++) {
 		err[0] = '\0';

@@ -537,6 +537,115 @@ int main(void) {
 	get_px(&cap, 198, 20, px);
 	CHECK(px[0] > 60 && px[2] > 60);
 
+	/*
+	 * 11. Frame-clock animations (0.4.4): disable corners/shadows/blur so we
+	 * also verify plain-scene bypass when animations settle and go idle.
+	 */
+	s.settings.corner_radius = 0;
+	s.settings.shadow_enabled = false;
+	s.settings.blur_enabled = false;
+	s.settings.animations_enabled = true;
+	s.settings.animations_on_battery = false;
+	s.settings.animation_duration_ms = 120;
+	s.settings.animation_curve = TP_ANIM_CURVE_LINEAR;
+	tp_visuals_set_battery_override(&s, 0); /* AC power */
+	tp_visuals_on_config_reload(&s);
+	pump(&s, &vc, 8);
+
+	/* 11a. Open animation: triggers on open + first place, settles to 0 active. */
+	tp_visuals_get_stats(&s, &st);
+	CHECK(st.animations_active && !st.on_battery);
+	struct tp_rect orig_geom = c->geom;
+	tp_visuals_notify_client_open(&s, c);
+	tp_client_place(c, orig_geom);
+	tp_visuals_get_stats(&s, &st);
+	CHECK(st.active_animations > 0);
+	for (int k = 0; k < 25; k++) {
+		pump(&s, &vc, 2);
+		usleep(8000);
+	}
+	tp_visuals_get_stats(&s, &st);
+	CHECK(st.active_animations == 0);
+
+	/* 11b. Move animation: start a move, see active_animations > 0, settle, 0 idle frames. */
+	uint64_t vis_before_move = st.frames_visual;
+	struct tp_rect moved_geom = {orig_geom.x + 80, orig_geom.y + 40,
+								 orig_geom.w, orig_geom.h};
+	tp_client_place(c, moved_geom);
+	tp_visuals_get_stats(&s, &st);
+	CHECK(st.active_animations > 0);
+	CHECK(tp_visuals_needs_render(&s));
+	/* Pump past 120ms so animation progresses and finishes. */
+	for (int k = 0; k < 25; k++) {
+		pump(&s, &vc, 2);
+		usleep(8000);
+	}
+	tp_visuals_get_stats(&s, &st);
+	CHECK(st.frames_visual > vis_before_move);
+	CHECK(st.active_animations == 0);
+	CHECK(!tp_visuals_needs_render(&s)); /* back to plain scene path */
+
+	/* Idle after animation: 0 frames drawn. */
+	uint64_t idle_vis = st.frames_visual;
+	uint64_t idle_plain = st.frames_plain;
+	pump(&s, &vc, 10);
+	tp_visuals_get_stats(&s, &st);
+	CHECK(st.frames_visual == idle_vis);
+	CHECK(st.frames_plain == idle_plain);
+
+	/* 11b. Tag change animation: triggers, settles, and returns to 0 active. */
+	tp_visuals_notify_tag_change(&s, m, tp_tag_mask(1), tp_tag_mask(2));
+	tp_visuals_get_stats(&s, &st);
+	CHECK(st.active_animations > 0);
+	for (int k = 0; k < 25; k++) {
+		pump(&s, &vc, 2);
+		usleep(8000);
+	}
+	tp_visuals_get_stats(&s, &st);
+	CHECK(st.active_animations == 0);
+
+	/* 11c. Battery suppression: on_battery=true with animations_on_battery=false
+	 * blocks animations from starting. */
+	tp_visuals_set_battery_override(&s, 1); /* on battery */
+	tp_visuals_get_stats(&s, &st);
+	CHECK(st.on_battery && !st.animations_active);
+	tp_client_place(c, orig_geom);
+	tp_visuals_notify_tag_change(&s, m, tp_tag_mask(2), tp_tag_mask(1));
+	tp_visuals_get_stats(&s, &st);
+	CHECK(st.active_animations == 0);
+
+	/* Opting in with animations_on_battery=true re-enables animations on battery. */
+	s.settings.animations_on_battery = true;
+	tp_visuals_get_stats(&s, &st);
+	CHECK(st.on_battery && st.animations_active);
+	tp_client_place(c, moved_geom);
+	tp_visuals_get_stats(&s, &st);
+	CHECK(st.active_animations > 0);
+	for (int k = 0; k < 25; k++) {
+		pump(&s, &vc, 2);
+		usleep(8000);
+	}
+	tp_visuals_get_stats(&s, &st);
+	CHECK(st.active_animations == 0);
+
+	/* 11d. Close animation (ghost snapshot) + GPU reset while ghost is active. */
+	wl_surface_attach(vc.surface, opaque_buf, 0, 0);
+	wl_surface_damage_buffer(vc.surface, 0, 0, 200, 150);
+	wl_surface_commit(vc.surface);
+	pump(&s, &vc, 8);
+	tp_visuals_set_battery_override(&s, 0);
+	s.settings.animation_duration_ms = 200;
+	tp_visuals_notify_client_close(&s, c);
+	tp_visuals_get_stats(&s, &st);
+	CHECK(st.active_animations > 0);
+	pump(&s, &vc, 3);
+	/* Trigger renderer loss mid-close-ghost to confirm clean GL teardown. */
+	wl_signal_emit_mutable(&s.renderer->events.lost, NULL);
+	pump(&s, &vc, 10);
+	tp_visuals_get_stats(&s, &st);
+	CHECK(st.active_animations == 0);
+	CHECK(s.renderer_recoveries == 3);
+
 	wl_list_remove(&cap.commit.link);
 	free(cap.rgba);
 

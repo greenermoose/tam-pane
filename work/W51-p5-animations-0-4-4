@@ -1,0 +1,68 @@
+W51 P5 VISUALS: FRAME-CLOCK ANIMATIONS (0.4.4)
+
+Date: 2026-11-28
+AI harness: agy
+AI model: gemini-4-neon-medium
+
+GUIDANCE
+
+  Fred: "/plan Do the next work slice of tam-pane"
+  Fred reviewed the implementation plan in tam-view and approved execution.
+
+DONE
+
+  - Bumped VERSION to 0.4.4 and marked Phase P5 (Visuals) Done in
+    ROADMAP.md and plans/P5-visuals.md.
+  - Added 4 Lua tp.config animation keys (animations_enabled,
+    animations_on_battery, animation_duration_ms, animation_curve; off by
+    default, suppressed on battery unless opted in) in
+    include/tam-pane/settings.h, src/settings.c, and src/lua.c, with live
+    reload handling via tp_visuals_on_config_reload() in src/server.c.
+  - Added pure animation math and sysfs battery detection in
+    include/tam-pane/visuals_math.h and src/visuals_math.c
+    (tp_visuals_anim_configured, tp_visuals_anim_allowed, curve parsing and
+    cubic ease_out/ease_in_out/linear easing, progress clamping, rect lerp
+    and center scaling, tag slide direction, and
+    tp_visuals_detect_battery_dir).
+  - Implemented the frame-clock animation state machine and GLES2 rendering
+    inside src/visuals_anim.c, src/visuals_internal.h, and src/visuals.c
+    behind the single include/tam-pane/visuals.h boundary (no scenefx, no
+    tp_client effect flags):
+    - Window open: center scale-up (0.90 -> 1.00) and fade-in.
+    - Window move/resize: smooth geometry interpolation with mid-flight
+      retargeting; bypassed during interactive pointer drags/resizes.
+    - Window close: snapshots the GLES2 surface texture into a short-lived
+      ghost owned by tp_visuals before unmap, scaling/fading out and
+      freeing immediately on completion, monitor destroy, or GPU reset.
+    - Tag change: directional horizontal slide + fade-in for non-pinned
+      entering windows across all tag-change paths (bindings, IPC,
+      ext-workspace, foreign-toplevel, xdg-activation).
+    - Frame-clock scheduling: advances via CLOCK_MONOTONIC on
+      wlr_output->events.frame, stops scheduling once the final frame
+      commits (0 idle frames), and falls back to plain wlr_scene via
+      tp_visuals_needs_render() when idle with no persistent effects.
+    - Battery power cache: reads /sys/class/power_supply every 5 seconds
+      and on config reload; desktops without batteries report AC.
+  - Extended the read-only `visuals` IPC query in src/ipc.c and
+    arch/ipc.md with animations, animations_active, animations_on_battery,
+    on_battery, animation_duration_ms, animation_curve, and
+    active_animations; updated arch/lua-api.md and Makefile.
+  - Expanded tests/test_visuals.c (111 checks, also verified under
+    ASan+UBSan), tests/test_lua.c (740 checks), and
+    tests/test_visuals_gles2.c (73 checks covering open, move, tag change,
+    close ghost + GPU renderer-loss teardown, battery suppression/opt-in,
+    plain-scene bypass when idle, and 0 idle frames).
+  - Full `make test` suite passed (including 1,076 headless input checks
+    and 6/6 smoke tests) with zero exported lua_* symbols and zero libxcb
+    NEEDED.
+
+FAILED
+
+  - Nothing.
+
+HANDOFF
+
+  - Phase P5 (Visuals) is complete.
+  - Next: Phase P4 real-hardware acceptance checks during Fred's Tamlinux
+    0.7 Test/Run, or Phase P6 (0.5.x libtam input replacing libinput and
+    xkbcommon).

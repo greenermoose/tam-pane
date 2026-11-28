@@ -6,6 +6,11 @@
 #include "tam-pane/settings.h"
 #include "tam-pane/visuals_math.h"
 #include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 static void test_enabled_predicate(void) {
 	struct tp_settings s;
@@ -152,11 +157,129 @@ static void test_sdf_rounded_box(void) {
 	CHECK(fabsf(d_sharp) < 1e-5f);
 }
 
+static void write_text_file(const char *path, const char *text) {
+	FILE *f = fopen(path, "w");
+	CHECK(f != NULL);
+	fputs(text, f);
+	fclose(f);
+}
+
+static void test_animation_math_and_battery(void) {
+	struct tp_settings s;
+	tp_settings_defaults(&s);
+	CHECK(!tp_visuals_anim_configured(&s));
+	CHECK(!tp_visuals_anim_allowed(&s, false));
+	CHECK(!tp_visuals_anim_allowed(&s, true));
+
+	s.animations_enabled = true;
+	CHECK(tp_visuals_anim_configured(&s));
+	CHECK(tp_visuals_anim_allowed(&s, false));
+	CHECK(!tp_visuals_anim_allowed(&s, true)); /* off by default on battery */
+
+	s.animations_on_battery = true;
+	CHECK(tp_visuals_anim_allowed(&s, true));
+
+	s.animation_duration_ms = 0;
+	CHECK(!tp_visuals_anim_configured(&s));
+	CHECK(!tp_visuals_anim_allowed(&s, false));
+
+	/* Curve parsing and names */
+	int curve = -1;
+	CHECK(tp_visuals_parse_curve("ease_out", &curve) &&
+		  curve == TP_ANIM_CURVE_EASE_OUT);
+	CHECK(tp_visuals_parse_curve("ease_in_out", &curve) &&
+		  curve == TP_ANIM_CURVE_EASE_IN_OUT);
+	CHECK(tp_visuals_parse_curve("linear", &curve) &&
+		  curve == TP_ANIM_CURVE_LINEAR);
+	CHECK(!tp_visuals_parse_curve("bounce", &curve));
+	CHECK(strcmp(tp_visuals_curve_name(TP_ANIM_CURVE_EASE_OUT), "ease_out") == 0);
+	CHECK(strcmp(tp_visuals_curve_name(TP_ANIM_CURVE_EASE_IN_OUT), "ease_in_out") == 0);
+	CHECK(strcmp(tp_visuals_curve_name(TP_ANIM_CURVE_LINEAR), "linear") == 0);
+
+	/* Easing curves */
+	CHECK(tp_visuals_anim_ease(TP_ANIM_CURVE_EASE_OUT, -0.5f) == 0.0f);
+	CHECK(tp_visuals_anim_ease(TP_ANIM_CURVE_EASE_OUT, 0.0f) == 0.0f);
+	CHECK(tp_visuals_anim_ease(TP_ANIM_CURVE_EASE_OUT, 1.0f) == 1.0f);
+	CHECK(tp_visuals_anim_ease(TP_ANIM_CURVE_EASE_OUT, 1.5f) == 1.0f);
+	CHECK(fabsf(tp_visuals_anim_ease(TP_ANIM_CURVE_EASE_OUT, 0.5f) - 0.875f) < 1e-5f);
+	CHECK(fabsf(tp_visuals_anim_ease(TP_ANIM_CURVE_EASE_IN_OUT, 0.5f) - 0.5f) < 1e-5f);
+	CHECK(fabsf(tp_visuals_anim_ease(TP_ANIM_CURVE_EASE_IN_OUT, 0.25f) - 0.0625f) < 1e-5f);
+	CHECK(fabsf(tp_visuals_anim_ease(TP_ANIM_CURVE_LINEAR, 0.35f) - 0.35f) < 1e-5f);
+
+	/* Progress clamping */
+	CHECK(tp_visuals_anim_progress(100, 50, 200) == 0.0f);
+	CHECK(tp_visuals_anim_progress(100, 100, 200) == 0.0f);
+	CHECK(fabsf(tp_visuals_anim_progress(100, 200, 200) - 0.5f) < 1e-5f);
+	CHECK(tp_visuals_anim_progress(100, 300, 200) == 1.0f);
+	CHECK(tp_visuals_anim_progress(100, 999, 200) == 1.0f);
+	CHECK(tp_visuals_anim_progress(100, 100, 0) == 1.0f);
+
+	/* Rect interpolation and center scale */
+	struct tp_rect a = {0, 10, 100, 200};
+	struct tp_rect b = {100, 50, 200, 100};
+	struct tp_rect mid = tp_visuals_rect_lerp(a, b, 0.5f);
+	CHECK(mid.x == 50 && mid.y == 30 && mid.w == 150 && mid.h == 150);
+	struct tp_rect sc = tp_visuals_rect_scale_center((struct tp_rect){100, 100, 200, 100}, 0.9f);
+	CHECK(sc.w == 180 && sc.h == 90 && sc.x == 110 && sc.y == 105);
+
+	/* Tag slide direction */
+	CHECK(tp_visuals_tag_slide_dir(tp_tag_mask(1), tp_tag_mask(2)) == 1);
+	CHECK(tp_visuals_tag_slide_dir(tp_tag_mask(3), tp_tag_mask(1)) == -1);
+	CHECK(tp_visuals_tag_slide_dir(tp_tag_mask(2), tp_tag_mask(2) | tp_tag_mask(4)) == 0);
+
+	/* Battery sysfs detection using mock directories */
+	CHECK(!tp_visuals_detect_battery_dir(NULL));
+	CHECK(!tp_visuals_detect_battery_dir("/nonexistent/tam-pane-power-dir"));
+
+	char tmpl[] = "/tmp/tam-pane-batt-XXXXXX";
+	char *root = mkdtemp(tmpl);
+	CHECK(root != NULL);
+
+	/* Empty power_supply dir (desktop): not on battery. */
+	CHECK(!tp_visuals_detect_battery_dir(root));
+
+	char ac_dir[256], bat_dir[256], p1[300], p2[300], p3[300], p4[300];
+	snprintf(ac_dir, sizeof(ac_dir), "%s/AC", root);
+	snprintf(bat_dir, sizeof(bat_dir), "%s/BAT0", root);
+	CHECK(mkdir(ac_dir, 0700) == 0);
+	CHECK(mkdir(bat_dir, 0700) == 0);
+	snprintf(p1, sizeof(p1), "%s/type", ac_dir);
+	snprintf(p2, sizeof(p2), "%s/online", ac_dir);
+	snprintf(p3, sizeof(p3), "%s/type", bat_dir);
+	snprintf(p4, sizeof(p4), "%s/status", bat_dir);
+
+	/* AC online + Battery discharging -> AC wins (not on battery). */
+	write_text_file(p1, "Mains\n");
+	write_text_file(p2, "1\n");
+	write_text_file(p3, "Battery\n");
+	write_text_file(p4, "Discharging\n");
+	CHECK(!tp_visuals_detect_battery_dir(root));
+
+	/* AC offline + Battery discharging -> on battery. */
+	write_text_file(p2, "0\n");
+	CHECK(tp_visuals_detect_battery_dir(root));
+
+	/* AC offline + Battery charging/full -> not on battery. */
+	write_text_file(p4, "Charging\n");
+	CHECK(!tp_visuals_detect_battery_dir(root));
+	write_text_file(p4, "Full\n");
+	CHECK(!tp_visuals_detect_battery_dir(root));
+
+	unlink(p1);
+	unlink(p2);
+	unlink(p3);
+	unlink(p4);
+	rmdir(ac_dir);
+	rmdir(bat_dir);
+	rmdir(root);
+}
+
 int main(void) {
 	test_enabled_predicate();
 	test_blur_and_damage_math();
 	test_radius_clamping();
 	test_shadow_box();
 	test_sdf_rounded_box();
+	test_animation_math_and_battery();
 	CHECK_DONE("test_visuals");
 }

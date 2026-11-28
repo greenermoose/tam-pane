@@ -1,6 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "tam-pane/visuals_math.h"
+#include <ctype.h>
+#include <dirent.h>
 #include <math.h>
+#include <stdio.h>
+#include <string.h>
 
 bool tp_visuals_blur_active(const struct tp_settings *s) {
 	return s && s->blur_enabled && s->blur_radius > 0 && s->blur_passes > 0;
@@ -134,4 +138,199 @@ float tp_visuals_sdf_rounded_box(float px, float py, float half_w, float half_h,
 	float maxq = qx > qy ? qx : qy;
 	float inside = maxq < 0.0f ? maxq : 0.0f;
 	return outside + inside - r;
+}
+
+bool tp_visuals_anim_configured(const struct tp_settings *s) {
+	return s && s->animations_enabled && s->animation_duration_ms > 0;
+}
+
+bool tp_visuals_anim_allowed(const struct tp_settings *s, bool on_battery) {
+	if (!tp_visuals_anim_configured(s))
+		return false;
+	if (on_battery && !s->animations_on_battery)
+		return false;
+	return true;
+}
+
+bool tp_visuals_parse_curve(const char *name, int *out) {
+	if (!name || !out)
+		return false;
+	if (strcmp(name, "ease_out") == 0) {
+		*out = TP_ANIM_CURVE_EASE_OUT;
+		return true;
+	}
+	if (strcmp(name, "ease_in_out") == 0) {
+		*out = TP_ANIM_CURVE_EASE_IN_OUT;
+		return true;
+	}
+	if (strcmp(name, "linear") == 0) {
+		*out = TP_ANIM_CURVE_LINEAR;
+		return true;
+	}
+	return false;
+}
+
+const char *tp_visuals_curve_name(int curve) {
+	switch (curve) {
+	case TP_ANIM_CURVE_EASE_IN_OUT:
+		return "ease_in_out";
+	case TP_ANIM_CURVE_LINEAR:
+		return "linear";
+	case TP_ANIM_CURVE_EASE_OUT:
+	default:
+		return "ease_out";
+	}
+}
+
+float tp_visuals_anim_ease(int curve, float t) {
+	if (t <= 0.0f)
+		return 0.0f;
+	if (t >= 1.0f)
+		return 1.0f;
+	switch (curve) {
+	case TP_ANIM_CURVE_LINEAR:
+		return t;
+	case TP_ANIM_CURVE_EASE_IN_OUT:
+		if (t < 0.5f)
+			return 4.0f * t * t * t;
+		{
+			float u = -2.0f * t + 2.0f;
+			return 1.0f - (u * u * u) * 0.5f;
+		}
+	case TP_ANIM_CURVE_EASE_OUT:
+	default: {
+		float u = 1.0f - t;
+		return 1.0f - u * u * u;
+	}
+	}
+}
+
+float tp_visuals_anim_progress(uint64_t start_ms, uint64_t now_ms,
+							   int32_t duration_ms) {
+	if (duration_ms <= 0)
+		return 1.0f;
+	if (now_ms <= start_ms)
+		return 0.0f;
+	uint64_t elapsed = now_ms - start_ms;
+	if (elapsed >= (uint64_t)duration_ms)
+		return 1.0f;
+	return (float)elapsed / (float)duration_ms;
+}
+
+struct tp_rect tp_visuals_rect_lerp(struct tp_rect from, struct tp_rect to,
+									float t) {
+	if (t <= 0.0f)
+		return from;
+	if (t >= 1.0f)
+		return to;
+	struct tp_rect r;
+	r.x = (int32_t)lroundf((float)from.x + (float)(to.x - from.x) * t);
+	r.y = (int32_t)lroundf((float)from.y + (float)(to.y - from.y) * t);
+	r.w = (int32_t)lroundf((float)from.w + (float)(to.w - from.w) * t);
+	r.h = (int32_t)lroundf((float)from.h + (float)(to.h - from.h) * t);
+	if (r.w < 1 && (from.w > 0 || to.w > 0))
+		r.w = 1;
+	if (r.h < 1 && (from.h > 0 || to.h > 0))
+		r.h = 1;
+	return r;
+}
+
+struct tp_rect tp_visuals_rect_scale_center(struct tp_rect box, float scale) {
+	if (box.w <= 0 || box.h <= 0)
+		return box;
+	if (scale < 0.01f)
+		scale = 0.01f;
+	int32_t nw = (int32_t)lroundf((float)box.w * scale);
+	int32_t nh = (int32_t)lroundf((float)box.h * scale);
+	if (nw < 1)
+		nw = 1;
+	if (nh < 1)
+		nh = 1;
+	int32_t nx = box.x + (box.w - nw) / 2;
+	int32_t ny = box.y + (box.h - nh) / 2;
+	return (struct tp_rect){nx, ny, nw, nh};
+}
+
+int tp_visuals_tag_slide_dir(tp_tags_t prev_tags, tp_tags_t new_tags) {
+	unsigned int prev_first = tp_tags_first(prev_tags);
+	unsigned int new_first = tp_tags_first(new_tags);
+	if (prev_first == 0 || new_first == 0 || prev_first == new_first)
+		return 0;
+	return new_first > prev_first ? 1 : -1;
+}
+
+static bool read_sysfs_trimmed(const char *path, char *buf, size_t size) {
+	FILE *f = fopen(path, "r");
+	if (!f)
+		return false;
+	if (!fgets(buf, (int)size, f)) {
+		fclose(f);
+		return false;
+	}
+	fclose(f);
+	size_t len = strlen(buf);
+	while (len > 0 && isspace((unsigned char)buf[len - 1]))
+		buf[--len] = '\0';
+	return len > 0;
+}
+
+bool tp_visuals_detect_battery_dir(const char *sysfs_dir) {
+	if (!sysfs_dir || !*sysfs_dir)
+		return false;
+	DIR *dir = opendir(sysfs_dir);
+	if (!dir)
+		return false;
+
+	bool any_ac_online = false;
+	bool any_battery = false;
+	bool any_discharging = false;
+	bool any_charging_or_full = false;
+
+	struct dirent *de;
+	while ((de = readdir(dir)) != NULL) {
+		if (de->d_name[0] == '.')
+			continue;
+		char path[512];
+		char type[64];
+		int n = snprintf(path, sizeof(path), "%s/%s/type", sysfs_dir,
+						 de->d_name);
+		if (n < 0 || (size_t)n >= sizeof(path))
+			continue;
+		if (!read_sysfs_trimmed(path, type, sizeof(type)))
+			continue;
+
+		if (strcmp(type, "Mains") == 0 || strcmp(type, "USB") == 0) {
+			char val[32];
+			n = snprintf(path, sizeof(path), "%s/%s/online", sysfs_dir,
+						 de->d_name);
+			if (n > 0 && (size_t)n < sizeof(path) &&
+				read_sysfs_trimmed(path, val, sizeof(val)) &&
+				strcmp(val, "1") == 0) {
+				any_ac_online = true;
+			}
+		} else if (strcmp(type, "Battery") == 0) {
+			any_battery = true;
+			char status[64];
+			n = snprintf(path, sizeof(path), "%s/%s/status", sysfs_dir,
+						 de->d_name);
+			if (n > 0 && (size_t)n < sizeof(path) &&
+				read_sysfs_trimmed(path, status, sizeof(status))) {
+				if (strcmp(status, "Discharging") == 0)
+					any_discharging = true;
+				else if (strcmp(status, "Charging") == 0 ||
+						 strcmp(status, "Full") == 0 ||
+						 strcmp(status, "Not charging") == 0)
+					any_charging_or_full = true;
+			}
+		}
+	}
+	closedir(dir);
+
+	if (any_ac_online || !any_battery)
+		return false;
+	if (any_discharging)
+		return true;
+	if (any_charging_or_full)
+		return false;
+	return true;
 }

@@ -3,10 +3,32 @@ WHATNOW
 What tam-pane is doing now and what comes next. Read this first; revise
 it at the end of every session (work/README-work).
 
-Updated: 2026-11-27, with W50
+Updated: 2026-11-28, with W51
 
 
 STATE
+
+  Version 0.4.4 on dev (W51) completes Phase P5 (Visuals) with frame-clock
+  animations for window open, close, move, and tag change inside
+  `src/visuals_anim.c`, `src/visuals.c`, and `src/visuals_math.c` (no
+  scenefx, no `tp_client` effect flags). Open fades and scales windows from
+  center (`0.90 -> 1.00`), move smoothly interpolates geometry (retargeting
+  mid-flight and bypassed during interactive pointer grabs), close snapshots
+  the GLES2 surface into a short-lived ghost texture (`1.00 -> 0.90` +
+  fade-out) freed on completion or GPU renderer loss, and tag change slides
+  and fades non-pinned entering windows in the tag direction. Adds 4
+  `tp.config` keys (`animations_enabled`, `animations_on_battery`,
+  `animation_duration_ms`, `animation_curve`; all off by default, and
+  automatically suppressed on battery via cached `/sys/class/power_supply`
+  detection unless `animations_on_battery = true`). Idle desktops draw 0
+  frames and fall back to the plain `wlr_scene` path when no persistent
+  visual effects or active animations are running. Extends the `visuals`
+  IPC query with animation and battery fields. All unit suites
+  (`test_visuals` 111 including ASan+UBSan, `test_lua` 740, `test_ipc` 215,
+  `test_gamma` 1235, `test_dwindle` 151, `test_layouts` 102, `test_tags`
+  28), smoke tests (6/6), headless input tests (`test_input_headless`
+  1076), and headless Mesa GLES2 tests (`test_visuals_gles2` 73) pass
+  cleanly with zero exported `lua_*` symbols and zero `libxcb` NEEDED.
 
   Version 0.4.3 on dev (W50) adds Dual-Kawase backdrop blur behind
   transparent windows and layer-shell panels (`BOTTOM`/`TOP`/`OVERLAY`)
@@ -177,11 +199,11 @@ STATE
 
 NEXT
 
-  1. Phase P5 (plans/P5-visuals.md): 0.4.4 frame-clock animations for
-     open, close, move, and tag change (off by default on battery).
-  2. Phase P4 (plans/P4-dogfood-tamlinux-0.7.md): complete physical-hardware
+  1. Phase P4 (plans/P4-dogfood-tamlinux-0.7.md): complete physical-hardware
      acceptance checks during Fred's Tamlinux 0.7 Test/Run, and record any
      daily-use issues in bugs/.
+  2. Phase P6 (plans/P6-own-the-stack.md): 0.5.x `libtam` input (evdev and
+     keymaps) replacing libinput and xkbcommon.
 
 
 WAITING FOR FRED

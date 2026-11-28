@@ -391,8 +391,12 @@ bool tp_server_reload(struct tp_server *s, char *err_buf, size_t err_buf_size) {
 		prev.blur_enabled != s->settings.blur_enabled ||
 		prev.blur_radius != s->settings.blur_radius ||
 		prev.blur_passes != s->settings.blur_passes ||
-		prev.blur_panels != s->settings.blur_panels) {
-		tp_visuals_damage_all(s);
+		prev.blur_panels != s->settings.blur_panels ||
+		prev.animations_enabled != s->settings.animations_enabled ||
+		prev.animations_on_battery != s->settings.animations_on_battery ||
+		prev.animation_duration_ms != s->settings.animation_duration_ms ||
+		prev.animation_curve != s->settings.animation_curve) {
+		tp_visuals_on_config_reload(s);
 	}
 	tp_events_emit_config_reload(s);
 

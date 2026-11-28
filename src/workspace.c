@@ -6,6 +6,7 @@
 #include "tam-pane/monitor.h"
 #include "tam-pane/server.h"
 #include "tam-pane/server_events.h"
+#include "tam-pane/visuals.h"
 #include "tam-pane/tags.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -55,6 +56,8 @@ static void on_commit(struct wl_listener *l, void *data) {
 								: tp_tagview_toggle(&m->view, tp_tag_mask(e->tag));
 		if (changed) {
 			tp_pointer_cancel_grab(s, NULL);
+			tp_visuals_notify_tag_change(s, m, prev,
+										 tp_tagview_current(&m->view));
 			tp_arrange(m);
 			tp_events_emit_tag(s, m, prev, tp_tagview_current(&m->view));
 			tp_workspace_sync_monitor(m);

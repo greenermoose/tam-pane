@@ -80,6 +80,10 @@ or out-of-range values raise a Lua error.
 | `blur_radius` | integer | `0..32` logical pixels for backdrop blur strength; `0` disables blur (0.4.3) | `8` |
 | `blur_passes` | integer | `1..6` Dual-Kawase downsample/upsample iterations (0.4.3) | `2` |
 | `blur_panels` | boolean | Also blur behind transparent layer-shell panels (`BOTTOM`/`TOP`/`OVERLAY`) when `blur_enabled` is true (0.4.3) | `true` |
+| `animations_enabled` | boolean | Enable frame-clock animations for window open, close, move, and tag change (0.4.4) | `false` |
+| `animations_on_battery` | boolean | Keep animations enabled while running on battery power (0.4.4) | `false` |
+| `animation_duration_ms` | integer | `0..1000` milliseconds for animation transitions; `0` disables animations (0.4.4) | `180` |
+| `animation_curve` | string | `"ease_out"`, `"ease_in_out"`, or `"linear"` easing curve (0.4.4) | `"ease_out"` |
 | `focus_follows_mouse` | boolean | Give the window under the moving pointer keyboard focus. | `false` |
 | `locker` | string | Absolute executable path for `tam-pane msg lock`. An empty string disables the command. | `""` |
 | `split_ratio` | number | `0.05..0.95` first child's share for a new split | `0.5` |

@@ -22,6 +22,7 @@
 #include "tam-pane/server.h"
 #include "tam-pane/server_events.h"
 #include "tam-pane/spawn.h"
+#include "tam-pane/visuals.h"
 #include "tam-pane/workspace.h"
 #include <ctype.h>
 #include <stdio.h>
@@ -76,6 +77,9 @@ static void focus_app_by_name(struct tp_server *s, const char *name) {
 			unsigned int tag = tp_tags_first(match->tags);
 			if (tag && tp_tagview_show(&match->mon->view, tp_tag_mask(tag))) {
 				tp_pointer_cancel_grab(s, NULL);
+				tp_visuals_notify_tag_change(
+					s, match->mon, prev,
+					tp_tagview_current(&match->mon->view));
 				tp_arrange(match->mon);
 				tp_events_emit_tag(s, match->mon, prev,
 								   tp_tagview_current(&match->mon->view));
@@ -88,6 +92,10 @@ static void focus_app_by_name(struct tp_server *s, const char *name) {
 
 static void view_changed(struct tp_server *s, tp_tags_t prev_tags) {
 	tp_pointer_cancel_grab(s, NULL);
+	if (s->selmon) {
+		tp_visuals_notify_tag_change(s, s->selmon, prev_tags,
+									 tp_tagview_current(&s->selmon->view));
+	}
 	tp_arrange(s->selmon);
 	if (s->selmon) {
 		tp_events_emit_tag(s, s->selmon, prev_tags,

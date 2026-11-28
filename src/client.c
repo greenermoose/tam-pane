@@ -11,6 +11,7 @@
 #include "tam-pane/monitor.h"
 #include "tam-pane/server.h"
 #include "tam-pane/server_events.h"
+#include "tam-pane/visuals.h"
 #include "tam-pane/xwayland.h"
 #include <stdlib.h>
 #include <tam.h>
@@ -255,6 +256,7 @@ void tp_client_apply_map(struct tp_client *c, struct tp_rect initial_geom,
 		wl_list_insert(s->focus_stack.prev, &c->flink);
 	if (c->mon)
 		tp_arrange(c->mon);
+	tp_visuals_notify_client_open(s, c);
 	tp_foreign_toplevel_map(c);
 	tp_events_emit_window(s, TP_EVENT_WINDOW_OPEN, c, false);
 	if (focus_now)
@@ -270,6 +272,7 @@ void tp_client_apply_unmap(struct tp_client *c) {
 	struct tp_server *s = c->server;
 	bool had_focus = tp_focused(s) == c;
 
+	tp_visuals_notify_client_close(s, c);
 	c->mapped = false;
 	wlr_scene_node_set_enabled(&c->tree->node, false);
 	c->fullscreen = false;
@@ -552,6 +555,7 @@ bool tp_client_visible(const struct tp_client *c) {
 }
 
 void tp_client_place(struct tp_client *c, struct tp_rect box) {
+	struct tp_rect old_geom = c->geom;
 	c->geom = box;
 	int32_t border = client_border_width(c);
 	struct tp_rect content = tp_rect_inset(box, border);
@@ -563,6 +567,8 @@ void tp_client_place(struct tp_client *c, struct tp_rect box) {
 		wlr_scene_node_set_position(&c->content->node, border, border);
 		update_border(c, c->server->focused_client == c && !c->server->locked);
 	}
+	if (c->mapped && tp_client_visible(c))
+		tp_visuals_notify_client_move(c->server, c, old_geom, box);
 	if (c->kind == TP_CLIENT_XWAYLAND) {
 		tp_xwayland_place(c, content);
 	} else if (resized && c->toplevel) {

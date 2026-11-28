@@ -86,7 +86,7 @@ WM_SRCS = src/main.c src/server.c src/security.c src/events.c src/ipc.c \
 	src/chord_overlay.c src/layout/arrange.c src/foreign_toplevel.c \
 	src/workspace.c src/session_lock.c src/idle.c src/shortcuts_inhibit.c \
 	src/output_power.c \
-	src/capture.c src/gamma.c src/visuals.c src/output_mgmt.c src/text_input.c \
+	src/capture.c src/gamma.c src/visuals.c src/visuals_anim.c src/output_mgmt.c src/text_input.c \
 	src/xdg_activation.c src/decoration.c src/input/input.c \
 	src/input/keyboard.c src/input/pointer.c
 ifeq ($(XWAYLAND),1)

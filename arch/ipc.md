@@ -85,9 +85,9 @@ replaced with a space. Every record is guaranteed to occupy one line.
 - `freeze` (0.2.16)
   - Whether native screen freeze is active:
     `freeze\tactive=<0|1>`
-- `visuals` (0.4.0, extended in 0.4.3)
-  - GLES2 visuals status, blur parameters, and rendered frame counters:
-    `visuals\tactive=<0|1>\tgles2=<0|1>\tcorner_radius=<N>\tshadow=<0|1>\tshadow_radius=<N>\tblur=<0|1>\tblur_radius=<N>\tblur_passes=<N>\tblur_panels=<0|1>\tblur_ops=<N>\tframes_visual=<N>\tframes_plain=<N>`
+- `visuals` (0.4.0, extended in 0.4.3 and 0.4.4)
+  - GLES2 visuals status, blur parameters, animation state, and rendered frame counters:
+    `visuals\tactive=<0|1>\tgles2=<0|1>\tcorner_radius=<N>\tshadow=<0|1>\tshadow_radius=<N>\tblur=<0|1>\tblur_radius=<N>\tblur_passes=<N>\tblur_panels=<0|1>\tblur_ops=<N>\tanimations=<0|1>\tanimations_active=<0|1>\tanimations_on_battery=<0|1>\ton_battery=<0|1>\tanimation_duration_ms=<N>\tanimation_curve=<ease_out|ease_in_out|linear>\tactive_animations=<N>\tframes_visual=<N>\tframes_plain=<N>`
 - `pixel [x y]` (0.2.16)
   - Samples the rendered RGB pixel at layout coordinates `(x, y)` (defaulting to
     the current pointer coordinates). Refused with `ERR session is locked` while

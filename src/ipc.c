@@ -14,6 +14,7 @@
 #include "tam-pane/focus.h"
 #include "tam-pane/gamma.h"
 #include "tam-pane/visuals.h"
+#include "tam-pane/visuals_math.h"
 #include "tam-pane/input.h"
 #include "tam-pane/layout/arrange.h"
 #include "tam-pane/lua.h"
@@ -505,12 +506,20 @@ static tam_str_t build_visuals(struct tp_server *s) {
 		out,
 		"visuals\tactive=%d\tgles2=%d\tcorner_radius=%d\tshadow=%d\t"
 		"shadow_radius=%d\tblur=%d\tblur_radius=%d\tblur_passes=%d\t"
-		"blur_panels=%d\tblur_ops=%llu\tframes_visual=%llu\tframes_plain=%llu\n",
+		"blur_panels=%d\tblur_ops=%llu\tanimations=%d\tanimations_active=%d\t"
+		"animations_on_battery=%d\ton_battery=%d\tanimation_duration_ms=%d\t"
+		"animation_curve=%s\tactive_animations=%u\tframes_visual=%llu\t"
+		"frames_plain=%llu\n",
 		st.active ? 1 : 0, st.gles2 ? 1 : 0, s->settings.corner_radius,
 		s->settings.shadow_enabled ? 1 : 0, s->settings.shadow_radius,
 		s->settings.blur_enabled ? 1 : 0, s->settings.blur_radius,
 		s->settings.blur_passes, s->settings.blur_panels ? 1 : 0,
-		(unsigned long long)st.blur_ops, (unsigned long long)st.frames_visual,
+		(unsigned long long)st.blur_ops,
+		s->settings.animations_enabled ? 1 : 0, st.animations_active ? 1 : 0,
+		s->settings.animations_on_battery ? 1 : 0, st.on_battery ? 1 : 0,
+		s->settings.animation_duration_ms,
+		tp_visuals_curve_name(s->settings.animation_curve),
+		(unsigned)st.active_animations, (unsigned long long)st.frames_visual,
 		(unsigned long long)st.frames_plain);
 	return tam_str_cat(out, "END\n");
 }
@@ -755,6 +764,8 @@ static bool handle_line(struct tp_ipc_client *c, char *line) {
 					: tp_tagview_toggle(&m->view, tp_tag_mask(act.tag));
 			if (changed) {
 				tp_pointer_cancel_grab(s, NULL);
+				tp_visuals_notify_tag_change(s, m, prev,
+											 tp_tagview_current(&m->view));
 				tp_arrange(m);
 				tp_events_emit_tag(s, m, prev, tp_tagview_current(&m->view));
 				tp_workspace_sync_monitor(m);

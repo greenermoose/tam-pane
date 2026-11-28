@@ -19,6 +19,12 @@ enum {
 	TP_SETTINGS_XKB_OPTS_MAX = 256,
 };
 
+enum tp_anim_curve {
+	TP_ANIM_CURVE_EASE_OUT = 0,
+	TP_ANIM_CURVE_EASE_IN_OUT = 1,
+	TP_ANIM_CURVE_LINEAR = 2,
+};
+
 struct tp_settings {
 	int32_t gap_inner;	 /* pixels between tiled windows */
 	int32_t gap_outer;	 /* pixels between windows and the monitor edge */
@@ -36,6 +42,10 @@ struct tp_settings {
 	int32_t blur_radius;             /* 0..32 logical px */
 	int32_t blur_passes;             /* 1..6 Dual-Kawase iterations */
 	bool blur_panels;                /* true = blur transparent layer-shell panels */
+	bool animations_enabled;         /* false = off (plain scene) */
+	bool animations_on_battery;      /* false = suppressed on battery power */
+	int32_t animation_duration_ms;   /* 0..1000 ms; 0 = disabled */
+	int animation_curve;             /* enum tp_anim_curve */
 	bool focus_follows_mouse;
 	char locker[TP_SETTINGS_TERMINAL_MAX];
 	float split_ratio;	 /* first child's share for a new split */

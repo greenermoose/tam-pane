@@ -43,7 +43,7 @@ static void on_frame(struct wl_listener *l, void *data) {
 	struct tp_server *s = m->server;
 	struct timespec now;
 	bool committed = false;
-	if (s && tp_visuals_enabled(&s->settings))
+	if (s && tp_visuals_needs_render(s))
 		committed = tp_visuals_commit_output(s, m);
 	if (!committed) {
 		if (s && s->gamma_transform) {
@@ -403,6 +403,7 @@ static void on_destroy(struct wl_listener *l, void *data) {
 		tp_pointer_cancel_grab(s, NULL);
 	if (s->frozen)
 		tp_capture_unfreeze(s);
+	tp_visuals_notify_monitor_destroy(s, m);
 	tp_workspace_monitor_finish(m);
 	tp_layers_monitor_destroy(m);
 

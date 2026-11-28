@@ -2,6 +2,7 @@
 #include "lua_internal.h"
 #include "tam-pane/layout/layout.h"
 #include "tam-pane/spawn.h"
+#include "tam-pane/visuals_math.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <lualib.h>
@@ -407,6 +408,21 @@ static int l_tp_config(lua_State *L) {
 			s->blur_passes = check_int_range(L, -1, key, 1, 6);
 		} else if (strcmp(key, "blur_panels") == 0) {
 			s->blur_panels = check_bool(L, -1, key);
+		} else if (strcmp(key, "animations_enabled") == 0) {
+			s->animations_enabled = check_bool(L, -1, key);
+		} else if (strcmp(key, "animations_on_battery") == 0) {
+			s->animations_on_battery = check_bool(L, -1, key);
+		} else if (strcmp(key, "animation_duration_ms") == 0) {
+			s->animation_duration_ms = check_int_range(L, -1, key, 0, 1000);
+		} else if (strcmp(key, "animation_curve") == 0) {
+			if (lua_type(L, -1) != LUA_TSTRING)
+				return luaL_error(L, "tp.config.animation_curve: expected string");
+			int curve = 0;
+			if (!tp_visuals_parse_curve(lua_tostring(L, -1), &curve))
+				return luaL_error(
+					L, "tp.config.animation_curve: expected 'ease_out', "
+					   "'ease_in_out', or 'linear'");
+			s->animation_curve = curve;
 		} else if (strcmp(key, "locker") == 0) {
 			check_string_buf(L, -1, key, true, s->locker, sizeof(s->locker));
 			if (s->locker[0] && s->locker[0] != '/')
