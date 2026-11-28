@@ -11,7 +11,7 @@ STATE
   Version 0.4.5 on dev (W52): releasing a Meta-dragged tiled window over
   another tiled window now splits that window's tile, by the same split
   rules as a new window (new `tp_layout_drop`, dwindle only). Before, a
-  tiled drag on one monitor did nothing on release. Live check pending.
+  tiled drag on one monitor did nothing on release. Fred accepted it live.
 
   Version 0.4.4 on dev (W51) completes Phase P5 (Visuals) with frame-clock
   animations for window open, close, move, and tag change inside

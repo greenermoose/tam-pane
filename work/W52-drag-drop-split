@@ -58,5 +58,5 @@ HANDOFF
 
   - No outline or preview shows where the window will land; only the
     moving outline of the dragged window is drawn.
-  - Live check: install the development build, restart the tam-pane
-    session, and repeat the A/B/C/D drag.
+  - Fred tested the 0.4.5 development build (commit 818f41b, installed
+    to ~/.local/bin) in his live session on 2026-11-28: "It works."
