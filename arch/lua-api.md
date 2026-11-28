@@ -406,3 +406,7 @@ into a **fresh** sandboxed Lua state starting from compiled-in defaults
 - **Themeable window borders:** `tp.config({ border_color_focused = "#RRGGBB[AA]", border_color_unfocused = "#RRGGBB[AA]" | "none" })`, live-updated on `reload`.
 - **Monitor enable/disable:** `tp.dsp.monitor("enable" | "disable", output_name)` for clamshell and laptop panel control.
 - **Window pinning and floating helpers:** `tp.dsp.pin(["on" | "off" | "toggle"])`, `tp.dsp.center()`, and `tp.dsp.raise()`.
+
+## Shipped in 0.4.6
+
+- **`tp.focused_window()`:** Returns a value snapshot table `{ app_id, title, floating, fullscreen }` for the currently focused toplevel window, or `nil` when no window has keyboard focus. Preserved across live reloads so keybinding callbacks (such as terminal-aware universal clipboard shortcuts) inspect focus synchronously without waiting for a `window.focus` event.

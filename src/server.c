@@ -4,6 +4,7 @@
 #include "tam-pane/chord_overlay.h"
 #include "tam-pane/client.h"
 #include "tam-pane/decoration.h"
+#include "tam-pane/focus.h"
 #include "tam-pane/foreign_toplevel.h"
 #include "tam-pane/gamma.h"
 #include "tam-pane/idle.h"
@@ -159,6 +160,21 @@ static void server_capture_argv(const char *const argv[], void *userdata) {
 	tp_capture_launch_argv(userdata, argv);
 }
 
+static bool server_focused_window(struct tp_lua_window_info *out,
+								  void *userdata) {
+	struct tp_server *s = userdata;
+	struct tp_client *c = tp_focused(s);
+	if (!c || !out)
+		return false;
+	const char *app_id = tp_client_app_id(c);
+	const char *title = tp_client_title(c);
+	snprintf(out->app_id, sizeof(out->app_id), "%s", app_id ? app_id : "");
+	snprintf(out->title, sizeof(out->title), "%s", title ? title : "");
+	out->floating = c->floating;
+	out->fullscreen = c->fullscreen;
+	return true;
+}
+
 bool tp_server_init(struct tp_server *s) {
 	wl_list_init(&s->monitors);
 	wl_list_init(&s->parked_monitors);
@@ -185,6 +201,7 @@ bool tp_server_init(struct tp_server *s) {
 		tp_lua_set_lock_argv_fn(s->lua, server_lock_argv, s);
 		tp_lua_set_capture_fn(s->lua, server_capture, s);
 		tp_lua_set_capture_argv_fn(s->lua, server_capture_argv, s);
+		tp_lua_set_focused_fn(s->lua, server_focused_window, s);
 	}
 
 	s->display = wl_display_create();

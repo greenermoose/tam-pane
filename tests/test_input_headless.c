@@ -1927,6 +1927,70 @@ int main(void) {
 	}
 	tp_focus(&server, split_target);
 
+	/* Terminal-aware Meta+v using tp.focused_window(): sends Ctrl+Shift+v
+	 * when focused on tam-last and Ctrl+v when focused on chromium. */
+	const char clip_binds[] =
+		"tp.bind('Meta+v', function()\n"
+		"  local w = tp.focused_window()\n"
+		"  if w and w.app_id == 'tam-last' then\n"
+		"    tp.dsp.send_key('Ctrl+Shift+v')()\n"
+		"  else\n"
+		"    tp.dsp.send_key('Ctrl+v')()\n"
+		"  end\n"
+		"end)\n";
+	CHECK(tp_lua_exec_string(server.lua, clip_binds, sizeof(clip_binds) - 1,
+							 "clip-binds", 100000, 100, &server.settings,
+							 &server.settings, NULL, 0));
+	xdg_toplevel_set_app_id(client.windows[0].toplevel, "tam-last");
+	xdg_toplevel_set_app_id(client.windows[1].toplevel, "chromium");
+	wl_display_flush(client.display);
+	for (unsigned int i = 0; i < 10; i++)
+		if (!pump(&client, &server)) goto fail;
+
+	/* Focus tam-last -> Meta+v synthesizes Ctrl+Shift+v. */
+	tp_focus(&server, split_target);
+	for (unsigned int i = 0; i < 10; i++)
+		if (!pump(&client, &server)) goto fail;
+	client.key_events = 0;
+	send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_PRESSED, 100);
+	send_key(&keyboard, KEY_V, WL_KEYBOARD_KEY_STATE_PRESSED, 101);
+	send_key(&keyboard, KEY_V, WL_KEYBOARD_KEY_STATE_RELEASED, 102);
+	send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_RELEASED, 103);
+	for (unsigned int i = 0; i < 10; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(client.key_events >= 3);
+	CHECK(client.keys[1] == KEY_V &&
+		  client.key_states[1] == WL_KEYBOARD_KEY_STATE_PRESSED &&
+		  client.key_mods[1] == (WLR_MODIFIER_CTRL | WLR_MODIFIER_SHIFT));
+
+	/* Focus chromium -> Meta+v synthesizes Ctrl+v. */
+	tp_focus(&server, right_tile);
+	for (unsigned int i = 0; i < 10; i++)
+		if (!pump(&client, &server)) goto fail;
+	client.key_events = 0;
+	send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_PRESSED, 104);
+	send_key(&keyboard, KEY_V, WL_KEYBOARD_KEY_STATE_PRESSED, 105);
+	send_key(&keyboard, KEY_V, WL_KEYBOARD_KEY_STATE_RELEASED, 106);
+	send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_RELEASED, 107);
+	for (unsigned int i = 0; i < 10; i++)
+		if (!pump(&client, &server)) goto fail;
+	CHECK(client.key_events >= 3);
+	CHECK(client.keys[1] == KEY_V &&
+		  client.key_states[1] == WL_KEYBOARD_KEY_STATE_PRESSED &&
+		  client.key_mods[1] == WLR_MODIFIER_CTRL);
+
+	xdg_toplevel_set_app_id(client.windows[0].toplevel, "tam-pane-test");
+	xdg_toplevel_set_app_id(client.windows[1].toplevel, "tam-pane-test");
+	wl_display_flush(client.display);
+	const char restore_meta_v[] = "tp.bind('Meta+v', tp.dsp.toggle_float())\n";
+	CHECK(tp_lua_exec_string(server.lua, restore_meta_v,
+							 sizeof(restore_meta_v) - 1, "restore-meta-v",
+							 100000, 100, &server.settings, &server.settings,
+							 NULL, 0));
+	tp_focus(&server, split_target);
+	for (unsigned int i = 0; i < 10; i++)
+		if (!pump(&client, &server)) goto fail;
+
 	/* Both plain slash and slash pressed before the modifiers pass through. */
 	for (int late_modifiers = 0; late_modifiers < 2; late_modifiers++) {
 		client.key_events = 0;

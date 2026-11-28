@@ -34,11 +34,20 @@ enum {
 	TP_LUA_RULE_SUBJECT_MAX = 255, /* bytes of app_id/title rules match */
 };
 
+struct tp_lua_window_info {
+	char app_id[256];
+	char title[256];
+	bool floating;
+	bool fullscreen;
+};
+
 typedef void (*tp_lua_action_fn)(const struct tp_action *act, void *userdata);
 typedef void (*tp_lua_lock_fn)(const char *cmd, void *userdata);
 typedef void (*tp_lua_lock_argv_fn)(const char *const argv[], void *userdata);
 typedef void (*tp_lua_capture_fn)(const char *cmd, void *userdata);
 typedef void (*tp_lua_capture_argv_fn)(const char *const argv[], void *userdata);
+typedef bool (*tp_lua_focused_fn)(struct tp_lua_window_info *out,
+								  void *userdata);
 
 struct tp_lua *tp_lua_create(void);
 void tp_lua_destroy(struct tp_lua *lua);
@@ -108,6 +117,10 @@ void tp_lua_set_capture_fn(struct tp_lua *lua, tp_lua_capture_fn fn,
 						   void *userdata);
 void tp_lua_set_capture_argv_fn(struct tp_lua *lua, tp_lua_capture_argv_fn fn,
 								void *userdata);
+
+/* Attach the focused-window query handler used by tp.focused_window(). */
+void tp_lua_set_focused_fn(struct tp_lua *lua, tp_lua_focused_fn fn,
+						   void *userdata);
 
 /*
  * Match and execute the active binding for (mods, sym) using TP_MOD_* bits.

@@ -118,6 +118,8 @@ struct tp_lua {
 
 	tp_lua_action_fn action_fn;
 	void *action_userdata;
+	tp_lua_focused_fn focused_fn;
+	void *focused_userdata;
 
 	struct tp_lua_bind_list active_binds;
 	struct tp_lua_bind_list staged_binds;

@@ -894,6 +894,29 @@ static const luaL_Reg safe_libs[] = {
 	{NULL, NULL},
 };
 
+static int l_tp_focused_window(lua_State *L) {
+	struct tp_lua *lua = tp_lua_from_state(L);
+	if (!lua || !lua->focused_fn) {
+		lua_pushnil(L);
+		return 1;
+	}
+	struct tp_lua_window_info info = {0};
+	if (!lua->focused_fn(&info, lua->focused_userdata)) {
+		lua_pushnil(L);
+		return 1;
+	}
+	lua_createtable(L, 0, 4);
+	lua_pushstring(L, info.app_id);
+	lua_setfield(L, -2, "app_id");
+	lua_pushstring(L, info.title);
+	lua_setfield(L, -2, "title");
+	lua_pushboolean(L, info.floating);
+	lua_setfield(L, -2, "floating");
+	lua_pushboolean(L, info.fullscreen);
+	lua_setfield(L, -2, "fullscreen");
+	return 1;
+}
+
 static const luaL_Reg tp_funcs[] = {
 	{"config", l_tp_config},
 	{"spawn", l_tp_spawn},
@@ -903,6 +926,7 @@ static const luaL_Reg tp_funcs[] = {
 	{"include", l_tp_include},
 	{"monitor", l_tp_monitor},
 	{"clear_monitors", l_tp_clear_monitors},
+	{"focused_window", l_tp_focused_window},
 	{NULL, NULL},
 };
 
@@ -1023,6 +1047,14 @@ void tp_lua_set_capture_argv_fn(struct tp_lua *lua, tp_lua_capture_argv_fn fn,
 		return;
 	lua->capture_argv_fn = fn;
 	lua->capture_argv_userdata = userdata;
+}
+
+void tp_lua_set_focused_fn(struct tp_lua *lua, tp_lua_focused_fn fn,
+						   void *userdata) {
+	if (!lua)
+		return;
+	lua->focused_fn = fn;
+	lua->focused_userdata = userdata;
 }
 
 bool tp_lua_default_config_path(char *out, size_t out_size) {
@@ -1215,6 +1247,8 @@ bool tp_lua_reload_file(struct tp_lua **lua_slot, const char *path,
 		next->capture_argv_userdata = (*lua_slot)->capture_argv_userdata;
 		next->action_fn = (*lua_slot)->action_fn;
 		next->action_userdata = (*lua_slot)->action_userdata;
+		next->focused_fn = (*lua_slot)->focused_fn;
+		next->focused_userdata = (*lua_slot)->focused_userdata;
 	}
 
 	struct tp_settings next_settings;

@@ -1947,6 +1947,93 @@ static void test_visuals_config_0_4_0(void) {
 	tp_lua_destroy(lua);
 }
 
+static struct tp_lua_window_info mock_focused_info;
+static bool mock_has_focused = false;
+
+static bool mock_focused_fn(struct tp_lua_window_info *out, void *userdata) {
+	(void)userdata;
+	if (!mock_has_focused || !out)
+		return false;
+	*out = mock_focused_info;
+	return true;
+}
+
+static void test_focused_window(void) {
+	struct tp_lua *lua = tp_lua_create();
+	CHECK(lua != NULL);
+	struct tp_settings base, out;
+	tp_settings_defaults(&base);
+	char err[256] = {0};
+
+	last_action = (struct tp_action){0};
+	action_count = 0;
+	tp_lua_set_action_fn(lua, mock_action, NULL);
+	tp_lua_set_focused_fn(lua, mock_focused_fn, NULL);
+
+	const char *cfg =
+		"tp.bind('Meta+v', function()\n"
+		"  local w = tp.focused_window()\n"
+		"  if w and w.app_id == 'tam-last' then\n"
+		"    tp.dsp.send_key('Ctrl+Shift+v')()\n"
+		"  else\n"
+		"    tp.dsp.send_key('Ctrl+v')()\n"
+		"  end\n"
+		"end)\n";
+	CHECK(tp_lua_exec_string(lua, cfg, strlen(cfg), "focused_win",
+							 TP_LUA_CONFIG_MAX_INSTRUCTIONS,
+							 TP_LUA_CONFIG_TIMEOUT_MS, &base, &out, err,
+							 sizeof(err)));
+
+	/* Unfocused -> nil -> Ctrl+v. */
+	mock_has_focused = false;
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_v, false));
+	CHECK(action_count == 1 && last_action.kind == TP_ACT_SEND_KEY &&
+		  last_action.mods == TP_MOD_CTRL && last_action.sym == XKB_KEY_v);
+
+	/* Focused on tam-last -> Ctrl+Shift+v. */
+	mock_has_focused = true;
+	snprintf(mock_focused_info.app_id, sizeof(mock_focused_info.app_id),
+			 "tam-last");
+	snprintf(mock_focused_info.title, sizeof(mock_focused_info.title),
+			 "tam-clam");
+	mock_focused_info.floating = false;
+	mock_focused_info.fullscreen = false;
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_v, false));
+	CHECK(action_count == 2 && last_action.kind == TP_ACT_SEND_KEY &&
+		  last_action.mods == (TP_MOD_CTRL | TP_MOD_SHIFT) &&
+		  last_action.sym == XKB_KEY_v);
+
+	/* Focused on chromium -> Ctrl+v. */
+	snprintf(mock_focused_info.app_id, sizeof(mock_focused_info.app_id),
+			 "chromium");
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_v, false));
+	CHECK(action_count == 3 && last_action.kind == TP_ACT_SEND_KEY &&
+		  last_action.mods == TP_MOD_CTRL && last_action.sym == XKB_KEY_v);
+
+	/* Reload preserves focused_fn callback. */
+	char dir_tmpl[] = "/tmp/tam-pane-foc-XXXXXX";
+	char *dir = mkdtemp(dir_tmpl);
+	CHECK(dir != NULL);
+	char path[256];
+	snprintf(path, sizeof(path), "%s/init.lua", dir);
+	FILE *f = fopen(path, "w");
+	CHECK(f != NULL);
+	fputs(cfg, f);
+	fclose(f);
+
+	snprintf(mock_focused_info.app_id, sizeof(mock_focused_info.app_id),
+			 "tam-last");
+	CHECK(tp_lua_reload_file(&lua, path, &out, err, sizeof(err)));
+	CHECK(tp_lua_handle_key(lua, TP_MOD_META, XKB_KEY_v, false));
+	CHECK(action_count == 4 && last_action.kind == TP_ACT_SEND_KEY &&
+		  last_action.mods == (TP_MOD_CTRL | TP_MOD_SHIFT) &&
+		  last_action.sym == XKB_KEY_v);
+
+	unlink(path);
+	rmdir(dir);
+	tp_lua_destroy(lua);
+}
+
 int main(void) {
 	tam_log_set_level(TAM_LOG_ERROR);
 	test_config_and_fallback();
@@ -1969,5 +2056,6 @@ int main(void) {
 	test_controls_and_borders_0_2_17();
 	test_r1_17_pattern_and_utf8_0_3_0();
 	test_visuals_config_0_4_0();
+	test_focused_window();
 	CHECK_DONE("test_lua");
 }
