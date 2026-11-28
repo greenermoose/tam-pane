@@ -64,6 +64,7 @@ static const char *const PRIVILEGED_GLOBALS[] = {
 	"zwlr_data_control_manager_v1",
 	"ext_data_control_manager_v1",
 	"zwp_input_method_manager_v2",
+	"zwp_keyboard_shortcuts_inhibit_manager_v1",
 	"xwayland_shell_v1",
 };
 

@@ -89,4 +89,5 @@ classification here and in `src/security.c` in the same commit.
 | `zwlr_data_control_manager_v1` | privileged | Unfocused clipboard and primary-selection access (`wl-clipboard`) |
 | `ext_data_control_manager_v1` | privileged | Standard replacement clipboard protocol |
 | `zwp_input_method_manager_v2` | privileged | Input method daemon (`fcitx5`); deactivated and keyboard grabs bypassed while locked |
+| `zwp_keyboard_shortcuts_inhibit_manager_v1` | privileged | Focused-surface shortcut inhibition for Keybinding Explorer, VMs, and remote desktop clients; deactivated on focus loss or session lock; hard-wired VT/emergency-quit keys are never inhibited |
 | `xwayland_shell_v1` | privileged | Opt-in `XWAYLAND=1` only; granted exclusively to `Xwayland` (`s->xwayland->server->client`) |

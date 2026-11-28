@@ -84,7 +84,8 @@ LUA_HOST_SRCS = src/lua.c src/lua_bindings.c src/lua_events.c src/lua_rules.c \
 WM_SRCS = src/main.c src/server.c src/security.c src/events.c src/ipc.c \
 	src/monitor.c src/layer.c src/client.c src/focus.c src/bindings.c \
 	src/chord_overlay.c src/layout/arrange.c src/foreign_toplevel.c \
-	src/workspace.c src/session_lock.c src/idle.c src/output_power.c \
+	src/workspace.c src/session_lock.c src/idle.c src/shortcuts_inhibit.c \
+	src/output_power.c \
 	src/capture.c src/gamma.c src/visuals.c src/output_mgmt.c src/text_input.c \
 	src/xdg_activation.c src/decoration.c src/input/input.c \
 	src/input/keyboard.c src/input/pointer.c
@@ -116,6 +117,7 @@ CLIENT_PROTO_HEADERS = build/protocols/xdg-shell-client-protocol.h \
 	build/protocols/ext-session-lock-v1-client-protocol.h \
 	build/protocols/ext-idle-notify-v1-client-protocol.h \
 	build/protocols/idle-inhibit-unstable-v1-client-protocol.h \
+	build/protocols/keyboard-shortcuts-inhibit-unstable-v1-client-protocol.h \
 	build/protocols/wlr-output-power-management-unstable-v1-client-protocol.h \
 	build/protocols/wlr-screencopy-unstable-v1-client-protocol.h \
 	build/protocols/ext-image-capture-source-v1-client-protocol.h \
@@ -140,6 +142,7 @@ CLIENT_PROTO_SRCS = build/protocols/xdg-shell-protocol.c \
 	build/protocols/ext-session-lock-v1-protocol.c \
 	build/protocols/ext-idle-notify-v1-protocol.c \
 	build/protocols/idle-inhibit-unstable-v1-protocol.c \
+	build/protocols/keyboard-shortcuts-inhibit-unstable-v1-protocol.c \
 	build/protocols/wlr-output-power-management-unstable-v1-protocol.c \
 	build/protocols/wlr-screencopy-unstable-v1-protocol.c \
 	build/protocols/ext-image-capture-source-v1-protocol.c \
@@ -277,6 +280,14 @@ build/protocols/idle-inhibit-unstable-v1-client-protocol.h: $(WAYLAND_PROTOCOLS)
 	$(WAYLAND_SCANNER) client-header $< $@
 
 build/protocols/idle-inhibit-unstable-v1-protocol.c: $(WAYLAND_PROTOCOLS)/unstable/idle-inhibit/idle-inhibit-unstable-v1.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) private-code $< $@
+
+build/protocols/keyboard-shortcuts-inhibit-unstable-v1-client-protocol.h: $(WAYLAND_PROTOCOLS)/unstable/keyboard-shortcuts-inhibit/keyboard-shortcuts-inhibit-unstable-v1.xml
+	@mkdir -p $(@D)
+	$(WAYLAND_SCANNER) client-header $< $@
+
+build/protocols/keyboard-shortcuts-inhibit-unstable-v1-protocol.c: $(WAYLAND_PROTOCOLS)/unstable/keyboard-shortcuts-inhibit/keyboard-shortcuts-inhibit-unstable-v1.xml
 	@mkdir -p $(@D)
 	$(WAYLAND_SCANNER) private-code $< $@
 

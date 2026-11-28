@@ -20,6 +20,7 @@
 #include <wlr/backend/headless.h>
 #include <wlr/types/wlr_scene.h>
 #include "tam-pane/server.h"
+#include "tam-pane/shortcuts_inhibit.h"
 #include <poll.h>
 #include <signal.h>
 #include <fcntl.h>
@@ -44,6 +45,7 @@
 #include "ext-session-lock-v1-client-protocol.h"
 #include "ext-idle-notify-v1-client-protocol.h"
 #include "idle-inhibit-unstable-v1-client-protocol.h"
+#include "keyboard-shortcuts-inhibit-unstable-v1-client-protocol.h"
 #include "wlr-output-power-management-unstable-v1-client-protocol.h"
 #include "wlr-screencopy-unstable-v1-client-protocol.h"
 #include "ext-image-capture-source-v1-client-protocol.h"
@@ -116,6 +118,7 @@ struct test_client {
 	struct ext_session_lock_manager_v1 *lock_mgr;
 	struct ext_idle_notifier_v1 *idle_notifier;
 	struct zwp_idle_inhibit_manager_v1 *idle_inhibit_mgr;
+	struct zwp_keyboard_shortcuts_inhibit_manager_v1 *shortcuts_inhibit_mgr;
 	struct zwlr_output_power_manager_v1 *output_power_mgr;
 	struct zwlr_screencopy_manager_v1 *screencopy_mgr;
 	struct ext_image_copy_capture_manager_v1 *image_copy_mgr;
@@ -141,7 +144,7 @@ struct test_client {
 	bool has_viewporter, has_fractional_scale, has_presentation;
 	bool has_wlr_foreign_toplevel, has_ext_foreign_toplevel;
 	bool has_ext_workspace, has_ext_session_lock;
-	bool has_idle_notify, has_idle_inhibit, has_output_power;
+	bool has_idle_notify, has_idle_inhibit, has_shortcuts_inhibit, has_output_power;
 	bool has_screencopy, has_image_copy, has_output_capture_src, has_toplevel_capture_src;
 	bool has_output_mgmt, has_gamma_control, has_cursor_shape, has_xdg_output;
 	bool has_text_input, has_input_method, has_xdg_activation;
@@ -1211,6 +1214,10 @@ static void registry_global(void *data, struct wl_registry *registry,
 		client->has_idle_inhibit = true;
 		client->idle_inhibit_mgr = wl_registry_bind(registry, name,
 			&zwp_idle_inhibit_manager_v1_interface, 1);
+	} else if (!strcmp(interface, zwp_keyboard_shortcuts_inhibit_manager_v1_interface.name)) {
+		client->has_shortcuts_inhibit = true;
+		client->shortcuts_inhibit_mgr = wl_registry_bind(registry, name,
+			&zwp_keyboard_shortcuts_inhibit_manager_v1_interface, 1);
 	} else if (!strcmp(interface, zwlr_output_power_manager_v1_interface.name)) {
 		client->has_output_power = true;
 		client->output_power_mgr = wl_registry_bind(registry, name,
@@ -1661,6 +1668,33 @@ static void on_hang_alarm(int sig) {
 	}
 	_exit(1);
 }
+
+struct test_shortcut_inhibit_state {
+	unsigned int active_count;
+	unsigned int inactive_count;
+	bool active;
+};
+
+static void test_si_active(void *data,
+		struct zwp_keyboard_shortcuts_inhibitor_v1 *inh) {
+	(void)inh;
+	struct test_shortcut_inhibit_state *st = data;
+	st->active = true;
+	st->active_count++;
+}
+
+static void test_si_inactive(void *data,
+		struct zwp_keyboard_shortcuts_inhibitor_v1 *inh) {
+	(void)inh;
+	struct test_shortcut_inhibit_state *st = data;
+	st->active = false;
+	st->inactive_count++;
+}
+
+static const struct zwp_keyboard_shortcuts_inhibitor_v1_listener test_si_listener = {
+	.active = test_si_active,
+	.inactive = test_si_inactive,
+};
 
 int main(void) {
 	struct tp_server server = {0};
@@ -3429,6 +3463,7 @@ int main(void) {
 			CHECK(!sb.has_output_capture_src);
 			CHECK(!sb.has_toplevel_capture_src);
 			CHECK(!sb.has_input_method);
+			CHECK(!sb.has_shortcuts_inhibit);
 			CHECK(!sb.has_wlr_data_control);
 			CHECK(!sb.has_ext_data_control);
 
@@ -5851,6 +5886,193 @@ int main(void) {
 		destroy_window(&wu);
 		for (unsigned int i = 0; i < 10; i++)
 			pump(&client, &server);
+	}
+
+	/* ---- Keyboard shortcuts inhibit (zwp_keyboard_shortcuts_inhibit_manager_v1) ---- */
+	{
+		char rep[4096];
+		CHECK(tp_security_classify_global(
+				  "zwp_keyboard_shortcuts_inhibit_manager_v1") ==
+			  TP_GLOBAL_PRIVILEGED);
+		CHECK(client.has_shortcuts_inhibit);
+		CHECK(client.shortcuts_inhibit_mgr != NULL);
+
+		/* Start on tag 1 with Meta+1 / Meta+2 bound from the previous block. */
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+								"dispatch tag view 1\n", rep, sizeof(rep)));
+		CHECK(tp_tagview_current(&m1->view) == tp_tag_mask(1));
+
+		struct test_window wa = {0}, wb = {0};
+		wa.client = &client;
+		wb.client = &client;
+		configure_window(&client, &wa, "si-a");
+		for (unsigned int i = 0; i < 40 && client.keyboard_focus != wa.surface;
+			 i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(client.keyboard_focus == wa.surface);
+
+		/* Creating an inhibitor on the focused toplevel activates immediately. */
+		struct test_shortcut_inhibit_state si_a = {0};
+		struct zwp_keyboard_shortcuts_inhibitor_v1 *inh_a =
+			zwp_keyboard_shortcuts_inhibit_manager_v1_inhibit_shortcuts(
+				client.shortcuts_inhibit_mgr, wa.surface, client.seat);
+		zwp_keyboard_shortcuts_inhibitor_v1_add_listener(
+			inh_a, &test_si_listener, &si_a);
+		for (unsigned int i = 0; i < 30 && !si_a.active; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(si_a.active);
+		CHECK(si_a.active_count == 1);
+		CHECK(tp_shortcuts_inhibited(&server));
+
+		/* Bound shortcut Meta+2 must NOT switch tags; KEY_2 reaches client. */
+		client.key_events = 0;
+		send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_PRESSED, 700);
+		send_key(&keyboard, KEY_2, WL_KEYBOARD_KEY_STATE_PRESSED, 701);
+		send_key(&keyboard, KEY_2, WL_KEYBOARD_KEY_STATE_RELEASED, 702);
+		send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_RELEASED, 703);
+		for (unsigned int i = 0; i < 15; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(tp_tagview_current(&m1->view) == tp_tag_mask(1));
+		bool saw_key2 = false;
+		for (unsigned int i = 0; i < client.key_events && i < 8; i++) {
+			if (client.keys[i] == KEY_2 &&
+				client.key_states[i] == WL_KEYBOARD_KEY_STATE_PRESSED)
+				saw_key2 = true;
+		}
+		CHECK(saw_key2);
+
+		/* Hard-wired VT switch (Ctrl+Alt+F1) is never inhibited. */
+		last_vt = 0;
+		server.change_vt = mock_change_vt;
+		send_key(&keyboard, KEY_LEFTCTRL, WL_KEYBOARD_KEY_STATE_PRESSED, 704);
+		send_key(&keyboard, KEY_LEFTALT, WL_KEYBOARD_KEY_STATE_PRESSED, 705);
+		send_key(&keyboard, KEY_F1, WL_KEYBOARD_KEY_STATE_PRESSED, 706);
+		send_key(&keyboard, KEY_F1, WL_KEYBOARD_KEY_STATE_RELEASED, 707);
+		send_key(&keyboard, KEY_LEFTALT, WL_KEYBOARD_KEY_STATE_RELEASED, 708);
+		send_key(&keyboard, KEY_LEFTCTRL, WL_KEYBOARD_KEY_STATE_RELEASED, 709);
+		for (unsigned int i = 0; i < 10; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(last_vt == 1);
+
+		/* Focusing a second window deactivates wa's inhibitor and restores binds. */
+		configure_window(&client, &wb, "si-b");
+		for (unsigned int i = 0; i < 40 && client.keyboard_focus != wb.surface;
+			 i++)
+			if (!pump(&client, &server)) goto fail;
+		for (unsigned int i = 0; i < 20 && si_a.active; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(!si_a.active);
+		CHECK(si_a.inactive_count == 1);
+		CHECK(!tp_shortcuts_inhibited(&server));
+
+		send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_PRESSED, 710);
+		send_key(&keyboard, KEY_2, WL_KEYBOARD_KEY_STATE_PRESSED, 711);
+		send_key(&keyboard, KEY_2, WL_KEYBOARD_KEY_STATE_RELEASED, 712);
+		send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_RELEASED, 713);
+		for (unsigned int i = 0; i < 10; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(tp_tagview_current(&m1->view) == tp_tag_mask(2));
+
+		/* Switch back to tag 1, close wb so focus returns to wa -> re-activates. */
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+								"dispatch tag view 1\n", rep, sizeof(rep)));
+		destroy_window(&wb);
+		for (unsigned int i = 0; i < 40 && !si_a.active; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(si_a.active);
+		CHECK(si_a.active_count == 2);
+
+		/* Session lock deactivates inhibitor; unlock re-activates it. */
+		server.locked = true;
+		tp_shortcuts_inhibit_update(&server);
+		for (unsigned int i = 0; i < 20 && si_a.active; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(!si_a.active);
+		CHECK(!tp_shortcuts_inhibited(&server));
+		server.locked = false;
+		tp_shortcuts_inhibit_update(&server);
+		for (unsigned int i = 0; i < 20 && !si_a.active; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(si_a.active);
+
+		/* Destroying the inhibitor immediately restores compositor shortcuts. */
+		zwp_keyboard_shortcuts_inhibitor_v1_destroy(inh_a);
+		for (unsigned int i = 0; i < 15; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(!tp_shortcuts_inhibited(&server));
+		send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_PRESSED, 720);
+		send_key(&keyboard, KEY_2, WL_KEYBOARD_KEY_STATE_PRESSED, 721);
+		send_key(&keyboard, KEY_2, WL_KEYBOARD_KEY_STATE_RELEASED, 722);
+		send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_RELEASED, 723);
+		for (unsigned int i = 0; i < 10; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(tp_tagview_current(&m1->view) == tp_tag_mask(2));
+
+		/* OVERLAY + ON_DEMAND layer surface (Explorer.qml pattern). */
+		CHECK(ipc_test_exchange(&client, &server, ipc_sock_path,
+								"dispatch tag view 1\n", rep, sizeof(rep)));
+		struct test_layer explorer_layer;
+		create_layer(&client, &explorer_layer,
+					 ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY,
+					 ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP |
+						 ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT,
+					 400, 300, 0,
+					 ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_ON_DEMAND);
+		for (unsigned int i = 0; i < 40 && !explorer_layer.configured; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(explorer_layer.configured);
+		for (unsigned int i = 0; i < 15; i++)
+			if (!pump(&client, &server)) goto fail;
+
+		/* Click the overlay surface to focus it, then inhibit shortcuts. */
+		wlr_cursor_warp(server.cursor, &pointer.base,
+						server.selmon->area.x + 1.0,
+						server.selmon->area.y + 1.0);
+		emit_motion(&server, &pointer, 0, 0, 725);
+		emit_button(&server, &pointer, BTN_LEFT,
+					WL_POINTER_BUTTON_STATE_PRESSED, 726);
+		emit_button(&server, &pointer, BTN_LEFT,
+					WL_POINTER_BUTTON_STATE_RELEASED, 727);
+		for (unsigned int i = 0;
+			 i < 30 && client.keyboard_focus != explorer_layer.surface; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(client.keyboard_focus == explorer_layer.surface);
+
+		struct test_shortcut_inhibit_state si_l = {0};
+		struct zwp_keyboard_shortcuts_inhibitor_v1 *inh_l =
+			zwp_keyboard_shortcuts_inhibit_manager_v1_inhibit_shortcuts(
+				client.shortcuts_inhibit_mgr, explorer_layer.surface,
+				client.seat);
+		zwp_keyboard_shortcuts_inhibitor_v1_add_listener(
+			inh_l, &test_si_listener, &si_l);
+		for (unsigned int i = 0; i < 30 && !si_l.active; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(si_l.active);
+		CHECK(tp_shortcuts_inhibited(&server));
+
+		/* Meta+2 goes to the Explorer layer surface, not the compositor. */
+		client.key_events = 0;
+		send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_PRESSED, 730);
+		send_key(&keyboard, KEY_2, WL_KEYBOARD_KEY_STATE_PRESSED, 731);
+		send_key(&keyboard, KEY_2, WL_KEYBOARD_KEY_STATE_RELEASED, 732);
+		send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_RELEASED, 733);
+		for (unsigned int i = 0; i < 15; i++)
+			if (!pump(&client, &server)) goto fail;
+		CHECK(tp_tagview_current(&m1->view) == tp_tag_mask(1));
+		bool saw_layer_key2 = false;
+		for (unsigned int i = 0; i < client.key_events && i < 8; i++) {
+			if (client.keys[i] == KEY_2 &&
+				client.key_states[i] == WL_KEYBOARD_KEY_STATE_PRESSED)
+				saw_layer_key2 = true;
+		}
+		CHECK(saw_layer_key2);
+
+		zwp_keyboard_shortcuts_inhibitor_v1_destroy(inh_l);
+		destroy_layer(&explorer_layer);
+		destroy_window(&wa);
+		for (unsigned int i = 0; i < 15; i++)
+			pump(&client, &server);
+		CHECK(!tp_shortcuts_inhibited(&server));
 	}
 
 	unlink(lua_cfg);

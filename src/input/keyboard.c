@@ -7,6 +7,7 @@
 #include "tam-pane/lua.h"
 #include "tam-pane/server.h"
 #include "tam-pane/server_events.h"
+#include "tam-pane/shortcuts_inhibit.h"
 #include "tam-pane/text_input.h"
 #include <linux/input-event-codes.h>
 #include <stdlib.h>
@@ -248,13 +249,16 @@ static void on_key(struct wl_listener *l, void *data) {
 		return;
 	}
 
+	bool inhibited = tp_shortcuts_inhibited(s);
+
 	/* A release binding owns the physical key from the instant it matches.
 	 * The key-up may arrive with different modifiers or layout. */
 	if (ev->keycode < KEY_CNT) {
 		size_t pending = s->kb_release_bindings[ev->keycode];
 		s->kb_release_bindings[ev->keycode] = 0;
 		if (!pressed && pending) {
-			tp_lua_run_bind_index(s->lua, pending - 1, s->locked);
+			if (!inhibited)
+				tp_lua_run_bind_index(s->lua, pending - 1, s->locked);
 			s->kb_consumed_keys[word] &= ~mask;
 			return;
 		}
@@ -299,7 +303,7 @@ static void on_key(struct wl_listener *l, void *data) {
 		if (cr.kind == TP_CHORD_RES_RUN_ITEM) {
 			tp_chord_overlay_update(s);
 			tp_events_emit_chord(s, TP_EVENT_CHORD_END, "menu", cr.item.desc);
-			if (s->lua)
+			if (!inhibited && s->lua)
 				tp_lua_run_bind_index(s->lua, cr.item.bind_index, s->locked);
 			return;
 		}
@@ -307,7 +311,7 @@ static void on_key(struct wl_listener *l, void *data) {
 			tp_chord_overlay_update(s);
 			char cstr[64];
 			tp_chord_format(cr.mods, cr.sym, cstr, sizeof(cstr));
-			if (tp_bindings_handle(s, cr.mods, cr.sym)) {
+			if (!inhibited && tp_bindings_handle(s, cr.mods, cr.sym)) {
 				tp_events_emit_chord(s, TP_EVENT_CHORD_END, "dispatch", cstr);
 			} else {
 				synthesize_chord(s, wlr, cr.mods, cr.keycode, ev->time_msec);
@@ -320,18 +324,20 @@ static void on_key(struct wl_listener *l, void *data) {
 	}
 
 	if (pressed) {
-		size_t press = find_binding(s, wlr, ev->keycode, false);
-		size_t release = ev->keycode < KEY_CNT
-							 ? find_binding(s, wlr, ev->keycode, true)
-							 : SIZE_MAX;
-		if (release != SIZE_MAX)
-			s->kb_release_bindings[ev->keycode] = release + 1;
-		if (press != SIZE_MAX || release != SIZE_MAX) {
-			if (word < consumed_words)
-				s->kb_consumed_keys[word] |= mask;
-			if (press != SIZE_MAX)
-				tp_lua_run_bind_index(s->lua, press, s->locked);
-			return;
+		if (!inhibited) {
+			size_t press = find_binding(s, wlr, ev->keycode, false);
+			size_t release = ev->keycode < KEY_CNT
+								 ? find_binding(s, wlr, ev->keycode, true)
+								 : SIZE_MAX;
+			if (release != SIZE_MAX)
+				s->kb_release_bindings[ev->keycode] = release + 1;
+			if (press != SIZE_MAX || release != SIZE_MAX) {
+				if (word < consumed_words)
+					s->kb_consumed_keys[word] |= mask;
+				if (press != SIZE_MAX)
+					tp_lua_run_bind_index(s->lua, press, s->locked);
+				return;
+			}
 		}
 	} else if (word < consumed_words && (s->kb_consumed_keys[word] & mask)) {
 		s->kb_consumed_keys[word] &= ~mask;

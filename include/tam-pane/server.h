@@ -38,6 +38,8 @@ struct wlr_ext_foreign_toplevel_list_v1;
 struct wlr_ext_workspace_manager_v1;
 struct wlr_idle_notifier_v1;
 struct wlr_idle_inhibit_manager_v1;
+struct wlr_keyboard_shortcuts_inhibit_manager_v1;
+struct wlr_keyboard_shortcuts_inhibitor_v1;
 struct wlr_output_power_manager_v1;
 struct wlr_screencopy_manager_v1;
 struct wlr_ext_image_copy_capture_manager_v1;
@@ -167,6 +169,12 @@ struct tp_server {
 	struct wlr_idle_inhibit_manager_v1 *idle_inhibit_mgr;
 	struct wl_listener new_idle_inhibitor;
 	struct wl_list idle_inhibitors; /* tp_idle_inhibitor.link */
+
+	struct wlr_keyboard_shortcuts_inhibit_manager_v1 *shortcuts_inhibit_mgr;
+	struct wlr_keyboard_shortcuts_inhibitor_v1 *active_shortcut_inhibitor;
+	struct wl_listener new_shortcut_inhibitor;
+	struct wl_listener kb_focus_change;
+	struct wl_list shortcut_inhibitors; /* tp_shortcut_inhibitor.link */
 
 	struct wlr_output_power_manager_v1 *output_power_mgr;
 	struct wl_listener output_power_set_mode;

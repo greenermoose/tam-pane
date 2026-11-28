@@ -17,6 +17,7 @@
 #include "tam-pane/output_power.h"
 #include "tam-pane/security.h"
 #include "tam-pane/session_lock.h"
+#include "tam-pane/shortcuts_inhibit.h"
 #include "tam-pane/text_input.h"
 #include "tam-pane/visuals.h"
 #include "tam-pane/workspace.h"
@@ -275,7 +276,8 @@ bool tp_server_init(struct tp_server *s) {
 	tp_monitors_init(s);
 	tp_layers_init(s);
 	tp_clients_init(s);
-	if (!tp_input_init(s) || !tp_pointer_init(s) || !tp_text_input_init(s) ||
+	if (!tp_input_init(s) || !tp_shortcuts_inhibit_init(s) ||
+		!tp_pointer_init(s) || !tp_text_input_init(s) ||
 		!tp_chord_overlay_init(s))
 		return false;
 	tp_xwayland_init(s);
@@ -434,6 +436,7 @@ void tp_server_finish(struct tp_server *s) {
 	tp_chord_finish(&s->chord);
 	tp_text_input_finish(s);
 	tp_pointer_finish(s);
+	tp_shortcuts_inhibit_finish(s);
 	tp_input_finish(s);
 	tp_clients_finish(s);
 	tp_layers_finish(s);

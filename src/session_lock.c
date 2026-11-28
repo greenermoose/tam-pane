@@ -9,6 +9,7 @@
 #include "tam-pane/security.h"
 #include "tam-pane/server.h"
 #include "tam-pane/server_events.h"
+#include "tam-pane/shortcuts_inhibit.h"
 #include "tam-pane/spawn.h"
 #include "tam-pane/text_input.h"
 #include <errno.h>
@@ -177,6 +178,7 @@ static void on_lock_unlock(struct wl_listener *l, void *data) {
 	set_non_lock_layers_enabled(s, true);
 	tp_idle_update_inhibit(s);
 	tp_focus_refresh(s);
+	tp_shortcuts_inhibit_update(s);
 	tp_pointer_refocus_now(s);
 	tp_events_emit_session_lock(s, false);
 	tam_log_info("session unlocked");
@@ -217,6 +219,7 @@ static void on_new_lock(struct wl_listener *l, void *data) {
 	s->active_lock = lock;
 	tp_capture_unfreeze(s);
 	tp_pointer_cancel_grab(s, NULL);
+	tp_shortcuts_inhibit_update(s);
 	tp_text_input_set_focus(s, NULL);
 
 	if (s->focused_client)
