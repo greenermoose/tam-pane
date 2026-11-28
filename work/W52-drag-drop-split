@@ -1,0 +1,62 @@
+W52 DRAG DROP SPLIT
+
+Date: 2026-11-28
+AI harness: Claude Code 2.1.332
+AI model: claude-opus-5-5
+Commits: Same commit as this record.
+
+GUIDANCE
+
+  Fred: "Change how the window move works so that Meta + right click
+  and drag over an existing window and release on it splits that
+  window. I had the following screen split: [A left half top one
+  window] [B right half top and bottom one window] [C left bottom half
+  left quarter] [D left bottom half right quater]. When I tried to drag
+  D over B so that I'd have four equal windows on my screen I could not
+  do it. Find the root cause and fix."
+
+ROOT CAUSE
+
+  The Tamlinux session binds Meta+mouse:273 to
+  tp.dsp.mouse_move("tam-menu toggle start"), so the drag started a
+  tiled move grab. On release, src/input/pointer.c only called
+  tp_client_set_monitor(), which returns at once when the window stays
+  on its monitor. Nothing looked at the window under the pointer, so
+  dropping on the same monitor did nothing. A drop on another monitor
+  put the window beside that monitor's last focused window, not the
+  one under the pointer.
+
+DONE
+
+  - A tiled move released over another tiled window (found by tile
+    geometry, so windows that draw less than their tile still count)
+    removes the dragged window from the layout and inserts it beside
+    the target. It splits the target's tile by the same rules as a new
+    window: the W47 auto split with its 8 px centre band, or smart_split
+    when that is on. Same and different monitors both work.
+  - New tp_layout_drop(). Dwindle only; master, scroller and monocle
+    return false and keep their old behaviour.
+  - tp_dwindle_remove() now carries the parent's box to the sibling
+    that replaces it, so dropping onto your own sibling splits the area
+    it now owns, not its stale box.
+  - Fred's A/B/C/D case is a unit test in test_layouts: D dropped on
+    B's lower half gives four 960x540 quarters. test_input_headless
+    drives the real Meta+drag path: a drop on itself changes nothing,
+    a drop on another window splits it, and a second drop restores the
+    layout.
+  - make test passes: test_layouts 132, test_dwindle 151,
+    test_input_headless 1089, smoke 6/6, test_visuals_gles2 73.
+  - Version 0.4.5.
+
+FAILED
+
+  - The first headless check pressed at the window centre. The test
+    clients draw 2x2 buffers, so the surface hit test missed. This led
+    to finding the target by tile geometry.
+
+HANDOFF
+
+  - No outline or preview shows where the window will land; only the
+    moving outline of the dragged window is drawn.
+  - Live check: install the development build, restart the tam-pane
+    session, and repeat the A/B/C/D drag.

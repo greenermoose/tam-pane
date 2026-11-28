@@ -207,6 +207,17 @@ bool tp_layout_remove(struct tp_layout *l, void *item) {
 	return false;
 }
 
+bool tp_layout_drop(struct tp_layout *l, void *item, void *target,
+					const struct tp_layout_insert_ctx *ctx) {
+	if (!l || !item || !target || item == target ||
+		l->kind != TP_LAYOUT_DWINDLE ||
+		!tp_dwindle_find(&l->dwindle, target))
+		return false;
+	/* Absent after a move from another monitor, so the result is ignored. */
+	tp_dwindle_remove(&l->dwindle, item);
+	return tp_layout_insert(l, item, target, ctx);
+}
+
 void tp_layout_forget(struct tp_layout *l, void *item) {
 	if (!l || !item)
 		return;

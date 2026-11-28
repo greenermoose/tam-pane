@@ -2148,6 +2148,63 @@ int main(void) {
 	emit_button(&server, &pointer, BTN_RIGHT, WL_POINTER_BUTTON_STATE_RELEASED, 104);
 	send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_RELEASED, 105);
 	CHECK(server.grab.mode == TP_GRAB_NONE);
+	for (unsigned int i = 0; i < 20; i++)
+		if (!pump(&client, &server)) goto fail;
+
+	/* W52 tiled drop: Meta+Left-drag c0 and release it on itself, which
+	 * changes nothing, then over the right part of c2, which splits c2's
+	 * tile and leaves c1 alone across the top. */
+	struct tp_rect d0 = c0->geom, d1 = c1->geom, d2 = c2->geom;
+	wlr_cursor_warp(server.cursor, &pointer.base, d0.x + 1.0, d0.y + 1.0);
+	emit_motion(&server, &pointer, 0, 0, 106);
+	send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_PRESSED, 107);
+	emit_button(&server, &pointer, BTN_LEFT, WL_POINTER_BUTTON_STATE_PRESSED, 108);
+	CHECK(server.grab.mode == TP_GRAB_MOVE && server.grab.tiled &&
+		server.grab.client == c0);
+	emit_motion(&server, &pointer, 5.0, 5.0, 109);
+	emit_button(&server, &pointer, BTN_LEFT, WL_POINTER_BUTTON_STATE_RELEASED, 110);
+	CHECK(server.grab.mode == TP_GRAB_NONE);
+	wl_event_loop_dispatch(server.loop, 0);
+	CHECK(c0->geom.x == d0.x && c0->geom.w == d0.w && c1->geom.x == d1.x &&
+		c2->geom.y == d2.y && c2->geom.w == d2.w);
+
+	wlr_cursor_warp(server.cursor, &pointer.base, d0.x + 1.0, d0.y + 1.0);
+	emit_motion(&server, &pointer, 0, 0, 111);
+	emit_button(&server, &pointer, BTN_LEFT, WL_POINTER_BUTTON_STATE_PRESSED, 111);
+	CHECK(server.grab.mode == TP_GRAB_MOVE && server.grab.client == c0);
+	wlr_cursor_warp(server.cursor, &pointer.base,
+		d2.x + d2.w * 0.75, d2.y + d2.h / 2.0);
+	emit_motion(&server, &pointer, 0, 0, 112);
+	emit_button(&server, &pointer, BTN_LEFT, WL_POINTER_BUTTON_STATE_RELEASED, 113);
+	send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_RELEASED, 114);
+	CHECK(server.grab.mode == TP_GRAB_NONE);
+	wl_event_loop_dispatch(server.loop, 0);
+	CHECK(c1->geom.y == d1.y && c1->geom.x == d0.x);
+	CHECK(c1->geom.w > d1.w);
+	CHECK(c0->geom.y == d2.y && c2->geom.y == d2.y);
+	CHECK(c2->geom.x == d2.x && c0->geom.x > c2->geom.x);
+	CHECK(c0->geom.w < d2.w && c2->geom.w < d2.w);
+	CHECK(tp_focused(&server) == c0);
+	for (unsigned int i = 0; i < 20; i++)
+		if (!pump(&client, &server)) goto fail;
+
+	/* Drop c0 back on c1's left part: [[c0|c1]/c2] again, evenly split. */
+	struct tp_rect e1 = c1->geom;
+	wlr_cursor_warp(server.cursor, &pointer.base,
+		c0->geom.x + 1.0, c0->geom.y + 1.0);
+	emit_motion(&server, &pointer, 0, 0, 115);
+	send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_PRESSED, 116);
+	emit_button(&server, &pointer, BTN_LEFT, WL_POINTER_BUTTON_STATE_PRESSED, 117);
+	wlr_cursor_warp(server.cursor, &pointer.base,
+		e1.x + e1.w * 0.25, e1.y + e1.h / 2.0);
+	emit_motion(&server, &pointer, 0, 0, 118);
+	emit_button(&server, &pointer, BTN_LEFT, WL_POINTER_BUTTON_STATE_RELEASED, 119);
+	send_key(&keyboard, KEY_LEFTMETA, WL_KEYBOARD_KEY_STATE_RELEASED, 120);
+	wl_event_loop_dispatch(server.loop, 0);
+	CHECK(c0->geom.y == d0.y && c1->geom.y == d0.y && c0->geom.x == d0.x);
+	CHECK(c1->geom.x > c0->geom.x && c2->geom.y == d2.y && c2->geom.w == d2.w);
+	for (unsigned int i = 0; i < 20; i++)
+		if (!pump(&client, &server)) goto fail;
 
 	/* Floating toggle, keyboard resize, pointer move, and pointer resize. */
 	tp_focus(&server, c2);

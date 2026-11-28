@@ -72,6 +72,12 @@ bool tp_layout_insert(struct tp_layout *l, void *item, void *near,
 					  const struct tp_layout_insert_ctx *ctx);
 bool tp_layout_remove(struct tp_layout *l, void *item);
 
+/* Move `item` next to `target`, splitting target's tile by the same rules a
+ * new window uses (ctx carries the pointer). `item` need not be in the layout
+ * yet. Only dwindle splits; other layouts return false and change nothing. */
+bool tp_layout_drop(struct tp_layout *l, void *item, void *target,
+					const struct tp_layout_insert_ctx *ctx);
+
 /* Remove `item` from every layout engine in this slot. */
 void tp_layout_forget(struct tp_layout *l, void *item);
 

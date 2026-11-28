@@ -7,6 +7,7 @@
 #include "tam-pane/input.h"
 #include "tam-pane/layer.h"
 #include "tam-pane/layout/arrange.h"
+#include "tam-pane/layout/layout.h"
 #include "tam-pane/monitor.h"
 #include "tam-pane/server.h"
 #include "tam-pane/session_lock.h"
@@ -226,6 +227,51 @@ static struct wlr_scene_tree *move_outline(struct tp_server *s,
 	return tree;
 }
 
+/* The tiled window other than `skip` whose tile on m holds the point. Tiles
+ * never overlap, and a tile counts where its client draws less than the
+ * whole tile (size increments, slow resizes), so this goes by geometry. */
+static struct tp_client *tiled_client_at(struct tp_server *s,
+										 struct tp_monitor *m,
+										 struct tp_client *skip, double x,
+										 double y) {
+	struct tp_layout *layout = tp_monitor_layout(m);
+	struct tp_client *c;
+	wl_list_for_each(c, &s->clients, link) {
+		if (c == skip || c->mon != m || !c->mapped || !tp_client_visible(c) ||
+			c->floating || c->fullscreen || c->scratchpad)
+			continue;
+		if (tp_rect_contains(c->geom, x, y) && tp_layout_contains(layout, c))
+			return c;
+	}
+	return NULL;
+}
+
+/* End a tiled move where the pointer was released: on another monitor the
+ * window moves there, and over another tiled window it splits that window's
+ * tile, as a new window opened at the pointer would. */
+static void drop_tiled(struct tp_server *s, struct tp_client *c) {
+	double x = s->cursor->x, y = s->cursor->y;
+	struct tp_monitor *dest = tp_monitor_at(s, x, y);
+	if (!c || !c->mapped || !dest)
+		return;
+	if (dest->arrange_dirty)
+		tp_arrange_flush(s);
+	struct tp_client *target = tiled_client_at(s, dest, c, x, y);
+	if (dest != c->mon)
+		tp_client_set_monitor(c, dest, true);
+	if (!target || c->mon != dest || c->floating)
+		return;
+	struct tp_layout_insert_ctx ctx = {
+		.fallback_box = dest->usable,
+		.cursor_x = x,
+		.cursor_y = y,
+		.smart_split = s->settings.smart_split,
+		.split_ratio = s->settings.split_ratio,
+	};
+	if (tp_layout_drop(tp_monitor_layout(dest), c, target, &ctx))
+		tp_arrange(dest);
+}
+
 static bool try_begin_grab(struct tp_server *s, struct tp_client *c,
 						   uint32_t button, enum tp_action_kind kind) {
 	if (!c || c->fullscreen)
@@ -327,11 +373,8 @@ static void on_button(struct wl_listener *l, void *data) {
 			ev->button == s->grab.button) {
 			struct tp_pointer_grab grab = s->grab;
 			tp_pointer_cancel_grab(s, NULL);
-			if (grab.mode == TP_GRAB_MOVE && grab.tiled) {
-				struct tp_monitor *dest = tp_monitor_at(s, s->cursor->x, s->cursor->y);
-				if (dest)
-					tp_client_set_monitor(grab.client, dest, true);
-			}
+			if (grab.mode == TP_GRAB_MOVE && grab.tiled)
+				drop_tiled(s, grab.client);
 		}
 		return;
 	}

@@ -261,6 +261,9 @@ bool tp_dwindle_remove(struct tp_dwindle *t, void *item) {
 		struct tp_dwindle_node *sib =
 			parent->child[parent->child[0] == leaf ? 1 : 0];
 		replace_in_parent(t, parent, sib);
+		/* The next layout pass gives the sibling the parent's box; carry it
+		 * now so a split of the sibling before that pass is sized right. */
+		sib->box = parent->box;
 		free(parent);
 	}
 	free(leaf);

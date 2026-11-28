@@ -266,10 +266,109 @@ static void test_unified_layout(void) {
 	tp_layout_clear(&l);
 }
 
+static bool box_is(const struct collector *c, void *item, int32_t x,
+				   int32_t y, int32_t w, int32_t h) {
+	const struct rec *r = find_rec(c, item);
+	return r && r->box.x == x && r->box.y == y && r->box.w == w &&
+		   r->box.h == h;
+}
+
+static void relayout(struct tp_layout *l, struct collector *col) {
+	memset(col, 0, sizeof(*col));
+	tp_layout_layout(l, (struct tp_rect){0, 0, 1920, 1080}, 0, NULL, collect,
+					 col);
+}
+
+/* W52: Meta-drag a tiled window and release it over another to split it. */
+static void test_layout_drop(void) {
+	struct tp_settings cfg = {
+		.width_bias = 1.0f,
+		.layout = TP_LAYOUT_DWINDLE,
+		.master_ratio = 0.55f,
+		.master_count = 1,
+		.scroller_width = 0.5f,
+	};
+	struct tp_layout l;
+	struct collector col;
+	tp_layout_init(&l, &cfg);
+	struct tp_layout_insert_ctx ctx = {
+		.fallback_box = {0, 0, 1920, 1080},
+		.split_ratio = 0.5f,
+	};
+	void *a = id(1), *b = id(2), *c = id(3), *d = id(4);
+
+	/* Fred's screen: [A | B] with A's half split into A over [C | D]. */
+	CHECK(tp_layout_insert(&l, a, NULL, &ctx));
+	ctx.cursor_x = 1500, ctx.cursor_y = 500;
+	CHECK(tp_layout_insert(&l, b, a, &ctx));
+	relayout(&l, &col);
+	ctx.cursor_x = 400, ctx.cursor_y = 900;
+	CHECK(tp_layout_insert(&l, c, a, &ctx));
+	relayout(&l, &col);
+	ctx.cursor_x = 700, ctx.cursor_y = 900;
+	CHECK(tp_layout_insert(&l, d, c, &ctx));
+	relayout(&l, &col);
+	CHECK(box_is(&col, a, 0, 0, 960, 540));
+	CHECK(box_is(&col, c, 0, 540, 480, 540));
+	CHECK(box_is(&col, d, 480, 540, 480, 540));
+	CHECK(box_is(&col, b, 960, 0, 960, 1080));
+
+	/* Dropping on itself, on an unknown window, or with no target does
+	 * nothing. */
+	ctx.cursor_x = 600, ctx.cursor_y = 800;
+	CHECK(!tp_layout_drop(&l, d, d, &ctx));
+	CHECK(!tp_layout_drop(&l, d, id(9), &ctx));
+	CHECK(!tp_layout_drop(&l, d, NULL, &ctx));
+	relayout(&l, &col);
+	CHECK(box_is(&col, d, 480, 540, 480, 540));
+
+	/* Drop D on B's lower half: four equal quarters, D under B. */
+	ctx.cursor_x = 1400, ctx.cursor_y = 900;
+	CHECK(tp_layout_drop(&l, d, b, &ctx));
+	relayout(&l, &col);
+	CHECK(col.n == 4);
+	CHECK(box_is(&col, a, 0, 0, 960, 540));
+	CHECK(box_is(&col, c, 0, 540, 960, 540));
+	CHECK(box_is(&col, b, 960, 0, 960, 540));
+	CHECK(box_is(&col, d, 960, 540, 960, 540));
+
+	/* Drop D on B's upper half: D is B's sibling, so B first regains the
+	 * whole right half and that half splits with D on top. */
+	ctx.cursor_x = 1400, ctx.cursor_y = 100;
+	CHECK(tp_layout_drop(&l, d, b, &ctx));
+	relayout(&l, &col);
+	CHECK(box_is(&col, d, 960, 0, 960, 540));
+	CHECK(box_is(&col, b, 960, 540, 960, 540));
+
+	/* And back below: the sibling split uses the half, not B's stale
+	 * quarter, so D does not land beside B. */
+	ctx.cursor_x = 1400, ctx.cursor_y = 900;
+	CHECK(tp_layout_drop(&l, d, b, &ctx));
+	relayout(&l, &col);
+	CHECK(box_is(&col, b, 960, 0, 960, 540));
+	CHECK(box_is(&col, d, 960, 540, 960, 540));
+
+	/* A window not yet in the layout (moved from another monitor) is
+	 * inserted beside the target. */
+	ctx.cursor_x = 300, ctx.cursor_y = 100;
+	CHECK(tp_layout_drop(&l, id(5), a, &ctx));
+	relayout(&l, &col);
+	CHECK(col.n == 5);
+	CHECK(box_is(&col, id(5), 0, 0, 480, 540));
+	CHECK(box_is(&col, a, 480, 0, 480, 540));
+
+	/* Only dwindle splits; other layouts are left alone. */
+	CHECK(tp_layout_set_kind(&l, TP_LAYOUT_MASTER));
+	CHECK(!tp_layout_drop(&l, d, b, &ctx));
+
+	tp_layout_clear(&l);
+}
+
 int main(void) {
 	test_master();
 	test_scroller();
 	test_monocle();
 	test_unified_layout();
+	test_layout_drop();
 	CHECK_DONE("test_layouts");
 }

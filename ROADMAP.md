@@ -3,7 +3,7 @@
 `tam-pane` is Tamlinux's tiling Wayland compositor with Lua configuration,
 written in C17 on top of `libtam`.
 
-- **Current version:** `0.4.4` (branch `dev`)
+- **Current version:** `0.4.5` (branch `dev`)
 - **Progress:** 4 of 7 phases done (P1–P3, P5 done; P4 hardware Test pending)
 - **Versioning:** Semantic versioning; during 0.x, minor marks a phase and
   patch marks milestones or fixes within it.
@@ -94,6 +94,7 @@ Fred decided these on 2026-11-17:
 | **0.4.2** | Confirm or cancel one-hand chords with the opening key | Fix available |
 | **0.4.3** | Dual-Kawase blur behind transparent windows and panels, with `wlr_damage_ring` damage tracking | Done (2026-11-27) |
 | **0.4.4** | Animations for open, close, move, and tag change, driven by the frame clock and off by default on battery | Done (2026-11-28) |
+| **0.4.5** | Release a Meta-dragged tiled window over another tiled window to split that window's tile (W52) | Fix available |
 
 ### Phase P6: Own the stack (0.5.x–0.7.x) — [P6-own-the-stack.md](plans/P6-own-the-stack.md)
 
