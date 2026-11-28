@@ -1,0 +1,61 @@
+W50 P5 VISUALS: BACKDROP BLUR AND DAMAGE TRACKING (0.4.3)
+
+Date: 2026-11-27
+AI harness: agy 1.5.18
+AI model: gemini-4-neon-medium
+
+GUIDANCE
+
+  Fred: "/plan Do the next work slice for tam-pane"
+  Fred reviewed the implementation plan in tam-view and approved execution.
+
+DONE
+
+  - Bumped VERSION to 0.4.3 and updated ROADMAP.md and plans/P5-visuals.md
+    (moving blur to 0.4.3 after the 0.4.1/0.4.2 fixes and shifting
+    frame-clock animations to 0.4.4).
+  - Added 4 Lua tp.config blur keys (blur_enabled, blur_radius, blur_passes,
+    blur_panels; off by default) in include/tam-pane/settings.h,
+    src/settings.c, and src/lua.c, with live reload damage scheduling in
+    src/server.c.
+  - Added pure blur and damage-rect math in include/tam-pane/visuals_math.h
+    and src/visuals_math.c (tp_visuals_blur_active, tp_visuals_blur_offset,
+    tp_visuals_blur_expand, tp_visuals_effect_pad, rect intersection and
+    clamped damage expansion).
+  - Implemented Mesa GLES2 Dual-Kawase backdrop blur (5-tap downsample,
+    8-tap upsample with UV clamping) and wlr_damage_ring damage tracking
+    inside src/visuals.c without scenefx or tp_client effect flags:
+    - Automatic transparency detection via Wayland opaque_region and
+      buffer opacity < 1.0 (opaque windows skip blur completely).
+    - Blurs behind transparent tiled/floating windows (respecting inner
+      rounded corner clip) and transparent layer-shell panels in
+      BOTTOM/TOP/OVERLAY layers when blur_panels is true.
+    - Lazy offscreen FBO pyramid freed immediately when blur is disabled
+      or on GPU renderer loss/teardown.
+    - Rotates m->scene_output->damage_ring against swapchain buffers,
+      scissor-culls rendering and blur to expanded damage extents, passes
+      output damage via wlr_output_state_set_damage, and draws 0 frames
+      when idle.
+  - Extended the read-only `visuals` IPC query in src/ipc.c and
+    arch/ipc.md with blur, blur_radius, blur_passes, blur_panels, and
+    blur_ops fields; updated arch/lua-api.md and Makefile (linking
+    pixman-1 and adding layer-shell client protocol to test_visuals_gles2).
+  - Expanded tests/test_visuals.c (59 checks, also verified under
+    ASan+UBSan), tests/test_lua.c (718 checks), and
+    tests/test_visuals_gles2.c (53 checks verifying transparent window blur,
+    opaque window bypass, transparent layer-shell panel blur, blur_panels
+    toggle, damage-tracked blur skip on undamaged panel, 0 idle frames,
+    plain-scene toggle, and GPU reset recovery with blur FBO recreation).
+  - Full `make test` suite passed with zero exported lua_* symbols and
+    zero libxcb NEEDED.
+
+FAILED
+
+  - Nothing.
+
+HANDOFF
+
+  - Next in Phase P5: 0.4.4 frame-clock animations for open, close, move,
+    and tag change (off by default on battery).
+  - Phase P4 real-hardware acceptance checks remain pending Fred's
+    Tamlinux 0.7 Test run.

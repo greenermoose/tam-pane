@@ -32,6 +32,10 @@ struct tp_settings {
 	int32_t shadow_offset_y;         /* -64..64 logical px */
 	float shadow_color[4];           /* premultiplied RGBA for focused shadow */
 	float shadow_inactive_color[4];  /* premultiplied RGBA for unfocused shadow */
+	bool blur_enabled;               /* false = off (plain scene) */
+	int32_t blur_radius;             /* 0..32 logical px */
+	int32_t blur_passes;             /* 1..6 Dual-Kawase iterations */
+	bool blur_panels;                /* true = blur transparent layer-shell panels */
 	bool focus_follows_mouse;
 	char locker[TP_SETTINGS_TERMINAL_MAX];
 	float split_ratio;	 /* first child's share for a new split */

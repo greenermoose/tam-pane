@@ -12,6 +12,7 @@
 #include "tam-pane/server.h"
 #include "tam-pane/visuals.h"
 #include "tam-pane/visuals_math.h"
+#include "wlr-layer-shell-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
@@ -101,11 +102,33 @@ struct vis_client {
 	struct wl_compositor *comp;
 	struct wl_shm *shm;
 	struct xdg_wm_base *wm_base;
+	struct zwlr_layer_shell_v1 *layer_shell;
 	struct wl_surface *surface;
 	struct xdg_surface *xdg_surf;
 	struct xdg_toplevel *toplevel;
 	struct wl_buffer *buf;
+	struct wl_surface *panel_surface;
+	struct zwlr_layer_surface_v1 *panel_layer;
+	struct wl_buffer *panel_buf;
 	bool configured;
+	bool panel_configured;
+};
+
+static void layer_configure(void *data, struct zwlr_layer_surface_v1 *ls,
+							uint32_t serial, uint32_t w, uint32_t h) {
+	struct vis_client *vc = data;
+	(void)w;
+	(void)h;
+	zwlr_layer_surface_v1_ack_configure(ls, serial);
+	vc->panel_configured = true;
+}
+static void layer_closed(void *data, struct zwlr_layer_surface_v1 *ls) {
+	(void)data;
+	(void)ls;
+}
+static const struct zwlr_layer_surface_v1_listener layer_listener = {
+	.configure = layer_configure,
+	.closed = layer_closed,
 };
 
 static void wm_ping(void *data, struct xdg_wm_base *wm, uint32_t serial) {
@@ -152,6 +175,9 @@ static void reg_global(void *data, struct wl_registry *reg, uint32_t name,
 	else if (strcmp(iface, xdg_wm_base_interface.name) == 0) {
 		vc->wm_base = wl_registry_bind(reg, name, &xdg_wm_base_interface, 1);
 		xdg_wm_base_add_listener(vc->wm_base, &wm_listener, vc);
+	} else if (strcmp(iface, zwlr_layer_shell_v1_interface.name) == 0) {
+		vc->layer_shell =
+			wl_registry_bind(reg, name, &zwlr_layer_shell_v1_interface, 1);
 	}
 }
 static void reg_remove(void *data, struct wl_registry *reg, uint32_t name) {
@@ -164,8 +190,8 @@ static const struct wl_registry_listener reg_listener = {
 	.global_remove = reg_remove,
 };
 
-static struct wl_buffer *create_solid_shm(struct wl_shm *shm, int w, int h,
-										  uint32_t argb) {
+static struct wl_buffer *create_solid_shm_fmt(struct wl_shm *shm, int w, int h,
+											  uint32_t pixel, uint32_t fmt) {
 	int stride = w * 4;
 	size_t size = (size_t)stride * (size_t)h;
 	int fd = memfd_create("tp-vis-test", MFD_CLOEXEC);
@@ -181,15 +207,20 @@ static struct wl_buffer *create_solid_shm(struct wl_shm *shm, int w, int h,
 		return NULL;
 	}
 	for (size_t i = 0; i < (size_t)w * (size_t)h; i++)
-		px[i] = argb;
+		px[i] = pixel;
 	munmap(px, size);
 
 	struct wl_shm_pool *pool = wl_shm_create_pool(shm, fd, (int32_t)size);
 	struct wl_buffer *buf =
-		wl_shm_pool_create_buffer(pool, 0, w, h, stride, WL_SHM_FORMAT_ARGB8888);
+		wl_shm_pool_create_buffer(pool, 0, w, h, stride, fmt);
 	wl_shm_pool_destroy(pool);
 	close(fd);
 	return buf;
+}
+
+static struct wl_buffer *create_solid_shm(struct wl_shm *shm, int w, int h,
+										  uint32_t argb) {
+	return create_solid_shm_fmt(shm, w, h, argb, WL_SHM_FORMAT_ARGB8888);
 }
 
 static void pump(struct tp_server *s, struct vis_client *vc, int iters) {
@@ -364,9 +395,157 @@ int main(void) {
 	tp_visuals_get_stats(&s, &st);
 	CHECK(st.frames_visual > vis_pre_reset);
 
+	/* 6. Dual-Kawase blur behind a semi-transparent window across a red/blue seam. */
+	float red_bg[4] = {1.0f, 0.0f, 0.0f, 1.0f};
+	float blue_bg[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+	struct wlr_scene_rect *bg_left =
+		wlr_scene_rect_create(s.layer[TP_LAYER_BACKGROUND], 200, 480, red_bg);
+	struct wlr_scene_rect *bg_right =
+		wlr_scene_rect_create(s.layer[TP_LAYER_BACKGROUND], 440, 480, blue_bg);
+	CHECK(bg_left && bg_right);
+	wlr_scene_node_set_position(&bg_right->node, 200, 0);
+
+	/* 50% alpha dark grey window straddling x=200. */
+	struct wl_buffer *trans_buf =
+		create_solid_shm_fmt(vc.shm, 200, 160, 0x80202020u,
+							 WL_SHM_FORMAT_ARGB8888);
+	CHECK(trans_buf != NULL);
+	wl_surface_attach(vc.surface, trans_buf, 0, 0);
+	wl_surface_damage_buffer(vc.surface, 0, 0, 200, 160);
+	wl_surface_commit(vc.surface);
+
+	s.settings.border_width = 0;
+	s.settings.corner_radius = 0;
+	s.settings.shadow_enabled = false;
+	s.settings.blur_enabled = true;
+	s.settings.blur_radius = 8;
+	s.settings.blur_passes = 2;
+	s.settings.blur_panels = true;
+	c->float_geom = (struct tp_rect){100, 100, 200, 160};
+	tp_client_place(c, c->float_geom);
+	tp_arrange_flush(&s);
+	tp_visuals_damage_all(&s);
+	pump(&s, &vc, 12);
+
+	tp_visuals_get_stats(&s, &st);
+	CHECK(st.active);
+	CHECK(st.blur_ops >= 1);
+
+	/* Near the red/blue seam inside the transparent window: blurred (both R and B). */
+	get_px(&cap, 198, 180, px);
+	CHECK(px[0] > 60 && px[2] > 60);
+	/* Far from seam inside the window: red-dominant (overlay B=32, no blue bleed). */
+	get_px(&cap, 120, 180, px);
+	CHECK(px[0] > 100 && px[2] < 45);
+	/* Outside the window near the seam: sharp red on left, sharp blue on right. */
+	get_px(&cap, 198, 60, px);
+	CHECK(px[0] > 240 && px[2] < 10);
+	get_px(&cap, 202, 60, px);
+	CHECK(px[2] > 240 && px[0] < 10);
+
+	/* 7. Fully opaque (XRGB8888) window skips blur completely. */
+	struct wl_buffer *opaque_buf =
+		create_solid_shm_fmt(vc.shm, 200, 140, 0xFF303030u,
+							 WL_SHM_FORMAT_XRGB8888);
+	CHECK(opaque_buf != NULL);
+	c->float_geom = (struct tp_rect){100, 300, 200, 140};
+	tp_client_place(c, c->float_geom);
+	tp_arrange_flush(&s);
+	wl_surface_attach(vc.surface, opaque_buf, 0, 0);
+	wl_surface_damage_buffer(vc.surface, 0, 0, 200, 140);
+	wl_surface_commit(vc.surface);
+	pump(&s, &vc, 10);
+
+	tp_visuals_get_stats(&s, &st);
+	uint64_t blur_before_opaque = st.blur_ops;
+	tp_visuals_damage_all(&s);
+	pump(&s, &vc, 10);
+	tp_visuals_get_stats(&s, &st);
+	CHECK(st.blur_ops == blur_before_opaque);
+
+	/* 8. Semi-transparent TOP layer-shell panel blur (blur_panels true vs false). */
+	CHECK(vc.layer_shell != NULL);
+	vc.panel_surface = wl_compositor_create_surface(vc.comp);
+	vc.panel_layer = zwlr_layer_shell_v1_get_layer_surface(
+		vc.layer_shell, vc.panel_surface, NULL,
+		ZWLR_LAYER_SHELL_V1_LAYER_TOP, "test-panel");
+	zwlr_layer_surface_v1_set_size(vc.panel_layer, 640, 40);
+	zwlr_layer_surface_v1_set_anchor(vc.panel_layer,
+									 ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP |
+										 ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT |
+										 ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
+	zwlr_layer_surface_v1_add_listener(vc.panel_layer, &layer_listener, &vc);
+	wl_surface_commit(vc.panel_surface);
+	pump(&s, &vc, 10);
+	CHECK(vc.panel_configured);
+
+	vc.panel_buf = create_solid_shm_fmt(vc.shm, 640, 40, 0x80202020u,
+										WL_SHM_FORMAT_ARGB8888);
+	CHECK(vc.panel_buf != NULL);
+	wl_surface_attach(vc.panel_surface, vc.panel_buf, 0, 0);
+	wl_surface_damage_buffer(vc.panel_surface, 0, 0, 640, 40);
+	wl_surface_commit(vc.panel_surface);
+	pump(&s, &vc, 12);
+
+	tp_visuals_get_stats(&s, &st);
+	CHECK(st.blur_ops > blur_before_opaque);
+	/* Seam inside the transparent panel is blurred (both R and B). */
+	get_px(&cap, 198, 20, px);
+	CHECK(px[0] > 60 && px[2] > 60);
+
+	/* Disable blur_panels -> seam behind panel becomes sharp red (overlay B=32). */
+	s.settings.blur_panels = false;
+	tp_visuals_damage_all(&s);
+	pump(&s, &vc, 10);
+	get_px(&cap, 198, 20, px);
+	CHECK(px[0] > 100 && px[2] < 45);
+
+	/* 9. Damage tracking: damaging only the bottom opaque window skips panel blur. */
+	s.settings.blur_panels = true;
+	tp_visuals_damage_all(&s);
+	pump(&s, &vc, 10);
+	/* Warm all swapchain buffers with full-frame renders so damage ring is steady. */
+	for (int k = 0; k < 3; k++) {
+		tp_visuals_damage_all(&s);
+		pump(&s, &vc, 6);
+	}
+	tp_visuals_get_stats(&s, &st);
+	uint64_t vis_pre_dmg = st.frames_visual;
+	uint64_t blur_pre_dmg = st.blur_ops;
+
+	wl_surface_damage_buffer(vc.surface, 10, 10, 20, 20);
+	wl_surface_commit(vc.surface);
+	pump(&s, &vc, 10);
+
+	tp_visuals_get_stats(&s, &st);
+	CHECK(st.frames_visual > vis_pre_dmg);
+	CHECK(st.blur_ops == blur_pre_dmg);
+
+	/* 10. GPU renderer-loss recovery with blur active recreates FBO pyramid. */
+	wl_signal_emit_mutable(&s.renderer->events.lost, NULL);
+	pump(&s, &vc, 15);
+	CHECK(s.renderer_recoveries == 2);
+	tp_visuals_get_stats(&s, &st);
+	uint64_t blur_pre_reset = st.blur_ops;
+	wl_surface_attach(vc.panel_surface, vc.panel_buf, 0, 0);
+	wl_surface_damage_buffer(vc.panel_surface, 0, 0, 640, 40);
+	wl_surface_commit(vc.panel_surface);
+	tp_visuals_damage_all(&s);
+	pump(&s, &vc, 12);
+	tp_visuals_get_stats(&s, &st);
+	CHECK(st.blur_ops > blur_pre_reset);
+	get_px(&cap, 198, 20, px);
+	CHECK(px[0] > 60 && px[2] > 60);
+
 	wl_list_remove(&cap.commit.link);
 	free(cap.rgba);
 
+	wl_buffer_destroy(vc.panel_buf);
+	zwlr_layer_surface_v1_destroy(vc.panel_layer);
+	wl_surface_destroy(vc.panel_surface);
+	zwlr_layer_shell_v1_destroy(vc.layer_shell);
+	wl_buffer_destroy(opaque_buf);
+	wl_buffer_destroy(trans_buf);
 	wl_buffer_destroy(vc.buf);
 	xdg_toplevel_destroy(vc.toplevel);
 	xdg_surface_destroy(vc.xdg_surf);

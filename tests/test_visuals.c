@@ -30,6 +30,66 @@ static void test_enabled_predicate(void) {
 
 	s.shadow_inactive_color[3] = 0.25f;
 	CHECK(tp_visuals_enabled(&s));
+
+	s.shadow_enabled = false;
+	CHECK(!tp_visuals_enabled(&s));
+	CHECK(!tp_visuals_blur_active(&s));
+
+	s.blur_enabled = true;
+	CHECK(tp_visuals_blur_active(&s));
+	CHECK(tp_visuals_enabled(&s));
+
+	s.blur_radius = 0;
+	CHECK(!tp_visuals_blur_active(&s));
+	CHECK(!tp_visuals_enabled(&s));
+
+	s.blur_radius = 8;
+	s.blur_passes = 0;
+	CHECK(!tp_visuals_blur_active(&s));
+	CHECK(!tp_visuals_enabled(&s));
+}
+
+static void test_blur_and_damage_math(void) {
+	CHECK(tp_visuals_blur_offset(0, 2, 1.0f) == 0.0f);
+	CHECK(tp_visuals_blur_offset(8, 0, 1.0f) == 0.0f);
+	CHECK(fabsf(tp_visuals_blur_offset(8, 2, 1.0f) - 2.0f) < 1e-6f);
+	CHECK(fabsf(tp_visuals_blur_offset(8, 2, 2.0f) - 4.0f) < 1e-6f);
+	CHECK(fabsf(tp_visuals_blur_offset(1, 6, 1.0f) - 0.5f) < 1e-6f);
+	CHECK(fabsf(tp_visuals_blur_offset(32, 1, 2.0f) - 4.0f) < 1e-6f);
+
+	CHECK(tp_visuals_blur_expand(0, 2) == 0);
+	CHECK(tp_visuals_blur_expand(8, 0) == 0);
+	CHECK(tp_visuals_blur_expand(8, 2) == 16);
+	CHECK(tp_visuals_blur_expand(8, 3) == 32);
+	CHECK(tp_visuals_blur_expand(1, 1) == 8);
+	CHECK(tp_visuals_blur_expand(32, 6) == 256);
+
+	struct tp_settings s;
+	tp_settings_defaults(&s);
+	CHECK(tp_visuals_effect_pad(&s) == 0);
+	s.shadow_enabled = true;
+	s.shadow_radius = 16;
+	s.shadow_offset_y = 6;
+	CHECK(tp_visuals_effect_pad(&s) == 22);
+	s.blur_enabled = true;
+	s.blur_radius = 8;
+	s.blur_passes = 3;
+	CHECK(tp_visuals_effect_pad(&s) == 32);
+
+	struct tp_rect a = {10, 10, 50, 40};
+	struct tp_rect b = {40, 30, 50, 40};
+	struct tp_rect c = {100, 100, 20, 20};
+	CHECK(tp_visuals_rect_intersects(a, b));
+	CHECK(!tp_visuals_rect_intersects(a, c));
+	struct tp_rect inter = tp_visuals_rect_intersect(a, b);
+	CHECK(inter.x == 40 && inter.y == 30 && inter.w == 20 && inter.h == 20);
+	struct tp_rect empty = tp_visuals_rect_intersect(a, c);
+	CHECK(empty.w == 0 && empty.h == 0);
+
+	struct tp_rect bounds = {0, 0, 640, 480};
+	struct tp_rect exp =
+		tp_visuals_damage_expand((struct tp_rect){5, 5, 20, 20}, 16, bounds);
+	CHECK(exp.x == 0 && exp.y == 0 && exp.w == 41 && exp.h == 41);
 }
 
 static void test_radius_clamping(void) {
@@ -94,6 +154,7 @@ static void test_sdf_rounded_box(void) {
 
 int main(void) {
 	test_enabled_predicate();
+	test_blur_and_damage_math();
 	test_radius_clamping();
 	test_shadow_box();
 	test_sdf_rounded_box();

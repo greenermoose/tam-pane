@@ -2,6 +2,10 @@
 #include "tam-pane/visuals_math.h"
 #include <math.h>
 
+bool tp_visuals_blur_active(const struct tp_settings *s) {
+	return s && s->blur_enabled && s->blur_radius > 0 && s->blur_passes > 0;
+}
+
 bool tp_visuals_enabled(const struct tp_settings *s) {
 	if (!s)
 		return false;
@@ -10,7 +14,86 @@ bool tp_visuals_enabled(const struct tp_settings *s) {
 	if (s->shadow_enabled && s->shadow_radius > 0 &&
 		(s->shadow_color[3] > 0.0f || s->shadow_inactive_color[3] > 0.0f))
 		return true;
+	if (tp_visuals_blur_active(s))
+		return true;
 	return false;
+}
+
+float tp_visuals_blur_offset(int32_t radius, int32_t passes, float scale) {
+	if (radius <= 0 || passes <= 0)
+		return 0.0f;
+	if (scale <= 0.0f)
+		scale = 1.0f;
+	int32_t p = passes > 6 ? 6 : passes;
+	float denom = (float)(1 << (p > 1 ? p - 1 : 0));
+	float off = ((float)radius * 0.5f * scale) / denom;
+	if (off < 0.5f)
+		off = 0.5f;
+	if (off > 4.0f)
+		off = 4.0f;
+	return off;
+}
+
+int32_t tp_visuals_blur_expand(int32_t radius, int32_t passes) {
+	if (radius <= 0 || passes <= 0)
+		return 0;
+	int32_t p = passes > 6 ? 6 : passes;
+	int32_t pad = radius * (1 << (p > 1 ? p - 1 : 0));
+	int32_t min_pad = 4 * (1 << p);
+	if (pad < min_pad)
+		pad = min_pad;
+	if (pad > 256)
+		pad = 256;
+	return pad;
+}
+
+int32_t tp_visuals_effect_pad(const struct tp_settings *s) {
+	if (!s)
+		return 0;
+	int32_t pad = 0;
+	if (s->shadow_enabled && s->shadow_radius > 0 &&
+		(s->shadow_color[3] > 0.0f || s->shadow_inactive_color[3] > 0.0f)) {
+		int32_t ox = s->shadow_offset_x < 0 ? -s->shadow_offset_x : s->shadow_offset_x;
+		int32_t oy = s->shadow_offset_y < 0 ? -s->shadow_offset_y : s->shadow_offset_y;
+		int32_t spad = s->shadow_radius + (ox > oy ? ox : oy);
+		if (spad > pad)
+			pad = spad;
+	}
+	if (tp_visuals_blur_active(s)) {
+		int32_t bpad = tp_visuals_blur_expand(s->blur_radius, s->blur_passes);
+		if (bpad > pad)
+			pad = bpad;
+	}
+	return pad;
+}
+
+bool tp_visuals_rect_intersects(struct tp_rect a, struct tp_rect b) {
+	return a.w > 0 && a.h > 0 && b.w > 0 && b.h > 0 && a.x < b.x + b.w &&
+		   a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+struct tp_rect tp_visuals_rect_intersect(struct tp_rect a, struct tp_rect b) {
+	if (!tp_visuals_rect_intersects(a, b))
+		return (struct tp_rect){0, 0, 0, 0};
+	int32_t x0 = a.x > b.x ? a.x : b.x;
+	int32_t y0 = a.y > b.y ? a.y : b.y;
+	int32_t x1 = (a.x + a.w) < (b.x + b.w) ? (a.x + a.w) : (b.x + b.w);
+	int32_t y1 = (a.y + a.h) < (b.y + b.h) ? (a.y + a.h) : (b.y + b.h);
+	return (struct tp_rect){x0, y0, x1 - x0, y1 - y0};
+}
+
+struct tp_rect tp_visuals_damage_expand(struct tp_rect box, int32_t pad,
+										struct tp_rect bounds) {
+	if (box.w <= 0 || box.h <= 0 || bounds.w <= 0 || bounds.h <= 0)
+		return (struct tp_rect){0, 0, 0, 0};
+	int32_t p = pad > 0 ? pad : 0;
+	struct tp_rect exp = {
+		.x = box.x - p,
+		.y = box.y - p,
+		.w = box.w + 2 * p,
+		.h = box.h + 2 * p,
+	};
+	return tp_visuals_rect_intersect(exp, bounds);
 }
 
 float tp_visuals_clamp_radius(int32_t radius, int32_t w, int32_t h) {

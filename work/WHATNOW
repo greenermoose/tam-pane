@@ -3,10 +3,27 @@ WHATNOW
 What tam-pane is doing now and what comes next. Read this first; revise
 it at the end of every session (work/README-work).
 
-Updated: 2026-11-27, with W49
+Updated: 2026-11-27, with W50
 
 
 STATE
+
+  Version 0.4.3 on dev (W50) adds Dual-Kawase backdrop blur behind
+  transparent windows and layer-shell panels (`BOTTOM`/`TOP`/`OVERLAY`)
+  with `wlr_damage_ring` damage tracking inside `src/visuals.c` and
+  `src/visuals_math.c` (no scenefx, no `tp_client` effect flags).
+  Transparency is detected automatically from Wayland `opaque_region`
+  and `opacity < 1.0`, so opaque surfaces pay zero blur cost. Adds 4
+  `tp.config` keys (`blur_enabled`, `blur_radius`, `blur_passes`,
+  `blur_panels`, off by default) with live reload, extends the `visuals`
+  IPC query with blur fields and `blur_ops`, frees blur FBOs when off
+  or on GPU renderer loss, and scissor-culls undamaged regions so
+  undamaged blurred panels execute 0 blur passes. All unit suites
+  (`test_visuals` 59 including ASan+UBSan, `test_lua` 718, `test_ipc`
+  215, `test_gamma` 1235, etc.), smoke tests (6/6), headless input tests
+  (`test_input_headless` 1043), and headless Mesa GLES2 pixel/panel/
+  damage tests (`test_visuals_gles2` 53) pass cleanly with zero `libxcb`
+  NEEDED.
 
   Version 0.4.2 confirms one-hand chords with the opening key (W49).
   Chord unit tests and 1,043 headless input checks passed. Physical
@@ -160,9 +177,8 @@ STATE
 
 NEXT
 
-  1. Phase P5 (plans/P5-visuals.md): 0.4.2 blur behind transparent windows
-     and panels with damage tracking, then 0.4.3 frame-clock animations
-     (off by default on battery).
+  1. Phase P5 (plans/P5-visuals.md): 0.4.4 frame-clock animations for
+     open, close, move, and tag change (off by default on battery).
   2. Phase P4 (plans/P4-dogfood-tamlinux-0.7.md): complete physical-hardware
      acceptance checks during Fred's Tamlinux 0.7 Test/Run, and record any
      daily-use issues in bugs/.

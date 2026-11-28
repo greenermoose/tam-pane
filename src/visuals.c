@@ -16,6 +16,7 @@
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
 #include <math.h>
+#include <pixman.h>
 #include <stdlib.h>
 #include <string.h>
 #include <tam.h>
@@ -26,9 +27,14 @@
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/render/wlr_texture.h>
 #include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_damage_ring.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_xdg_shell.h>
+
+enum {
+	TP_BLUR_MAX_LEVELS = 7, /* level 0 = full res, 1..6 = half-res pyramid */
+};
 
 struct tp_tex_prog {
 	GLuint id;
@@ -64,6 +70,16 @@ struct tp_shadow_prog {
 	GLint u_blur;
 };
 
+struct tp_blur_prog {
+	GLuint id;
+	GLint a_pos;
+	GLint a_uv;
+	GLint u_tex;
+	GLint u_halfpixel;
+	GLint u_offset;
+	GLint u_uv_max;
+};
+
 struct tp_visuals {
 	bool gl_ready;
 	bool gl_failed;
@@ -73,6 +89,16 @@ struct tp_visuals {
 	struct tp_tex_prog tex_ext;
 	struct tp_rect_prog rect;
 	struct tp_shadow_prog shadow;
+	struct tp_blur_prog blur_down;
+	struct tp_blur_prog blur_up;
+	GLuint blur_fbo[TP_BLUR_MAX_LEVELS];
+	GLuint blur_tex[TP_BLUR_MAX_LEVELS];
+	int blur_w[TP_BLUR_MAX_LEVELS];
+	int blur_h[TP_BLUR_MAX_LEVELS];
+	int blur_levels;
+	int blur_fb_w;
+	int blur_fb_h;
+	uint64_t blur_ops;
 	uint64_t frames_visual;
 	uint64_t frames_plain;
 };
@@ -98,6 +124,8 @@ struct tp_frame_ctx {
 	GLuint fbo;
 	int fb_w, fb_h;
 	float scale;
+	struct tp_rect damage; /* framebuffer-space scissor box */
+	bool has_damage;
 };
 
 /* ---- GLES2 Shaders ---- */
@@ -215,6 +243,49 @@ static const char *FRAG_SHADOW_SRC =
 	"    gl_FragColor = u_color * falloff;\n"
 	"}\n";
 
+static const char *FRAG_BLUR_DOWN_SRC =
+	"precision mediump float;\n"
+	"varying vec2 v_uv;\n"
+	"uniform sampler2D u_tex;\n"
+	"uniform vec2 u_halfpixel;\n"
+	"uniform float u_offset;\n"
+	"uniform vec2 u_uv_max;\n"
+	"vec4 tap(vec2 uv) {\n"
+	"    return texture2D(u_tex, clamp(uv, vec2(0.0), u_uv_max));\n"
+	"}\n"
+	"void main() {\n"
+	"    vec2 off = u_halfpixel * u_offset;\n"
+	"    vec4 sum = tap(v_uv) * 4.0;\n"
+	"    sum += tap(v_uv - off);\n"
+	"    sum += tap(v_uv + off);\n"
+	"    sum += tap(v_uv + vec2(off.x, -off.y));\n"
+	"    sum += tap(v_uv - vec2(off.x, -off.y));\n"
+	"    gl_FragColor = vec4((sum / 8.0).rgb, 1.0);\n"
+	"}\n";
+
+static const char *FRAG_BLUR_UP_SRC =
+	"precision mediump float;\n"
+	"varying vec2 v_uv;\n"
+	"uniform sampler2D u_tex;\n"
+	"uniform vec2 u_halfpixel;\n"
+	"uniform float u_offset;\n"
+	"uniform vec2 u_uv_max;\n"
+	"vec4 tap(vec2 uv) {\n"
+	"    return texture2D(u_tex, clamp(uv, vec2(0.0), u_uv_max));\n"
+	"}\n"
+	"void main() {\n"
+	"    vec2 off = u_halfpixel * u_offset;\n"
+	"    vec4 sum = tap(v_uv + vec2(-off.x * 2.0, 0.0));\n"
+	"    sum += tap(v_uv + vec2(-off.x, off.y)) * 2.0;\n"
+	"    sum += tap(v_uv + vec2(0.0, off.y * 2.0));\n"
+	"    sum += tap(v_uv + vec2(off.x, off.y)) * 2.0;\n"
+	"    sum += tap(v_uv + vec2(off.x * 2.0, 0.0));\n"
+	"    sum += tap(v_uv + vec2(off.x, -off.y)) * 2.0;\n"
+	"    sum += tap(v_uv + vec2(0.0, -off.y * 2.0));\n"
+	"    sum += tap(v_uv + vec2(-off.x, -off.y)) * 2.0;\n"
+	"    gl_FragColor = vec4((sum / 12.0).rgb, 1.0);\n"
+	"}\n";
+
 /* ---- EGL context helpers ---- */
 
 static bool egl_enter(struct tp_server *s, struct tp_egl_saved *saved) {
@@ -317,7 +388,90 @@ static bool init_tex_prog(struct tp_tex_prog *p, const char *fs_src) {
 	return true;
 }
 
+static bool init_blur_prog(struct tp_blur_prog *p, const char *fs_src) {
+	p->id = link_program(VERT_TEX_SRC, fs_src);
+	if (!p->id)
+		return false;
+	p->a_pos = glGetAttribLocation(p->id, "a_pos");
+	p->a_uv = glGetAttribLocation(p->id, "a_uv");
+	p->u_tex = glGetUniformLocation(p->id, "u_tex");
+	p->u_halfpixel = glGetUniformLocation(p->id, "u_halfpixel");
+	p->u_offset = glGetUniformLocation(p->id, "u_offset");
+	p->u_uv_max = glGetUniformLocation(p->id, "u_uv_max");
+	return true;
+}
+
+static void destroy_blur_fbos(struct tp_visuals *v) {
+	for (int i = 0; i < TP_BLUR_MAX_LEVELS; i++) {
+		if (v->blur_fbo[i])
+			glDeleteFramebuffers(1, &v->blur_fbo[i]);
+		if (v->blur_tex[i])
+			glDeleteTextures(1, &v->blur_tex[i]);
+		v->blur_fbo[i] = 0;
+		v->blur_tex[i] = 0;
+		v->blur_w[i] = 0;
+		v->blur_h[i] = 0;
+	}
+	v->blur_levels = 0;
+	v->blur_fb_w = 0;
+	v->blur_fb_h = 0;
+}
+
+static bool ensure_blur_fbos(struct tp_visuals *v, int fb_w, int fb_h,
+							 int passes) {
+	int need = passes + 1;
+	if (need < 2)
+		need = 2;
+	if (need > TP_BLUR_MAX_LEVELS)
+		need = TP_BLUR_MAX_LEVELS;
+	if (v->blur_levels >= need && v->blur_fb_w == fb_w && v->blur_fb_h == fb_h)
+		return true;
+
+	destroy_blur_fbos(v);
+
+	int w = fb_w > 0 ? fb_w : 1;
+	int h = fb_h > 0 ? fb_h : 1;
+	for (int i = 0; i < need; i++) {
+		GLuint tex = 0, fbo = 0;
+		glGenTextures(1, &tex);
+		glBindTexture(GL_TEXTURE_2D, tex);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA,
+					 GL_UNSIGNED_BYTE, NULL);
+
+		glGenFramebuffers(1, &fbo);
+		glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+							   GL_TEXTURE_2D, tex, 0);
+		GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+		v->blur_tex[i] = tex;
+		v->blur_fbo[i] = fbo;
+		v->blur_w[i] = w;
+		v->blur_h[i] = h;
+		if (status != GL_FRAMEBUFFER_COMPLETE) {
+			tam_log_warn("visuals: blur FBO level %d incomplete (0x%x)", i,
+						 (unsigned)status);
+			glBindTexture(GL_TEXTURE_2D, 0);
+			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+			destroy_blur_fbos(v);
+			return false;
+		}
+		w = w > 1 ? (w + 1) / 2 : 1;
+		h = h > 1 ? (h + 1) / 2 : 1;
+	}
+	glBindTexture(GL_TEXTURE_2D, 0);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	v->blur_levels = need;
+	v->blur_fb_w = fb_w;
+	v->blur_fb_h = fb_h;
+	return true;
+}
+
 static void destroy_gl_programs(struct tp_visuals *v) {
+	destroy_blur_fbos(v);
 	if (v->tex_2d.id)
 		glDeleteProgram(v->tex_2d.id);
 	if (v->tex_ext.id)
@@ -326,10 +480,16 @@ static void destroy_gl_programs(struct tp_visuals *v) {
 		glDeleteProgram(v->rect.id);
 	if (v->shadow.id)
 		glDeleteProgram(v->shadow.id);
+	if (v->blur_down.id)
+		glDeleteProgram(v->blur_down.id);
+	if (v->blur_up.id)
+		glDeleteProgram(v->blur_up.id);
 	v->tex_2d.id = 0;
 	v->tex_ext.id = 0;
 	v->rect.id = 0;
 	v->shadow.id = 0;
+	v->blur_down.id = 0;
+	v->blur_up.id = 0;
 	v->gl_ready = false;
 }
 
@@ -371,6 +531,11 @@ static bool ensure_gl_ready(struct tp_server *s, struct tp_visuals *v) {
 	v->shadow.u_radius = glGetUniformLocation(v->shadow.id, "u_radius");
 	v->shadow.u_blur = glGetUniformLocation(v->shadow.id, "u_blur");
 
+	if (!init_blur_prog(&v->blur_down, FRAG_BLUR_DOWN_SRC))
+		goto fail;
+	if (!init_blur_prog(&v->blur_up, FRAG_BLUR_UP_SRC))
+		goto fail;
+
 	v->gl_ready = true;
 	return true;
 
@@ -409,9 +574,252 @@ static void quad_ndc(const struct tp_frame_ctx *fc, float x0, float y0,
 
 /* ---- Primitive draw calls ---- */
 
+static bool fb_rect_visible(const struct tp_frame_ctx *fc, float x0, float y0,
+							float x1, float y1) {
+	if (x1 <= x0 || y1 <= y0)
+		return false;
+	if (x1 <= 0.0f || y1 <= 0.0f || x0 >= (float)fc->fb_w ||
+		y0 >= (float)fc->fb_h)
+		return false;
+	if (fc->has_damage) {
+		float dx0 = (float)fc->damage.x;
+		float dy0 = (float)fc->damage.y;
+		float dx1 = (float)(fc->damage.x + fc->damage.w);
+		float dy1 = (float)(fc->damage.y + fc->damage.h);
+		if (x1 <= dx0 || y1 <= dy0 || x0 >= dx1 || y0 >= dy1)
+			return false;
+	}
+	return true;
+}
+
+static void restore_frame_state(const struct tp_frame_ctx *fc) {
+	glBindFramebuffer(GL_FRAMEBUFFER, fc->fbo);
+	glViewport(0, 0, fc->fb_w, fc->fb_h);
+	if (fc->has_damage) {
+		glEnable(GL_SCISSOR_TEST);
+		glScissor(fc->damage.x, fc->damage.y, fc->damage.w, fc->damage.h);
+	} else {
+		glDisable(GL_SCISSOR_TEST);
+	}
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+}
+
+static bool scene_buffer_is_transparent(struct wlr_scene_buffer *sb, int dw,
+										int dh) {
+	if (!sb || dw <= 0 || dh <= 0)
+		return false;
+	if (sb->opacity < 0.999f)
+		return true;
+	struct wlr_scene_surface *ss = wlr_scene_surface_try_from_buffer(sb);
+	const pixman_region32_t *opaque =
+		(ss && ss->surface) ? &ss->surface->opaque_region : &sb->opaque_region;
+	pixman_box32_t box = {0, 0, dw, dh};
+	return pixman_region32_contains_rectangle((pixman_region32_t *)opaque,
+											  &box) != PIXMAN_REGION_IN;
+}
+
+static bool tree_has_transparent_buffer(struct wlr_scene_node *node) {
+	if (!node || !node->enabled)
+		return false;
+	if (node->type == WLR_SCENE_NODE_TREE) {
+		struct wlr_scene_tree *tree = wlr_scene_tree_from_node(node);
+		struct wlr_scene_node *child;
+		wl_list_for_each(child, &tree->children, link) {
+			if (tree_has_transparent_buffer(child))
+				return true;
+		}
+		return false;
+	}
+	if (node->type == WLR_SCENE_NODE_BUFFER) {
+		struct wlr_scene_buffer *sb = wlr_scene_buffer_from_node(node);
+		struct wlr_scene_surface *ss = wlr_scene_surface_try_from_buffer(sb);
+		if (ss && ss->surface &&
+			wlr_xdg_popup_try_from_wlr_surface(ss->surface))
+			return false;
+		int dw = sb->dst_width;
+		int dh = sb->dst_height;
+		if (dw <= 0 || dh <= 0) {
+			if (ss && ss->surface) {
+				dw = ss->surface->current.width;
+				dh = ss->surface->current.height;
+			} else if (sb->buffer) {
+				dw = sb->buffer->width;
+				dh = sb->buffer->height;
+			}
+		}
+		return scene_buffer_is_transparent(sb, dw, dh);
+	}
+	return false;
+}
+
+static void run_blur_pass(const struct tp_blur_prog *prog, GLuint dst_fbo,
+						  int dst_w, int dst_h, GLuint src_tex, int src_w,
+						  int src_h, int src_cap_w, int src_cap_h,
+						  float offset) {
+	static const GLfloat full_pos[8] = {
+		-1.0f, -1.0f, 1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f,
+	};
+	float u1 = (float)src_w / (float)src_cap_w;
+	float v1 = (float)src_h / (float)src_cap_h;
+	GLfloat uv[8] = {0.0f, 0.0f, u1, 0.0f, 0.0f, v1, u1, v1};
+	float uv_max_x = ((float)src_w - 0.5f) / (float)src_cap_w;
+	float uv_max_y = ((float)src_h - 0.5f) / (float)src_cap_h;
+	if (uv_max_x < 0.0f)
+		uv_max_x = 0.0f;
+	if (uv_max_y < 0.0f)
+		uv_max_y = 0.0f;
+
+	glBindFramebuffer(GL_FRAMEBUFFER, dst_fbo);
+	glViewport(0, 0, dst_w, dst_h);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, src_tex);
+
+	glUseProgram(prog->id);
+	glUniform1i(prog->u_tex, 0);
+	glUniform2f(prog->u_halfpixel, 0.5f / (float)src_cap_w,
+				0.5f / (float)src_cap_h);
+	glUniform1f(prog->u_offset, offset);
+	glUniform2f(prog->u_uv_max, uv_max_x, uv_max_y);
+
+	glVertexAttribPointer((GLuint)prog->a_pos, 2, GL_FLOAT, GL_FALSE, 0,
+						  full_pos);
+	glEnableVertexAttribArray((GLuint)prog->a_pos);
+	glVertexAttribPointer((GLuint)prog->a_uv, 2, GL_FLOAT, GL_FALSE, 0, uv);
+	glEnableVertexAttribArray((GLuint)prog->a_uv);
+	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+	glDisableVertexAttribArray((GLuint)prog->a_uv);
+	glDisableVertexAttribArray((GLuint)prog->a_pos);
+}
+
+static void apply_backdrop_blur(const struct tp_frame_ctx *fc, float x0,
+								float y0, float x1, float y1,
+								const struct tp_clip_box *clip) {
+	const struct tp_settings *cfg = &fc->s->settings;
+	struct tp_visuals *v = fc->v;
+	if (!tp_visuals_blur_active(cfg) || !v->blur_down.id || !v->blur_up.id)
+		return;
+
+	struct tp_rect bounds = {0, 0, fc->fb_w, fc->fb_h};
+	int32_t rx0 = (int32_t)floorf(x0);
+	int32_t ry0 = (int32_t)floorf(y0);
+	int32_t rx1 = (int32_t)ceilf(x1);
+	int32_t ry1 = (int32_t)ceilf(y1);
+	struct tp_rect dst_rect = tp_visuals_rect_intersect(
+		(struct tp_rect){rx0, ry0, rx1 - rx0, ry1 - ry0}, bounds);
+	if (fc->has_damage)
+		dst_rect = tp_visuals_rect_intersect(dst_rect, fc->damage);
+	if (dst_rect.w <= 0 || dst_rect.h <= 0)
+		return;
+
+	int32_t pad_px = (int32_t)ceilf(
+		(float)tp_visuals_blur_expand(cfg->blur_radius, cfg->blur_passes) *
+		fc->scale);
+	struct tp_rect src_rect =
+		tp_visuals_damage_expand(dst_rect, pad_px, bounds);
+	if (src_rect.w <= 0 || src_rect.h <= 0)
+		return;
+
+	int passes = cfg->blur_passes;
+	if (passes < 1)
+		passes = 1;
+	if (passes >= TP_BLUR_MAX_LEVELS)
+		passes = TP_BLUR_MAX_LEVELS - 1;
+
+	if (!ensure_blur_fbos(v, fc->fb_w, fc->fb_h, passes)) {
+		restore_frame_state(fc);
+		return;
+	}
+
+	/* Copy the current backdrop region from fc->fbo into level 0. */
+	glBindFramebuffer(GL_FRAMEBUFFER, fc->fbo);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, v->blur_tex[0]);
+	glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, src_rect.x, src_rect.y,
+						src_rect.w, src_rect.h);
+
+	int rw[TP_BLUR_MAX_LEVELS];
+	int rh[TP_BLUR_MAX_LEVELS];
+	rw[0] = src_rect.w;
+	rh[0] = src_rect.h;
+	for (int i = 1; i <= passes; i++) {
+		rw[i] = rw[i - 1] > 1 ? (rw[i - 1] + 1) / 2 : 1;
+		rh[i] = rh[i - 1] > 1 ? (rh[i - 1] + 1) / 2 : 1;
+	}
+
+	glDisable(GL_SCISSOR_TEST);
+	glDisable(GL_BLEND);
+
+	float offset =
+		tp_visuals_blur_offset(cfg->blur_radius, passes, fc->scale);
+
+	/* Dual-Kawase downsample passes: 0 -> 1 -> ... -> passes. */
+	for (int i = 0; i < passes; i++) {
+		run_blur_pass(&v->blur_down, v->blur_fbo[i + 1], rw[i + 1], rh[i + 1],
+					  v->blur_tex[i], rw[i], rh[i], v->blur_w[i], v->blur_h[i],
+					  offset);
+	}
+	/* Dual-Kawase upsample passes: passes -> ... -> 1 -> 0. */
+	for (int i = passes; i > 0; i--) {
+		run_blur_pass(&v->blur_up, v->blur_fbo[i - 1], rw[i - 1], rh[i - 1],
+					  v->blur_tex[i], rw[i], rh[i], v->blur_w[i], v->blur_h[i],
+					  offset);
+	}
+
+	/* Composite blurred backdrop back onto fc->fbo over dst_rect. */
+	restore_frame_state(fc);
+	bool apply_clip = clip && clip->enabled && clip->radius > 0.0f;
+	if (!apply_clip)
+		glDisable(GL_BLEND);
+
+	float bx0 = (float)dst_rect.x;
+	float by0 = (float)dst_rect.y;
+	float bx1 = (float)(dst_rect.x + dst_rect.w);
+	float by1 = (float)(dst_rect.y + dst_rect.h);
+	float u0 = (float)(dst_rect.x - src_rect.x) / (float)v->blur_w[0];
+	float v0 = (float)(dst_rect.y - src_rect.y) / (float)v->blur_h[0];
+	float u1 =
+		(float)(dst_rect.x + dst_rect.w - src_rect.x) / (float)v->blur_w[0];
+	float v1 =
+		(float)(dst_rect.y + dst_rect.h - src_rect.y) / (float)v->blur_h[0];
+
+	GLfloat pos[8];
+	quad_ndc(fc, bx0, by0, bx1, by1, pos);
+	GLfloat uv[8] = {u0, v0, u1, v0, u0, v1, u1, v1};
+
+	const struct tp_tex_prog *p = &v->tex_2d;
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, v->blur_tex[0]);
+	glUseProgram(p->id);
+	glUniform1i(p->u_tex, 0);
+	glUniform1f(p->u_alpha, 1.0f);
+	if (apply_clip) {
+		glUniform1f(p->u_clip_enabled, 1.0f);
+		glUniform2f(p->u_clip_center, clip->cx, clip->cy);
+		glUniform2f(p->u_clip_half, clip->hw, clip->hh);
+		glUniform1f(p->u_clip_radius, clip->radius);
+	} else {
+		glUniform1f(p->u_clip_enabled, 0.0f);
+	}
+	glVertexAttribPointer((GLuint)p->a_pos, 2, GL_FLOAT, GL_FALSE, 0, pos);
+	glEnableVertexAttribArray((GLuint)p->a_pos);
+	glVertexAttribPointer((GLuint)p->a_uv, 2, GL_FLOAT, GL_FALSE, 0, uv);
+	glEnableVertexAttribArray((GLuint)p->a_uv);
+	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+	glDisableVertexAttribArray((GLuint)p->a_uv);
+	glDisableVertexAttribArray((GLuint)p->a_pos);
+	glBindTexture(GL_TEXTURE_2D, 0);
+
+	if (!apply_clip) {
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+	}
+	v->blur_ops++;
+}
+
 static void draw_solid_rect(const struct tp_frame_ctx *fc, float x0, float y0,
 							float x1, float y1, const float col[4]) {
-	if (x1 <= x0 || y1 <= y0 || col[3] <= 0.0f)
+	if (!fb_rect_visible(fc, x0, y0, x1, y1) || col[3] <= 0.0f)
 		return;
 	const struct tp_rect_prog *p = &fc->v->rect;
 	GLfloat pos[8];
@@ -433,8 +841,7 @@ static void draw_rounded_border(const struct tp_frame_ctx *fc,
 		return;
 	float x0, y0, x1, y1;
 	logical_rect_to_fb(fc, geom.x, geom.y, geom.w, geom.h, &x0, &y0, &x1, &y1);
-	if (x1 <= 0.0f || y1 <= 0.0f || x0 >= (float)fc->fb_w ||
-		y0 >= (float)fc->fb_h)
+	if (!fb_rect_visible(fc, x0, y0, x1, y1))
 		return;
 
 	float cx = 0.5f * (x0 + x1);
@@ -478,8 +885,7 @@ static void draw_shadow(const struct tp_frame_ctx *fc, struct tp_rect win,
 		win, cfg->shadow_radius, cfg->shadow_offset_x, cfg->shadow_offset_y);
 	float x0, y0, x1, y1;
 	logical_rect_to_fb(fc, sbox.x, sbox.y, sbox.w, sbox.h, &x0, &y0, &x1, &y1);
-	if (x1 <= 0.0f || y1 <= 0.0f || x0 >= (float)fc->fb_w ||
-		y0 >= (float)fc->fb_h)
+	if (!fb_rect_visible(fc, x0, y0, x1, y1))
 		return;
 
 	float wx0, wy0, wx1, wy1;
@@ -505,7 +911,8 @@ static void draw_shadow(const struct tp_frame_ctx *fc, struct tp_rect win,
 
 static void draw_scene_buffer(const struct tp_frame_ctx *fc,
 							  struct wlr_scene_buffer *sb, int lx, int ly,
-							  const struct tp_clip_box *clip) {
+							  const struct tp_clip_box *clip,
+							  bool blur_backdrop) {
 	if (!sb)
 		return;
 	struct wlr_scene_surface *ss = wlr_scene_surface_try_from_buffer(sb);
@@ -517,10 +924,7 @@ static void draw_scene_buffer(const struct tp_frame_ctx *fc,
 		tex = wlr_texture_from_buffer(fc->s->renderer, sb->buffer);
 		owned_tex = true;
 		/* wlr_texture_from_buffer restores EGL context; rebind our FBO/state. */
-		glBindFramebuffer(GL_FRAMEBUFFER, fc->fbo);
-		glViewport(0, 0, fc->fb_w, fc->fb_h);
-		glEnable(GL_BLEND);
-		glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+		restore_frame_state(fc);
 	}
 	if (!tex || !wlr_texture_is_gles2(tex)) {
 		if (owned_tex && tex)
@@ -547,11 +951,16 @@ static void draw_scene_buffer(const struct tp_frame_ctx *fc,
 
 	float x0, y0, x1, y1;
 	logical_rect_to_fb(fc, lx, ly, dw, dh, &x0, &y0, &x1, &y1);
-	if (x1 <= 0.0f || y1 <= 0.0f || x0 >= (float)fc->fb_w ||
-		y0 >= (float)fc->fb_h) {
+	if (!fb_rect_visible(fc, x0, y0, x1, y1)) {
 		if (owned_tex)
 			wlr_texture_destroy(tex);
 		return;
+	}
+
+	bool is_popup =
+		ss && ss->surface && wlr_xdg_popup_try_from_wlr_surface(ss->surface);
+	if (blur_backdrop && !is_popup && scene_buffer_is_transparent(sb, dw, dh)) {
+		apply_backdrop_blur(fc, x0, y0, x1, y1, clip);
 	}
 
 	struct wlr_gles2_texture_attribs attribs;
@@ -623,7 +1032,7 @@ static void draw_scene_buffer(const struct tp_frame_ctx *fc,
 static void render_node_tree(const struct tp_frame_ctx *fc,
 							 struct wlr_scene_node *node, int parent_x,
 							 int parent_y, const struct tp_clip_box *clip,
-							 bool skip_rects) {
+							 bool skip_rects, bool blur_backdrop) {
 	if (!node || !node->enabled)
 		return;
 	int nx = parent_x + node->x;
@@ -634,7 +1043,8 @@ static void render_node_tree(const struct tp_frame_ctx *fc,
 		struct wlr_scene_tree *tree = wlr_scene_tree_from_node(node);
 		struct wlr_scene_node *child;
 		wl_list_for_each(child, &tree->children, link) {
-			render_node_tree(fc, child, nx, ny, clip, skip_rects);
+			render_node_tree(fc, child, nx, ny, clip, skip_rects,
+							 blur_backdrop);
 		}
 		break;
 	}
@@ -649,7 +1059,7 @@ static void render_node_tree(const struct tp_frame_ctx *fc,
 	}
 	case WLR_SCENE_NODE_BUFFER: {
 		struct wlr_scene_buffer *sb = wlr_scene_buffer_from_node(node);
-		draw_scene_buffer(fc, sb, nx, ny, clip);
+		draw_scene_buffer(fc, sb, nx, ny, clip, blur_backdrop);
 		break;
 	}
 	}
@@ -660,7 +1070,7 @@ static void render_client_tree(const struct tp_frame_ctx *fc,
 	if (!c || !c->tree || !c->tree->node.enabled)
 		return;
 	if (c->fullscreen) {
-		render_node_tree(fc, &c->tree->node, 0, 0, NULL, false);
+		render_node_tree(fc, &c->tree->node, 0, 0, NULL, false, false);
 		return;
 	}
 
@@ -676,24 +1086,34 @@ static void render_client_tree(const struct tp_frame_ctx *fc,
 	const float *scol = active ? cfg->shadow_color : cfg->shadow_inactive_color;
 	draw_shadow(fc, c->geom, outer_r, scol);
 
-	/* 2. Client content with rounded-corner clipping. */
+	/* 2. Backdrop blur (only for transparent windows) + client content. */
 	struct tp_clip_box clip = {0};
 	float inner_r = tp_visuals_inner_radius(outer_r, border_w);
-	if (inner_r > 0.0f && c->content_geom.w > 0 && c->content_geom.h > 0) {
-		float cx0, cy0, cx1, cy1;
+	float cx0 = 0.0f, cy0 = 0.0f, cx1 = 0.0f, cy1 = 0.0f;
+	if (c->content_geom.w > 0 && c->content_geom.h > 0) {
 		logical_rect_to_fb(fc, c->content_geom.x, c->content_geom.y,
 						   c->content_geom.w, c->content_geom.h, &cx0, &cy0,
 						   &cx1, &cy1);
-		clip.enabled = true;
-		clip.cx = 0.5f * (cx0 + cx1);
-		clip.cy = 0.5f * (cy0 + cy1);
-		clip.hw = 0.5f * (cx1 - cx0);
-		clip.hh = 0.5f * (cy1 - cy0);
-		clip.radius = inner_r * fc->scale;
+		if (inner_r > 0.0f) {
+			clip.enabled = true;
+			clip.cx = 0.5f * (cx0 + cx1);
+			clip.cy = 0.5f * (cy0 + cy1);
+			clip.hw = 0.5f * (cx1 - cx0);
+			clip.hh = 0.5f * (cy1 - cy0);
+			clip.radius = inner_r * fc->scale;
+		}
 	}
 	if (c->content) {
+		if (tp_visuals_blur_active(cfg) && c->content_geom.w > 0 &&
+			c->content_geom.h > 0 &&
+			fb_rect_visible(fc, cx0, cy0, cx1, cy1) &&
+			tree_has_transparent_buffer(&c->content->node)) {
+			apply_backdrop_blur(fc, cx0, cy0, cx1, cy1,
+								clip.enabled ? &clip : NULL);
+		}
 		render_node_tree(fc, &c->content->node, c->tree->node.x,
-						 c->tree->node.y, clip.enabled ? &clip : NULL, false);
+						 c->tree->node.y, clip.enabled ? &clip : NULL, false,
+						 false);
 	}
 
 	/* 3. Rounded (or sharp) border ring on top of content edges. */
@@ -709,7 +1129,12 @@ static void render_layer(const struct tp_frame_ctx *fc, int layer_idx) {
 	if (!layer || !layer->node.enabled)
 		return;
 	if (layer_idx != TP_LAYER_TILE && layer_idx != TP_LAYER_FLOAT) {
-		render_node_tree(fc, &layer->node, 0, 0, NULL, false);
+		bool blur_panel_layer =
+			tp_visuals_blur_active(&fc->s->settings) &&
+			fc->s->settings.blur_panels &&
+			(layer_idx == TP_LAYER_BOTTOM || layer_idx == TP_LAYER_TOP ||
+			 layer_idx == TP_LAYER_OVERLAY);
+		render_node_tree(fc, &layer->node, 0, 0, NULL, false, blur_panel_layer);
 		return;
 	}
 	struct wlr_scene_node *child;
@@ -720,7 +1145,7 @@ static void render_layer(const struct tp_frame_ctx *fc, int layer_idx) {
 			render_client_tree(fc, child->data);
 		} else {
 			render_node_tree(fc, child, layer->node.x, layer->node.y, NULL,
-							 false);
+							 false, false);
 		}
 	}
 }
@@ -752,6 +1177,15 @@ void tp_visuals_reset_renderer(struct tp_server *s) {
 	v->tex_ext.id = 0;
 	v->rect.id = 0;
 	v->shadow.id = 0;
+	v->blur_down.id = 0;
+	v->blur_up.id = 0;
+	memset(v->blur_fbo, 0, sizeof(v->blur_fbo));
+	memset(v->blur_tex, 0, sizeof(v->blur_tex));
+	memset(v->blur_w, 0, sizeof(v->blur_w));
+	memset(v->blur_h, 0, sizeof(v->blur_h));
+	v->blur_levels = 0;
+	v->blur_fb_w = 0;
+	v->blur_fb_h = 0;
 	v->gl_ready = false;
 	v->gl_failed = false;
 	v->fallback_warned = false;
@@ -770,6 +1204,8 @@ void tp_visuals_damage_all(struct tp_server *s) {
 		return;
 	struct tp_monitor *m;
 	wl_list_for_each(m, &s->monitors, link) {
+		if (m->scene_output)
+			wlr_damage_ring_add_whole(&m->scene_output->damage_ring);
 		if (m->output && m->output->enabled)
 			wlr_output_schedule_frame(m->output);
 	}
@@ -790,6 +1226,7 @@ void tp_visuals_get_stats(const struct tp_server *s,
 	out->active = tp_visuals_enabled(&s->settings);
 	out->gles2 = s->renderer && wlr_renderer_is_gles2(s->renderer);
 	if (s->visuals) {
+		out->blur_ops = s->visuals->blur_ops;
 		out->frames_visual = s->visuals->frames_visual;
 		out->frames_plain = s->visuals->frames_plain;
 	}
@@ -826,56 +1263,126 @@ bool tp_visuals_commit_output(struct tp_server *s, struct tp_monitor *m) {
 		return false;
 	}
 
-	struct tp_egl_saved saved;
-	if (!egl_enter(s, &saved)) {
-		wlr_buffer_unlock(buf);
-		wlr_output_state_finish(&state);
-		return false;
+	float scale = m->output->scale > 0.0f ? m->output->scale : 1.0f;
+	struct tp_rect fb_bounds = {0, 0, buf->width, buf->height};
+	int32_t pad_px =
+		(int32_t)ceilf((float)tp_visuals_effect_pad(&s->settings) * scale);
+
+	pixman_region32_t buffer_damage;
+	pixman_region32_t output_damage;
+	pixman_region32_init(&buffer_damage);
+	pixman_region32_init(&output_damage);
+
+	bool have_ring = (m->scene_output != NULL);
+	struct tp_rect render_damage = fb_bounds;
+	bool need_draw = true;
+
+	if (have_ring) {
+		pixman_region32_copy(&output_damage,
+							 &m->scene_output->damage_ring.current);
+		pixman_region32_intersect_rect(&output_damage, &output_damage, 0, 0,
+									   buf->width, buf->height);
+		wlr_damage_ring_rotate_buffer(&m->scene_output->damage_ring, buf,
+									  &buffer_damage);
+		pixman_region32_intersect_rect(&buffer_damage, &buffer_damage, 0, 0,
+									   buf->width, buf->height);
+		if (!pixman_region32_not_empty(&buffer_damage)) {
+			need_draw = false;
+			render_damage = (struct tp_rect){0, 0, 0, 0};
+		} else {
+			pixman_box32_t *ext = pixman_region32_extents(&buffer_damage);
+			struct tp_rect raw = {
+				.x = ext->x1,
+				.y = ext->y1,
+				.w = ext->x2 - ext->x1,
+				.h = ext->y2 - ext->y1,
+			};
+			render_damage = tp_visuals_damage_expand(raw, pad_px, fb_bounds);
+			if (render_damage.w <= 0 || render_damage.h <= 0)
+				need_draw = false;
+		}
+		if (pixman_region32_not_empty(&output_damage) && pad_px > 0) {
+			pixman_box32_t *oext = pixman_region32_extents(&output_damage);
+			struct tp_rect oexp = tp_visuals_damage_expand(
+				(struct tp_rect){oext->x1, oext->y1, oext->x2 - oext->x1,
+								 oext->y2 - oext->y1},
+				pad_px, fb_bounds);
+			pixman_region32_reset(&output_damage,
+								  &(pixman_box32_t){oexp.x, oexp.y,
+													oexp.x + oexp.w,
+													oexp.y + oexp.h});
+		}
+	} else {
+		pixman_region32_union_rect(&output_damage, &output_damage, 0, 0,
+								   buf->width, buf->height);
 	}
 
-	if (!ensure_gl_ready(s, v)) {
+	if (need_draw) {
+		struct tp_egl_saved saved;
+		if (!egl_enter(s, &saved)) {
+			if (have_ring)
+				wlr_damage_ring_add_whole(&m->scene_output->damage_ring);
+			pixman_region32_fini(&buffer_damage);
+			pixman_region32_fini(&output_damage);
+			wlr_buffer_unlock(buf);
+			wlr_output_state_finish(&state);
+			return false;
+		}
+
+		if (!ensure_gl_ready(s, v)) {
+			egl_leave(s, &saved);
+			if (have_ring)
+				wlr_damage_ring_add_whole(&m->scene_output->damage_ring);
+			pixman_region32_fini(&buffer_damage);
+			pixman_region32_fini(&output_damage);
+			wlr_buffer_unlock(buf);
+			wlr_output_state_finish(&state);
+			return false;
+		}
+
+		if (!tp_visuals_blur_active(&s->settings) && v->blur_levels > 0)
+			destroy_blur_fbos(v);
+
+		GLuint fbo = wlr_gles2_renderer_get_buffer_fbo(s->renderer, buf);
+		if (!fbo) {
+			egl_leave(s, &saved);
+			if (have_ring)
+				wlr_damage_ring_add_whole(&m->scene_output->damage_ring);
+			pixman_region32_fini(&buffer_damage);
+			pixman_region32_fini(&output_damage);
+			wlr_buffer_unlock(buf);
+			wlr_output_state_finish(&state);
+			return false;
+		}
+
+		struct tp_frame_ctx fc = {
+			.s = s,
+			.m = m,
+			.v = v,
+			.fbo = fbo,
+			.fb_w = buf->width,
+			.fb_h = buf->height,
+			.scale = scale,
+			.damage = render_damage,
+			.has_damage = have_ring,
+		};
+
+		restore_frame_state(&fc);
+		glDisable(GL_DEPTH_TEST);
+		glDisable(GL_CULL_FACE);
+		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+		glClear(GL_COLOR_BUFFER_BIT);
+
+		for (int i = 0; i < TP_LAYER_COUNT; i++)
+			render_layer(&fc, i);
+
+		glDisable(GL_SCISSOR_TEST);
+		glUseProgram(0);
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		glFlush();
+
 		egl_leave(s, &saved);
-		wlr_buffer_unlock(buf);
-		wlr_output_state_finish(&state);
-		return false;
 	}
-
-	GLuint fbo = wlr_gles2_renderer_get_buffer_fbo(s->renderer, buf);
-	if (!fbo) {
-		egl_leave(s, &saved);
-		wlr_buffer_unlock(buf);
-		wlr_output_state_finish(&state);
-		return false;
-	}
-
-	struct tp_frame_ctx fc = {
-		.s = s,
-		.m = m,
-		.v = v,
-		.fbo = fbo,
-		.fb_w = buf->width,
-		.fb_h = buf->height,
-		.scale = m->output->scale > 0.0f ? m->output->scale : 1.0f,
-	};
-
-	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-	glViewport(0, 0, fc.fb_w, fc.fb_h);
-	glDisable(GL_SCISSOR_TEST);
-	glDisable(GL_DEPTH_TEST);
-	glDisable(GL_CULL_FACE);
-	glEnable(GL_BLEND);
-	glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-	glClear(GL_COLOR_BUFFER_BIT);
-
-	for (int i = 0; i < TP_LAYER_COUNT; i++)
-		render_layer(&fc, i);
-
-	glUseProgram(0);
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-	glFlush();
-
-	egl_leave(s, &saved);
 
 	/* Draw software cursors (if any) on top using wlroots' buffer pass. */
 	struct wlr_buffer_pass_options pass_opts = {
@@ -889,7 +1396,14 @@ bool tp_visuals_commit_output(struct tp_server *s, struct tp_monitor *m) {
 	}
 
 	wlr_output_state_set_buffer(&state, buf);
+	if (pixman_region32_not_empty(&output_damage))
+		wlr_output_state_set_damage(&state, &output_damage);
 	bool ok = wlr_output_commit_state(m->output, &state);
+	if (!ok && have_ring)
+		wlr_damage_ring_add_whole(&m->scene_output->damage_ring);
+
+	pixman_region32_fini(&buffer_damage);
+	pixman_region32_fini(&output_damage);
 	wlr_buffer_unlock(buf);
 	wlr_output_state_finish(&state);
 

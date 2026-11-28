@@ -76,6 +76,10 @@ or out-of-range values raise a Lua error.
 | `shadow_offset_y` | integer | `-64..64` logical pixels vertical shadow offset (0.4.0) | `4` |
 | `shadow_color` | string | `#RRGGBB[AA]`, `0xRRGGBB[AA]`, or `"none"`/`""` for focused window shadow (0.4.0) | `"#00000073"` |
 | `shadow_inactive_color` | string | `#RRGGBB[AA]`, `0xRRGGBB[AA]`, or `"none"`/`""` for unfocused window shadow (0.4.0) | `"#00000040"` |
+| `blur_enabled` | boolean | Enable Mesa GLES2 Dual-Kawase blur behind transparent windows and panels (0.4.3) | `false` |
+| `blur_radius` | integer | `0..32` logical pixels for backdrop blur strength; `0` disables blur (0.4.3) | `8` |
+| `blur_passes` | integer | `1..6` Dual-Kawase downsample/upsample iterations (0.4.3) | `2` |
+| `blur_panels` | boolean | Also blur behind transparent layer-shell panels (`BOTTOM`/`TOP`/`OVERLAY`) when `blur_enabled` is true (0.4.3) | `true` |
 | `focus_follows_mouse` | boolean | Give the window under the moving pointer keyboard focus. | `false` |
 | `locker` | string | Absolute executable path for `tam-pane msg lock`. An empty string disables the command. | `""` |
 | `split_ratio` | number | `0.05..0.95` first child's share for a new split | `0.5` |

@@ -1863,6 +1863,10 @@ static void test_visuals_config_0_4_0(void) {
 	CHECK(base.shadow_radius == 16);
 	CHECK(base.shadow_offset_x == 0);
 	CHECK(base.shadow_offset_y == 4);
+	CHECK(!base.blur_enabled);
+	CHECK(base.blur_radius == 8);
+	CHECK(base.blur_passes == 2);
+	CHECK(base.blur_panels);
 
 	/* Valid visual settings. */
 	const char *good =
@@ -1874,6 +1878,10 @@ static void test_visuals_config_0_4_0(void) {
 		"  shadow_offset_y = 8,\n"
 		"  shadow_color = '#00000080',\n"
 		"  shadow_inactive_color = 'none',\n"
+		"  blur_enabled = true,\n"
+		"  blur_radius = 12,\n"
+		"  blur_passes = 3,\n"
+		"  blur_panels = false,\n"
 		"})\n";
 	CHECK(tp_lua_exec_string(lua, good, strlen(good), "visuals_good",
 							 TP_LUA_CONFIG_MAX_INSTRUCTIONS,
@@ -1886,6 +1894,10 @@ static void test_visuals_config_0_4_0(void) {
 	CHECK(out.shadow_offset_y == 8);
 	CHECK(out.shadow_color[3] > 0.49f && out.shadow_color[3] < 0.51f);
 	CHECK(out.shadow_inactive_color[3] == 0.0f);
+	CHECK(out.blur_enabled);
+	CHECK(out.blur_radius == 12);
+	CHECK(out.blur_passes == 3);
+	CHECK(!out.blur_panels);
 
 	/* Out-of-range and invalid-type rejections. */
 	const char *bad[] = {
@@ -1897,6 +1909,12 @@ static void test_visuals_config_0_4_0(void) {
 		"tp.config({ shadow_offset_y = -65 })\n",
 		"tp.config({ shadow_color = 'notacolor' })\n",
 		"tp.config({ shadow_inactive_color = 123 })\n",
+		"tp.config({ blur_enabled = 1 })\n",
+		"tp.config({ blur_radius = -1 })\n",
+		"tp.config({ blur_radius = 33 })\n",
+		"tp.config({ blur_passes = 0 })\n",
+		"tp.config({ blur_passes = 7 })\n",
+		"tp.config({ blur_panels = 'no' })\n",
 	};
 	for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++) {
 		err[0] = '\0';

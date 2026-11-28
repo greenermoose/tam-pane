@@ -19,7 +19,7 @@ LIBTAM_PREFIX ?= $(HOME)/.local
 XWAYLAND ?= 0
 
 PKG_CONFIG ?= pkg-config
-PKGS = wlroots-0.20 wayland-server wayland-client xkbcommon glesv2 egl
+PKGS = wlroots-0.20 wayland-server wayland-client xkbcommon glesv2 egl pixman-1
 # Used only by the test client, never linked into the compositor.
 CLIENT_PKGS = wayland-client
 
@@ -442,10 +442,14 @@ build/tests/test_visuals_gles2: tests/test_visuals_gles2.c $(CORE_OBJS) \
 	$(LUA_HOST_OBJS) $(filter-out build/main.o,$(WM_OBJS)) $(PROTO_OBJS) \
 	$(LUA_OBJS) $(LIBTAM) \
 	build/protocols/xdg-shell-client-protocol.h \
-	build/protocols/xdg-shell-protocol.c
+	build/protocols/xdg-shell-protocol.c \
+	build/protocols/wlr-layer-shell-unstable-v1-client-protocol.h \
+	build/protocols/wlr-layer-shell-unstable-v1-protocol.c
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(PKG_CFLAGS) -Ibuild/protocols -o $@ $< \
-		build/protocols/xdg-shell-protocol.c $(CORE_OBJS) $(LUA_HOST_OBJS) \
+		build/protocols/xdg-shell-protocol.c \
+		build/protocols/wlr-layer-shell-unstable-v1-protocol.c \
+		$(CORE_OBJS) $(LUA_HOST_OBJS) \
 		$(filter-out build/main.o,$(WM_OBJS)) $(PROTO_OBJS) $(LUA_OBJS) \
 		$(LIBTAM) $(PKG_LIBS) \
 		$(shell $(PKG_CONFIG) --libs $(CLIENT_PKGS)) -lm

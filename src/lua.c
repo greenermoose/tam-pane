@@ -399,6 +399,14 @@ static int l_tp_config(lua_State *L) {
 				return luaL_error(
 					L, "tp.config.shadow_inactive_color: expected '#RRGGBB[AA]', "
 					   "'0xRRGGBB[AA]', or 'none'");
+		} else if (strcmp(key, "blur_enabled") == 0) {
+			s->blur_enabled = check_bool(L, -1, key);
+		} else if (strcmp(key, "blur_radius") == 0) {
+			s->blur_radius = check_int_range(L, -1, key, 0, 32);
+		} else if (strcmp(key, "blur_passes") == 0) {
+			s->blur_passes = check_int_range(L, -1, key, 1, 6);
+		} else if (strcmp(key, "blur_panels") == 0) {
+			s->blur_panels = check_bool(L, -1, key);
 		} else if (strcmp(key, "locker") == 0) {
 			check_string_buf(L, -1, key, true, s->locker, sizeof(s->locker));
 			if (s->locker[0] && s->locker[0] != '/')

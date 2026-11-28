@@ -504,10 +504,13 @@ static tam_str_t build_visuals(struct tp_server *s) {
 	out = tam_str_cat_printf(
 		out,
 		"visuals\tactive=%d\tgles2=%d\tcorner_radius=%d\tshadow=%d\t"
-		"shadow_radius=%d\tframes_visual=%llu\tframes_plain=%llu\n",
+		"shadow_radius=%d\tblur=%d\tblur_radius=%d\tblur_passes=%d\t"
+		"blur_panels=%d\tblur_ops=%llu\tframes_visual=%llu\tframes_plain=%llu\n",
 		st.active ? 1 : 0, st.gles2 ? 1 : 0, s->settings.corner_radius,
 		s->settings.shadow_enabled ? 1 : 0, s->settings.shadow_radius,
-		(unsigned long long)st.frames_visual,
+		s->settings.blur_enabled ? 1 : 0, s->settings.blur_radius,
+		s->settings.blur_passes, s->settings.blur_panels ? 1 : 0,
+		(unsigned long long)st.blur_ops, (unsigned long long)st.frames_visual,
 		(unsigned long long)st.frames_plain);
 	return tam_str_cat(out, "END\n");
 }

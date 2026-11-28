@@ -17,6 +17,7 @@ struct tp_server;
 struct tp_visuals_stats {
 	bool active;
 	bool gles2;
+	uint64_t blur_ops;
 	uint64_t frames_visual;
 	uint64_t frames_plain;
 };

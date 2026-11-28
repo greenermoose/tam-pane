@@ -1,6 +1,6 @@
 # P5: Visuals (0.4.x)
 
-**Status:** in progress (`0.4.0` landed on `dev` 2026-11-27).
+**Status:** in progress (`0.4.0` and `0.4.3` landed on `dev` 2026-11-27).
 
 ## Goal
 
@@ -15,9 +15,11 @@ own small renderer module on Mesa, without scenefx.
   are off and zero frames rendered when idle. (Focused and unfocused
   scene-rectangle window borders already landed early in `0.2.11` and
   `0.2.17`.) — **Done (2026-11-27).**
-- **0.4.2** Blur behind transparent windows and panels, with damage
-  tracking so idle screens cost nothing.
-- **0.4.3** Animations for open, close, move and tag change, driven by
+- **0.4.3** Dual-Kawase blur behind transparent windows and panels, with
+  `wlr_damage_ring` damage tracking so idle screens cost nothing and
+  undamaged blurred surfaces skip GPU blur work (`blur_enabled`,
+  `blur_radius`, `blur_passes`, `blur_panels`). — **Done (2026-11-27).**
+- **0.4.4** Animations for open, close, move and tag change, driven by
   the frame clock and off by default on battery.
 
 ## Acceptance
