@@ -114,7 +114,10 @@ KEYS NO CONFIG CAN REMOVE
 
 WHERE THINGS ARE
 
-  src/, include/   the compositor (one module per file)
+  src/             the compositor (one module per file)
+  include/tam-pane/
+                   headers shared between modules
+                   (arch/principles.md)
   third_party/lua/ vendored Lua 5.5.1 C sources, one marked patch
                    (UPSTREAM.md)
   tests/           unit tests and headless checks

@@ -35,6 +35,11 @@ their structure. These rules decide how code is written here.
   `finish` function.
 - Pure logic, such as tags and layout trees, has no wlroots in it and is
   unit tested.
+- Headers shared between modules live in `include/tam-pane/`, with
+  subfolders matching `src/` (`layout/`). Includes name the prefix
+  (`"tam-pane/lua.h"`), so they cannot collide with vendored or system
+  headers such as Lua's `lua.h`. A header private to one module stays
+  beside it in `src/` (`src/lua_internal.h`).
 
 ## The event loop never blocks
 
